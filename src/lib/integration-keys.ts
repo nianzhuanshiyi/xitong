@@ -27,6 +27,14 @@ export function getSellerspriteMcpUrl(): string {
   );
 }
 
+/** Google AI Studio / Gemini API（Imagen 图片生成），仅从环境变量读取 */
+export function getGoogleAiApiKey(): string | null {
+  const k =
+    process.env.GOOGLE_AI_API_KEY?.trim() ||
+    process.env.GEMINI_API_KEY?.trim();
+  return k || null;
+}
+
 export function maskSecret(value: string | null | undefined): string {
   if (!value) return "";
   const v = value.trim();

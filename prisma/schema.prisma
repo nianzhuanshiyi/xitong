@@ -28,8 +28,162 @@ model User {
   operationLogs          OperationLog[]
   productAnalysisReports ProductAnalysisReport[]
   analysisCaches         AnalysisCache[]
+  smartSelectionPlans    SmartSelectionPlan[]
+  listingDrafts          ListingDraft[]
+  imageProjects          ImageProject[]
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
+}
+
+/// AI 图片模块：亚马逊 Listing 用图类型
+enum AiImageType {
+  MAIN_WHITE
+  LIFESTYLE
+  INFOGRAPHIC
+  SIZE_COMPARE
+  MODEL_USE
+  BEFORE_AFTER
+  PACKAGING
+  APLUS_STORY
+}
+
+/// 产品图片项目（每个产品一个）
+model ImageProject {
+  id               String           @id @default(cuid())
+  userId           String
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String
+  category         String           @default("")
+  description      String           @default("")
+  /// 参考图相对路径 JSON 数组，最多 5 张：["uploads/ai-images/{id}/ref/xxx.jpg"]
+  referencePathsJson String         @default("[]")
+  /// 新建项目时 AI 推荐的 7 张图策略（JSON）
+  bundlePlanJson   String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  generatedImages  GeneratedImage[]
+}
+
+/// Imagen 等生成的图片记录
+model GeneratedImage {
+  id             String      @id @default(cuid())
+  projectId      String
+  project        ImageProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  imageType      AiImageType
+  promptEn       String
+  promptZh       String      @default("")
+  paramsJson     String      @default("{}")
+  /// 相对网站根路径，如 uploads/ai-images/{projectId}/gen-xxx.png
+  filePath       String
+  isFavorite     Boolean     @default(false)
+  /// 亚马逊 7 张套装中的位置 0–6，未编入套装则为 null
+  sortPosition   Int?
+  parentImageId  String?
+  createdAt      DateTime    @default(now())
+}
+
+enum ListingDraftStatus {
+  DRAFT
+  COMPLETED
+  USED
+}
+
+/// Listing 撰写草稿
+model ListingDraft {
+  id          String              @id @default(cuid())
+  userId      String
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  marketplace String
+  category    String
+  productName String
+  brandName   String
+  inputJson   String
+  resultJson  String?
+  status      ListingDraftStatus  @default(DRAFT)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([userId, updatedAt])
+}
+
+enum SmartSelectionResultStatus {
+  RECOMMENDED
+  CANDIDATE
+  EXCLUDED
+  PASSED_HARD
+  REJECTED_AI
+}
+
+/// 智能选品方案（每套独立筛选条件与历史）
+model SmartSelectionPlan {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  marketplace String
+  category    String?
+  filtersJson String
+  active      Boolean  @default(true)
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  batches  SmartSelectionScanBatch[]
+  results  SmartSelectionResult[]
+  excludes SmartSelectionExcludeList[]
+}
+
+/// 单次扫描批次（同一批的推荐结果共享 batchId）
+model SmartSelectionScanBatch {
+  id        String   @id @default(cuid())
+  planId    String
+  plan      SmartSelectionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  statsJson String?
+  createdAt DateTime @default(now())
+
+  results SmartSelectionResult[]
+
+  @@index([planId, createdAt])
+}
+
+/// 扫描结果 / 候选 / 曾评估记录
+model SmartSelectionResult {
+  id          String                       @id @default(cuid())
+  planId      String
+  plan        SmartSelectionPlan           @relation(fields: [planId], references: [id], onDelete: Cascade)
+  batchId     String?
+  batch       SmartSelectionScanBatch?     @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  asin        String
+  marketplace String
+  productJson String
+  imageUrl    String?
+  title       String?
+  price       Float?
+  bsr         Int?
+  rating      Float?
+  reviewCount Int?
+  monthlySales Int?
+  aiScore     Int?
+  aiSummary   String?
+  aiJson      String?
+  status      SmartSelectionResultStatus   @default(RECOMMENDED)
+  createdAt   DateTime                     @default(now())
+
+  @@index([planId, asin])
+  @@index([planId, status, createdAt])
+  @@index([batchId])
+}
+
+/// 排除列表（不感兴趣）
+model SmartSelectionExcludeList {
+  id        String             @id @default(cuid())
+  planId    String
+  plan      SmartSelectionPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  asin      String
+  reason    String?
+  createdAt DateTime           @default(now())
+
+  @@unique([planId, asin])
 }
 
 /// 选品分析结果缓存（按站点+ASIN 组合+利润参数键；默认约 90 天过期）

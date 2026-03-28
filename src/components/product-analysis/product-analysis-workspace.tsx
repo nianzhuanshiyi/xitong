@@ -119,6 +119,23 @@ export function ProductAnalysisWorkspace() {
       return;
     }
 
+    const asinQ = searchParams.get("asin");
+    const marketplaceQ = searchParams.get("marketplace");
+    if (asinQ?.trim()) {
+      const m = (marketplaceQ ?? "US").toUpperCase();
+      const host =
+        m === "DE" || m === "EU"
+          ? "amazon.de"
+          : m === "UK"
+            ? "amazon.co.uk"
+            : m === "JP"
+              ? "amazon.co.jp"
+              : m === "AU"
+                ? "amazon.com.au"
+                : "amazon.com";
+      setRawInput(`https://${host}/dp/${asinQ.trim().toUpperCase()}`);
+    }
+
     setLoadingSaved(false);
   }, [searchParams]);
 

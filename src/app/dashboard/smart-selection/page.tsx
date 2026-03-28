@@ -1,10 +1,10 @@
-import { SectionPlaceholder } from "@/components/dashboard/section-placeholder";
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+import { authOptions } from "@/lib/auth";
+import { SmartSelectionWorkspace } from "@/components/smart-selection/smart-selection-workspace";
 
-export default function SmartSelectionPage() {
-  return (
-    <SectionPlaceholder
-      title="智能选品"
-      description="基于 Claude API 的 AI 选品建议与机会挖掘（待接入）。"
-    />
-  );
+export default async function SmartSelectionPage() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) redirect("/login");
+  return <SmartSelectionWorkspace />;
 }

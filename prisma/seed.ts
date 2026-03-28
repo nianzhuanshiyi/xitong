@@ -1,5 +1,9 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import {
+  EMPTY_FILTERS_PLACEHOLDER,
+  US_BEAUTY_DEFAULT_FILTERS,
+} from "../src/lib/smart-selection-filters";
 
 const prisma = new PrismaClient();
 
@@ -174,6 +178,50 @@ async function main() {
       });
     }
   }
+
+  await prisma.smartSelectionPlan.upsert({
+    where: { slug: "us-beauty" },
+    create: {
+      name: "美国美妆智能选品",
+      slug: "us-beauty",
+      marketplace: "US",
+      category: "Beauty & Personal Care",
+      filtersJson: JSON.stringify(US_BEAUTY_DEFAULT_FILTERS),
+      active: true,
+    },
+    update: {
+      name: "美国美妆智能选品",
+      marketplace: "US",
+      category: "Beauty & Personal Care",
+      active: true,
+    },
+  });
+
+  await prisma.smartSelectionPlan.upsert({
+    where: { slug: "au" },
+    create: {
+      name: "澳洲选品",
+      slug: "au",
+      marketplace: "AU",
+      category: null,
+      filtersJson: JSON.stringify(EMPTY_FILTERS_PLACEHOLDER),
+      active: false,
+    },
+    update: { active: false },
+  });
+
+  await prisma.smartSelectionPlan.upsert({
+    where: { slug: "eu" },
+    create: {
+      name: "欧洲选品",
+      slug: "eu",
+      marketplace: "EU",
+      category: null,
+      filtersJson: JSON.stringify(EMPTY_FILTERS_PLACEHOLDER),
+      active: false,
+    },
+    update: { active: false },
+  });
 }
 
 main()

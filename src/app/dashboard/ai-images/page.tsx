@@ -1,10 +1,10 @@
-import { SectionPlaceholder } from "@/components/dashboard/section-placeholder";
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+import { authOptions } from "@/lib/auth";
+import { AiImagesWorkspace } from "@/components/ai-images/ai-images-workspace";
 
-export default function AiImagesPage() {
-  return (
-    <SectionPlaceholder
-      title="AI 图片"
-      description="产品主图与场景图生成（待接入）。"
-    />
-  );
+export default async function AiImagesPage() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) redirect("/login");
+  return <AiImagesWorkspace />;
 }

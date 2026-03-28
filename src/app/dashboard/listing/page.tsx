@@ -1,10 +1,10 @@
-import { SectionPlaceholder } from "@/components/dashboard/section-placeholder";
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+import { authOptions } from "@/lib/auth";
+import { ListingWorkspace } from "@/components/listing/listing-workspace";
 
-export default function ListingPage() {
-  return (
-    <SectionPlaceholder
-      title="Listing 撰写"
-      description="AI 生成亚马逊 Listing 标题、五点与描述（待接入）。"
-    />
-  );
+export default async function ListingPage() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) redirect("/login");
+  return <ListingWorkspace />;
 }
