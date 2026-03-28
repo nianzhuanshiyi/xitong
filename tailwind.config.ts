@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import tailwindcssAnimate from "tailwindcss-animate";
 
 const config: Config = {
   darkMode: ["class"],
@@ -45,6 +46,9 @@ const config: Config = {
         border: "var(--border)",
         input: "var(--input)",
         ring: "var(--ring)",
+        success: "var(--success)",
+        warning: "var(--warning)",
+        error: "var(--error)",
         sidebar: {
           DEFAULT: "var(--sidebar)",
           foreground: "var(--sidebar-foreground)",
@@ -60,9 +64,52 @@ const config: Config = {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
         heading: ["var(--font-heading)", "var(--font-sans)", "sans-serif"],
       },
+      backgroundImage: {
+        "gradient-primary": "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+        "gradient-primary-soft":
+          "linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(139,92,246,0.12) 100%)",
+      },
+      boxShadow: {
+        card: "0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 16px -4px rgba(99, 102, 241, 0.08)",
+        "card-hover":
+          "0 8px 28px -6px rgba(99, 102, 241, 0.18), 0 4px 12px -4px rgba(15, 23, 42, 0.08)",
+        sidebar: "4px 0 24px -8px rgba(30, 27, 75, 0.35)",
+      },
+      blur: {
+        xs: "2px",
+      },
+      keyframes: {
+        "page-enter": {
+          "0%": { opacity: "0", transform: "translateY(10px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+      },
+      animation: {
+        "page-enter": "page-enter 0.38s cubic-bezier(0.16, 1, 0.3, 1) both",
+      },
     },
   },
-  plugins: [],
+  plugins: [
+    tailwindcssAnimate,
+    function ({
+      addVariant,
+    }: {
+      addVariant: (name: string, definition: string | string[]) => void;
+    }) {
+      addVariant("data-open", [
+        "&:where([data-state=open])",
+        "&:where([data-open]:not([data-open=false]))",
+      ]);
+      addVariant("data-closed", [
+        "&:where([data-state=closed])",
+        "&:where([data-closed]:not([data-closed=false]))",
+      ]);
+      addVariant(
+        "supports-backdrop-filter",
+        "@supports (backdrop-filter: blur(0)) or (-webkit-backdrop-filter: blur(0)) { & }"
+      );
+    },
+  ],
 };
 
 export default config;

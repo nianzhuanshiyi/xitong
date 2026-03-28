@@ -65,20 +65,22 @@ export function UsersManagement() {
   }, [load]);
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between space-y-0">
+        <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-4">
           <div>
-            <CardTitle>团队成员</CardTitle>
-            <CardDescription>管理角色权限与 AI 功能授权（仅管理员）</CardDescription>
+            <CardTitle className="font-heading text-lg text-slate-900">团队成员</CardTitle>
+            <CardDescription className="text-slate-600">
+              管理角色权限与 AI 功能授权（仅管理员）
+            </CardDescription>
           </div>
-          <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
+          <Button size="sm" className="gap-1.5 shadow-md" onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" />
             添加用户
           </Button>
         </CardHeader>
         <CardContent>
-          <div className="rounded-lg border border-border">
+          <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-slate-50/40 shadow-inner">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -109,12 +111,19 @@ export function UsersManagement() {
                       <TableCell className="font-medium">{u.name ?? "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{u.email}</TableCell>
                       <TableCell>
-                        <Badge variant={u.role === "ADMIN" ? "default" : "secondary"}>
+                        <Badge
+                          variant={u.role === "ADMIN" ? "default" : "secondary"}
+                          className={
+                            u.role === "ADMIN"
+                              ? "border-0 bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white shadow-sm"
+                              : ""
+                          }
+                        >
                           {u.role === "ADMIN" ? "管理员" : "员工"}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={u.aiAuthorized ? "default" : "outline"}>
+                        <Badge variant={u.aiAuthorized ? "success" : "outline"}>
                           {u.aiAuthorized ? "已授权" : "未授权"}
                         </Badge>
                       </TableCell>
@@ -125,7 +134,7 @@ export function UsersManagement() {
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          className="mr-1"
+                          className="mr-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                           onClick={() => setEditUser(u)}
                           aria-label="编辑"
                         >
@@ -188,7 +197,7 @@ function UserDeleteButton({ user, onDone }: { user: UserRow; onDone: () => void 
     <Button
       variant="ghost"
       size="icon-sm"
-      className="text-destructive hover:text-destructive"
+      className="text-destructive hover:bg-red-50 hover:text-destructive"
       disabled={pending}
       onClick={onDelete}
       aria-label="删除"

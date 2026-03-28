@@ -1,10 +1,13 @@
-import { SectionPlaceholder } from "@/components/dashboard/section-placeholder";
+import { HistoryList } from "./history-list";
 
 export default function HistoryPage() {
   return (
-    <SectionPlaceholder
-      title="历史记录"
-      description="操作与 AI 调用历史将在此汇总（与 OperationLog 打通后展示）。"
-    />
+    <div className="mx-auto max-w-3xl space-y-6">
+      <div>
+        <h2 className="font-heading text-xl font-semibold text-slate-900">历史记录</h2>
+        <p className="mt-1 text-sm text-slate-600">最近的选品分析报告（按时间倒序）。</p>
+      </div>
+      <HistoryList />
+    </div>
   );
 }

@@ -13,21 +13,57 @@ enum UserRole {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  password      String?
-  role          UserRole  @default(EMPLOYEE)
-  aiAuthorized  Boolean   @default(false)
-  teamId        String?
-  team          Team?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  accounts      Account[]
-  sessions      Session[]
-  operationLogs OperationLog[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                     String                  @id @default(cuid())
+  name                   String?
+  email                  String?                 @unique
+  emailVerified          DateTime?
+  image                  String?
+  password               String?
+  role                   UserRole                @default(EMPLOYEE)
+  aiAuthorized           Boolean                 @default(false)
+  teamId                 String?
+  team                   Team?                   @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  accounts               Account[]
+  sessions               Session[]
+  operationLogs          OperationLog[]
+  productAnalysisReports ProductAnalysisReport[]
+  analysisCaches         AnalysisCache[]
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+}
+
+/// 选品分析结果缓存（按站点+ASIN 组合+利润参数键；默认约 90 天过期）
+model AnalysisCache {
+  id             String   @id @default(cuid())
+  cacheKey       String   @unique
+  asin           String
+  marketplace    String
+  analysisData   String
+  reportMarkdown String
+  score          Int
+  expiresAt      DateTime
+  analyzedById   String
+  analyzedBy     User     @relation(fields: [analyzedById], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([asin])
+  @@index([marketplace])
+  @@index([expiresAt])
+}
+
+model ProductAnalysisReport {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  marketplace String
+  asinsJson   String
+  title       String?
+  score       Int?
+  scoreBand   String?
+  status      String
+  resultJson  String?
+  createdAt   DateTime @default(now())
 }
 
 model Account {
@@ -75,16 +111,159 @@ model Team {
   users       User[]
 }
 
+enum SupplierStatus {
+  COOPERATING
+  EVALUATING
+  CANDIDATE
+  REJECTED
+}
+
+enum SupplierFileCategory {
+  CATALOG
+  PRICE_LIST
+  TEST_REPORT
+  CERTIFICATION
+  CONTRACT
+  PACKAGING
+  PRODUCT_IMAGE
+  OTHER
+}
+
 model Supplier {
-  id             String    @id @default(cuid())
-  name           String
-  country        String
-  website        String?
-  mainCategories String?
-  contact        String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  products       Product[]
+  id                   String         @id @default(cuid())
+  name                 String
+  nameEn               String?
+  country              String
+  countryCode          String?
+  website              String?
+  address              String?
+  mainCategories       String?
+  contact              String?
+  paymentTerms         String?
+  moq                  String?
+  sampleLeadDays       Int?
+  productionLeadDays   Int?
+  cooperationStartDate DateTime?
+  remarks              String?
+  status               SupplierStatus @default(EVALUATING)
+  overallScore         Float?
+  logoUrl              String?
+  profileSummary       String?
+  aiEvaluationJson     String?
+  websiteScrapedAt     DateTime?
+  lastActivityAt       DateTime?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  contacts      SupplierContact[]
+  files         SupplierFile[]
+  ratings       SupplierRatingEntry[]
+  orders        SupplierOrder[]
+  samples       SupplierSample[]
+  qualityIssues SupplierQualityIssue[]
+  supplierNotes SupplierNote[]
+  products      Product[]
+}
+
+model SupplierContact {
+  id          String   @id @default(cuid())
+  supplierId  String
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  name        String
+  title       String?
+  email       String?
+  phone       String?
+  wechat      String?
+  whatsapp    String?
+  lineId      String?
+  isPrimary   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SupplierFile {
+  id           String               @id @default(cuid())
+  supplierId   String
+  supplier     Supplier             @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  storedName   String
+  originalName String
+  mimeType     String
+  size         Int
+  category     SupplierFileCategory @default(OTHER)
+  relativePath String
+  uploadedAt   DateTime             @default(now())
+
+  analysis SupplierFileAnalysis?
+}
+
+model SupplierFileAnalysis {
+  id              String       @id @default(cuid())
+  fileId          String       @unique
+  file            SupplierFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  summary         String?
+  structuredJson  String?
+  complianceNotes String?
+  certExpiryDate  DateTime?
+  rawResponse     String?
+  createdAt       DateTime     @default(now())
+}
+
+model SupplierRatingEntry {
+  id            String   @id @default(cuid())
+  supplierId    String
+  supplier      Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  quality       Int
+  priceCompete  Int
+  delivery      Int
+  communication Int
+  cooperation   Int
+  rdCapability  Int
+  comment       String?
+  createdAt     DateTime @default(now())
+}
+
+model SupplierOrder {
+  id          String   @id @default(cuid())
+  supplierId  String
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  orderDate   DateTime
+  productDesc String
+  quantity    Int?
+  amount      Float?
+  currency    String?  @default("USD")
+  status      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SupplierSample {
+  id          String   @id @default(cuid())
+  supplierId  String
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  sampleDate  DateTime
+  productDesc String
+  status      String?
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+model SupplierQualityIssue {
+  id          String   @id @default(cuid())
+  supplierId  String
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  issueDate   DateTime @default(now())
+  description String
+  severity    String?
+  createdAt   DateTime @default(now())
+}
+
+model SupplierNote {
+  id          String   @id @default(cuid())
+  supplierId  String
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  title       String?
+  content     String
+  createdAt   DateTime @default(now())
 }
 
 model Product {
@@ -115,4 +294,13 @@ model InviteCode {
   usedCount Int       @default(0)
   expiresAt DateTime?
   createdAt DateTime  @default(now())
+}
+
+/// 后台保存的 API 密钥（.env 存在同名变量时优先使用环境变量）
+model IntegrationSecret {
+  id                 String   @id @default("default")
+  claudeApiKey       String?
+  sellerspriteSecret String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }

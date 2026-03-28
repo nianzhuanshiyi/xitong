@@ -29,6 +29,9 @@ yarn-error.log*
 .env
 .env*.local
 
+# local supplier uploads (dev)
+/public/uploads/
+
 # prisma sqlite
 /prisma/dev.db
 /prisma/dev.db-journal

@@ -3,6 +3,90 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+const seedSuppliers = [
+  {
+    name: "FormulAB",
+    nameEn: "FormulAB",
+    country: "美国",
+    countryCode: "US" as const,
+    website: "https://formulab.com/",
+    mainCategories: "美妆,美妆配方研发",
+    status: "COOPERATING" as const,
+  },
+  {
+    name: "AMR Labs",
+    nameEn: "AMR Labs",
+    country: "美国",
+    countryCode: "US" as const,
+    website: "https://amrlabs.com/",
+    mainCategories: "美妆,生产",
+    status: "COOPERATING" as const,
+  },
+  {
+    name: "Spade Soleil",
+    nameEn: "Spade Soleil",
+    country: "美国",
+    countryCode: "US" as const,
+    website: "https://spadesoleil.com/",
+    mainCategories: "美妆,品牌",
+    status: "EVALUATING" as const,
+  },
+  {
+    name: "CTK OTC",
+    nameEn: "CTK OTC",
+    country: "美国",
+    countryCode: "US" as const,
+    website: "https://www.ctkotc.com/",
+    mainCategories: "OTC,美妆",
+    status: "COOPERATING" as const,
+  },
+  {
+    name: "Cohere Beauty",
+    nameEn: "Cohere Beauty",
+    country: "美国",
+    countryCode: "US" as const,
+    website: "https://coherebeauty.com/",
+    mainCategories: "美妆",
+    status: "CANDIDATE" as const,
+  },
+  {
+    name: "Pravada",
+    nameEn: "Pravada",
+    country: "美国",
+    countryCode: "US" as const,
+    website: "http://pravada.com/",
+    mainCategories: "美妆",
+    status: "EVALUATING" as const,
+  },
+  {
+    name: "Luxe Farm",
+    nameEn: "Luxe Farm",
+    country: "韩国",
+    countryCode: "KR" as const,
+    website: "http://luxe-farm.com/",
+    mainCategories: "美妆,原料",
+    status: "COOPERATING" as const,
+  },
+  {
+    name: "Ecoment",
+    nameEn: "Ecoment",
+    country: "韩国",
+    countryCode: "KR" as const,
+    website: "https://ecoment.co.kr/en/",
+    mainCategories: "美妆",
+    status: "COOPERATING" as const,
+  },
+  {
+    name: "NFC New Eng",
+    nameEn: "NFC New Eng",
+    country: "韩国",
+    countryCode: "KR" as const,
+    website: "http://nfcneweng.sendpage.co.kr/",
+    mainCategories: "美妆,综合",
+    status: "EVALUATING" as const,
+  },
+];
+
 async function main() {
   const team = await prisma.team.upsert({
     where: { id: "seed-default-team" },
@@ -52,28 +136,40 @@ async function main() {
     },
   });
 
-  const suppliers = [
-    { name: "FormulAB", country: "美国", mainCategories: "美妆" },
-    { name: "AMR Labs", country: "美国", mainCategories: "美妆" },
-    { name: "Spade Soleil", country: "美国", mainCategories: "美妆" },
-    { name: "CTK OTC", country: "美国", mainCategories: "OTC" },
-    { name: "Cohere Beauty", country: "美国", mainCategories: "美妆" },
-    { name: "Pravada", country: "美国", mainCategories: "美妆" },
-    { name: "Luxe Farm", country: "韩国", mainCategories: "美妆" },
-    { name: "Ecoment", country: "韩国", mainCategories: "综合" },
-    { name: "NFC New Eng", country: "韩国", mainCategories: "综合" },
-  ];
+  const fav = (url: string) =>
+    `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=64`;
 
-  for (const s of suppliers) {
+  for (const s of seedSuppliers) {
     const existing = await prisma.supplier.findFirst({
       where: { name: s.name },
     });
-    if (!existing) {
+    const logoUrl = fav(s.website);
+    if (existing) {
+      await prisma.supplier.update({
+        where: { id: existing.id },
+        data: {
+          nameEn: s.nameEn,
+          country: s.country,
+          countryCode: s.countryCode,
+          website: s.website,
+          mainCategories: s.mainCategories,
+          status: s.status,
+          logoUrl,
+          lastActivityAt: new Date(),
+        },
+      });
+    } else {
       await prisma.supplier.create({
         data: {
           name: s.name,
+          nameEn: s.nameEn,
           country: s.country,
+          countryCode: s.countryCode,
+          website: s.website,
           mainCategories: s.mainCategories,
+          status: s.status,
+          logoUrl,
+          lastActivityAt: new Date(),
         },
       });
     }
