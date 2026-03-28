@@ -12,7 +12,7 @@ import {
   Warehouse,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { dashboardNav } from "@/config/dashboard-nav";
+import { dashboardNav, getDashboardTitle } from "@/config/dashboard-nav";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import {
   Sheet,
@@ -42,20 +42,24 @@ function useFilteredNav() {
 function NavLinks({
   variant,
   onNavigate,
+  mailUnread,
 }: {
   variant: "full" | "icons" | "mobile";
   onNavigate?: () => void;
+  mailUnread: number;
 }) {
   const pathname = usePathname();
   const items = useFilteredNav();
 
   return (
     <>
-      {items.map(({ href, label, Icon }) => {
+      {items.map(({ href, label, Icon, mailBadge }) => {
         const active =
           href === "/dashboard"
             ? pathname === "/dashboard"
             : pathname.startsWith(href);
+        const showMailDot = mailBadge && mailUnread > 0;
+        const badgeText = mailUnread > 99 ? "99+" : String(mailUnread);
 
         if (variant === "icons") {
           return (
@@ -65,13 +69,18 @@ function NavLinks({
               title={label}
               onClick={onNavigate}
               className={cn(
-                "flex size-11 items-center justify-center rounded-xl transition-all duration-200",
+                "relative flex size-11 items-center justify-center rounded-xl transition-all duration-200",
                 active
                   ? "bg-white/[0.18] text-white shadow-sm ring-1 ring-white/15"
                   : "text-slate-400 hover:bg-white/[0.1] hover:text-white"
               )}
             >
               <Icon className="size-[22px] shrink-0" />
+              {showMailDot ? (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-0.5 text-[9px] font-bold leading-none text-white ring-2 ring-[#1e1b4b]">
+                  {badgeText}
+                </span>
+              ) : null}
             </Link>
           );
         }
@@ -89,13 +98,20 @@ function NavLinks({
                 : "border-l-transparent text-slate-300 hover:border-l-white/20 hover:bg-white/[0.08] hover:text-white"
             )}
           >
-            <Icon
-              className={cn(
-                "size-[18px] shrink-0 transition-transform duration-200 group-hover/nav:scale-110",
-                active ? "text-indigo-100" : "text-slate-400 group-hover/nav:text-white"
-              )}
-            />
-            <span className="truncate">{label}</span>
+            <span className="relative shrink-0">
+              <Icon
+                className={cn(
+                  "size-[18px] transition-transform duration-200 group-hover/nav:scale-110",
+                  active ? "text-indigo-100" : "text-slate-400 group-hover/nav:text-white"
+                )}
+              />
+              {showMailDot ? (
+                <span className="absolute -right-1.5 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red-500 px-0.5 text-[8px] font-bold leading-none text-white">
+                  {badgeText}
+                </span>
+              ) : null}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{label}</span>
           </Link>
         );
       })}
@@ -132,6 +148,40 @@ function SidebarBrand({ compact }: { compact?: boolean }) {
  */
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [mailUnread, setMailUnread] = useState(0);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      try {
+        const r = await fetch("/api/mail/stats");
+        if (!r.ok) return;
+        const j = (await r.json()) as { unread?: number };
+        if (alive) setMailUnread(Math.max(0, Number(j.unread) || 0));
+      } catch {
+        /* ignore */
+      }
+    }
+    void load();
+    const t = setInterval(load, 120_000);
+    const onMailStatsRefresh = () => {
+      void load();
+    };
+    window.addEventListener("xitong-mail-stats-refresh", onMailStatsRefresh);
+    return () => {
+      alive = false;
+      clearInterval(t);
+      window.removeEventListener("xitong-mail-stats-refresh", onMailStatsRefresh);
+    };
+  }, []);
+
+  useEffect(() => {
+    const base = "选品分析 SaaS";
+    const section = getDashboardTitle(pathname ?? "");
+    const prefix = mailUnread > 0 ? `(${mailUnread}) ` : "";
+    document.title = `${prefix}${section} · ${base}`;
+  }, [pathname, mailUnread]);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
@@ -150,7 +200,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <SidebarBrand />
         </div>
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden p-3">
-          <NavLinks variant="full" />
+          <NavLinks variant="full" mailUnread={mailUnread} />
         </nav>
         <div className="border-t border-white/10 px-4 py-3">
           <p className="text-center text-[11px] text-indigo-300/75">
@@ -164,7 +214,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <SidebarBrand compact />
         </div>
         <nav className="flex flex-1 flex-col items-center gap-2 overflow-y-auto overflow-x-hidden px-1 py-3">
-          <NavLinks variant="icons" />
+          <NavLinks variant="icons" mailUnread={mailUnread} />
         </nav>
       </aside>
 
@@ -182,7 +232,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <p className="text-xs font-normal text-indigo-200/80">选择功能模块</p>
           </SheetHeader>
           <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
-            <NavLinks variant="mobile" onNavigate={() => setMobileOpen(false)} />
+            <NavLinks
+              variant="mobile"
+              mailUnread={mailUnread}
+              onNavigate={() => setMobileOpen(false)}
+            />
           </nav>
         </SheetContent>
       </Sheet>

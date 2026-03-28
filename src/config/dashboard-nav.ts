@@ -3,6 +3,8 @@ import {
   LayoutDashboard,
   Users,
   Warehouse,
+  Mail,
+  ClipboardList,
   LineChart,
   Sparkles,
   FileText,
@@ -19,6 +21,8 @@ export type DashboardNavItem = {
   label: string;
   title: string;
   Icon: LucideIcon;
+  /** 显示未读邮件数角标 */
+  mailBadge?: boolean;
 };
 
 export const dashboardNav: DashboardNavItem[] = [
@@ -29,6 +33,19 @@ export const dashboardNav: DashboardNavItem[] = [
     label: "供应商资源库",
     title: "供应商资源库",
     Icon: Warehouse,
+  },
+  {
+    href: "/dashboard/mail",
+    label: "📧 邮件中心",
+    title: "邮件中心",
+    Icon: Mail,
+    mailBadge: true,
+  },
+  {
+    href: "/dashboard/todos",
+    label: "📋 待办中心",
+    title: "待办中心",
+    Icon: ClipboardList,
   },
   {
     href: "/dashboard/product-analysis",

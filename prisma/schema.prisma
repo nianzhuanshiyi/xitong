@@ -31,6 +31,7 @@ model User {
   smartSelectionPlans    SmartSelectionPlan[]
   listingDrafts          ListingDraft[]
   imageProjects          ImageProject[]
+  assignedActionItems    ActionItem[]            @relation("ActionItemAssignee")
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
 }
@@ -317,6 +318,112 @@ model Supplier {
   qualityIssues SupplierQualityIssue[]
   supplierNotes SupplierNote[]
   products      Product[]
+  emails        Email[]
+  supplierDomains SupplierDomain[]
+  actionItems   ActionItem[]
+}
+
+/// 邮件方向
+enum EmailDirection {
+  RECEIVED
+  SENT
+}
+
+/// 紧急程度（邮件与待办共用）
+enum MailPriority {
+  URGENT
+  NORMAL
+  LOW
+}
+
+/// 供应商邮件
+model Email {
+  id              String         @id @default(cuid())
+  supplierId      String?
+  supplier        Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  messageId       String         @unique
+  inReplyTo       String?
+  referencesIds   String?
+  direction       EmailDirection
+  fromAddress     String
+  toAddress       String
+  subject         String
+  bodyText        String         @default("")
+  bodyHtml        String?
+  /// AI 全文中文翻译（展示用）
+  bodyZh          String?
+  receivedAt      DateTime
+  summaryCn       String?
+  priority        MailPriority   @default(NORMAL)
+  tagsJson        String         @default("[]")
+  /// 未归类邮件的 AI 分组：logistics / invoice / inquiry / fair / other
+  aiBucket        String?
+  isRead          Boolean        @default(false)
+  isClassified    Boolean        @default(false)
+  /// 软删除：列表与详情均不展示
+  isDeleted       Boolean        @default(false)
+  isStarred       Boolean        @default(false)
+  /// 归档后从默认收件列表隐藏
+  isArchived      Boolean        @default(false)
+  imapUid         Int?
+  hasAttachments  Boolean        @default(false)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  attachments EmailAttachment[]
+  actionItems ActionItem[]
+
+  @@index([supplierId, receivedAt])
+  @@index([supplierId, isRead])
+  @@index([receivedAt])
+}
+
+model EmailAttachment {
+  id          String   @id @default(cuid())
+  emailId     String
+  email       Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  filename    String
+  contentType String
+  sizeBytes   Int
+  storagePath String
+  createdAt   DateTime @default(now())
+}
+
+model ActionItem {
+  id          String       @id @default(cuid())
+  emailId     String?
+  email       Email?       @relation(fields: [emailId], references: [id], onDelete: SetNull)
+  supplierId  String?
+  supplier    Supplier?    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  userId      String?
+  user        User?        @relation("ActionItemAssignee", fields: [userId], references: [id], onDelete: SetNull)
+  content     String
+  isCompleted Boolean      @default(false)
+  dueDate     DateTime?
+  priority    MailPriority @default(NORMAL)
+  completedAt DateTime?
+  createdAt   DateTime     @default(now())
+
+  @@index([supplierId, isCompleted])
+  @@index([isCompleted, priority])
+}
+
+model SupplierDomain {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  domain     String   @unique
+  createdAt  DateTime @default(now())
+}
+
+model ImapSyncState {
+  id           String    @id @default(cuid())
+  emailAccount String    @unique
+  lastUid      Int       @default(0)
+  lastSyncAt   DateTime?
+  status       String    @default("active")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 model SupplierContact {
