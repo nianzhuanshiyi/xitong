@@ -5,6 +5,8 @@ import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 const patchSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   email: z.string().email().optional(),

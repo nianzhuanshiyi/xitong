@@ -6,6 +6,8 @@ import prisma from "@/lib/prisma";
 import { requireDashboardSession } from "@/lib/supplier-auth";
 import { absolutePathFromRelative } from "@/lib/supplier-uploads";
 
+export const dynamic = "force-dynamic";
+
 const patchSchema = z.object({
   category: z.enum([
     "CATALOG",

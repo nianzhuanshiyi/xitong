@@ -6,6 +6,8 @@ import prisma from "@/lib/prisma";
 import { requireDashboardSession } from "@/lib/supplier-auth";
 import { publicRoot } from "@/lib/ai-images/paths";
 
+export const dynamic = "force-dynamic";
+
 const patchSchema = z.object({
   isFavorite: z.boolean().optional(),
   sortPosition: z.number().int().min(0).max(6).nullable().optional(),

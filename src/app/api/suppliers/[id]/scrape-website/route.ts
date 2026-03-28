@@ -5,6 +5,8 @@ import { requireDashboardSession } from "@/lib/supplier-auth";
 import { aiExtractWebsiteFields, scrapeWebsitePlainText } from "@/lib/supplier-ai";
 import { faviconUrlFromWebsite } from "@/lib/supplier-uploads";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }

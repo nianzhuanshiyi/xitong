@@ -7,6 +7,8 @@ import { bundleSlotsFromAi } from "@/lib/ai-images/bundle-resolve";
 import { DEFAULT_AMAZON_BUNDLE } from "@/lib/ai-images/bundle-defaults";
 import { ensureProjectDirs } from "@/lib/ai-images/paths";
 
+export const dynamic = "force-dynamic";
+
 const createSchema = z.object({
   name: z.string().min(1).max(200),
   category: z.string().max(200).default(""),

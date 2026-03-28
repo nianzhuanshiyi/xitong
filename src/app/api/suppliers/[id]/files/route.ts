@@ -13,6 +13,8 @@ import {
   absolutePathFromRelative,
 } from "@/lib/supplier-uploads";
 
+export const dynamic = "force-dynamic";
+
 const CATEGORIES = new Set<string>([
   "CATALOG",
   "PRICE_LIST",

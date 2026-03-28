@@ -5,6 +5,8 @@ import { extractTextFromSupplierFile } from "@/lib/supplier-file-text";
 import { aiAnalyzeFileByCategory } from "@/lib/supplier-ai";
 import { absolutePathFromRelative } from "@/lib/supplier-uploads";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string; fileId: string }> }

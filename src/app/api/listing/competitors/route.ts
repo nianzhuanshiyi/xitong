@@ -4,6 +4,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { fetchCompetitorContext } from "@/lib/listing/competitor";
 
+export const dynamic = "force-dynamic";
+
 const bodySchema = z.object({
   marketplace: z.string().min(1).max(16),
   asinText: z.string().max(500),

@@ -3,6 +3,8 @@ import { z } from "zod";
 import { requireDashboardSession } from "@/lib/supplier-auth";
 import { claudeProcurementAdvice } from "@/lib/mail/claude-mail";
 
+export const dynamic = "force-dynamic";
+
 const schema = z.object({
   context: z.string().min(10).max(20_000),
 });

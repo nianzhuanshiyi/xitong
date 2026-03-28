@@ -15,6 +15,8 @@ import type {
 } from "@/lib/listing/types";
 import { DEFAULT_GENERATE_FLAGS } from "@/lib/listing/types";
 
+export const dynamic = "force-dynamic";
+
 export const maxDuration = 120;
 
 const inputSchema = z.object({

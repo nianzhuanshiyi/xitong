@@ -3,6 +3,8 @@ import prisma from "@/lib/prisma";
 import { requireDashboardSession } from "@/lib/supplier-auth";
 import { aiSupplierEvaluation } from "@/lib/supplier-ai";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }

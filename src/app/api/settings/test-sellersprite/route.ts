@@ -5,6 +5,8 @@ import {
 } from "@/lib/integration-keys";
 import { requireAdminSession } from "@/lib/require-admin";
 
+export const dynamic = "force-dynamic";
+
 async function mcpProbe(
   url: string,
   secret: string,

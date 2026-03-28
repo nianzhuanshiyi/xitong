@@ -3,6 +3,8 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { requireDashboardSession } from "@/lib/supplier-auth";
 
+export const dynamic = "force-dynamic";
+
 const bodySchema = z.object({
   sampleDate: z.string().datetime(),
   productDesc: z.string().min(1).max(2000),

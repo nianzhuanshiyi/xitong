@@ -3,6 +3,8 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { requireDashboardSession } from "@/lib/supplier-auth";
 
+export const dynamic = "force-dynamic";
+
 const bodySchema = z.object({
   quality: z.number().int().min(1).max(5),
   priceCompete: z.number().int().min(1).max(5),

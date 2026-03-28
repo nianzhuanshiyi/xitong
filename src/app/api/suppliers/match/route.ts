@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import { requireDashboardSession } from "@/lib/supplier-auth";
 import { aiMatchSuppliersForCategory } from "@/lib/supplier-ai";
 
+export const dynamic = "force-dynamic";
+
 const bodySchema = z.object({
   categoryHint: z.string().min(1).max(2000),
 });

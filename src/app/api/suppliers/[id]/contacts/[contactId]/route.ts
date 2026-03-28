@@ -3,6 +3,8 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { requireDashboardSession } from "@/lib/supplier-auth";
 
+export const dynamic = "force-dynamic";
+
 const patchSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   title: z.string().max(120).optional().nullable(),

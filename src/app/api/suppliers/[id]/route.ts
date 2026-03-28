@@ -5,6 +5,8 @@ import prisma from "@/lib/prisma";
 import { requireDashboardSession } from "@/lib/supplier-auth";
 import { faviconUrlFromWebsite } from "@/lib/supplier-uploads";
 
+export const dynamic = "force-dynamic";
+
 const patchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   nameEn: z.string().max(200).optional().nullable(),

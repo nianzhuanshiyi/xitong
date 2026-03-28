@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import { requireDashboardSession } from "@/lib/supplier-auth";
 import { US_BEAUTY_DEFAULT_FILTERS } from "@/lib/smart-selection-filters";
 
+export const dynamic = "force-dynamic";
+
 const createSchema = z.object({
   name: z.string().min(1).max(120),
   slug: z

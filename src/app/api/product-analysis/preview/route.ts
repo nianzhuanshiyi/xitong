@@ -5,6 +5,8 @@ import { parseAsinInput } from "@/lib/asin-parser";
 import { guessPriceFromDetail } from "@/lib/product-analysis/utils";
 import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {

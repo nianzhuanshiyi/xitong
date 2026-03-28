@@ -5,6 +5,8 @@ import { requireDashboardSession } from "@/lib/supplier-auth";
 import { mailUiMock } from "@/lib/mail/config";
 import { MailPriority } from "@prisma/client";
 
+export const dynamic = "force-dynamic";
+
 const patchSchema = z.object({
   isCompleted: z.boolean().optional(),
   priority: z.enum(["URGENT", "NORMAL", "LOW"]).optional(),

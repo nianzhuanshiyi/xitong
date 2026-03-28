@@ -5,6 +5,8 @@ import { applyAiSummaryToEmail } from "@/lib/mail/imap-sync";
 import { claudeSummarizeEmail } from "@/lib/mail/claude-mail";
 import { MailPriority } from "@prisma/client";
 
+export const dynamic = "force-dynamic";
+
 const bodySchema = z.object({
   emailId: z.string().optional(),
   bodyText: z.string().max(20_000).optional(),

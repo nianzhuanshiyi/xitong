@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getClaudeApiKey } from "@/lib/integration-keys";
 import { requireAdminSession } from "@/lib/require-admin";
 
+export const dynamic = "force-dynamic";
+
 const MODEL =
   process.env.CLAUDE_TEST_MODEL?.trim() || "claude-opus-4-6";
 

@@ -7,6 +7,8 @@ import { requireDashboardSession } from "@/lib/supplier-auth";
 import { parseBundlePlanJson } from "@/lib/ai-images/bundle-resolve";
 import { publicRoot } from "@/lib/ai-images/paths";
 
+export const dynamic = "force-dynamic";
+
 const patchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   category: z.string().max(200).optional(),

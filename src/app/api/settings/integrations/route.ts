@@ -9,6 +9,8 @@ import {
 } from "@/lib/integration-keys";
 import { requireAdminSession } from "@/lib/require-admin";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const session = await requireAdminSession();
   if (!session) {

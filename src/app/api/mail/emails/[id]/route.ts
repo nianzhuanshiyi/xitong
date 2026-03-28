@@ -6,6 +6,8 @@ import { mailUiMock } from "@/lib/mail/config";
 import { MOCK_MAIL_DETAILS } from "@/lib/mail/fixtures";
 import { emailDetail } from "@/lib/mail/dto";
 
+export const dynamic = "force-dynamic";
+
 const patchSchema = z.object({
   isRead: z.boolean().optional(),
   isStarred: z.boolean().optional(),

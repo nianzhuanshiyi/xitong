@@ -4,6 +4,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 const createSchema = z.object({
   marketplace: z.string().min(1).max(16),
   category: z.string().min(1).max(200),

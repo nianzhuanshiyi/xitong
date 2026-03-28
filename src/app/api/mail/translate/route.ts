@@ -3,6 +3,8 @@ import { z } from "zod";
 import { requireDashboardSession } from "@/lib/supplier-auth";
 import { claudeTranslateFree } from "@/lib/mail/claude-mail";
 
+export const dynamic = "force-dynamic";
+
 const schema = z.object({
   text: z.string().min(1).max(8000),
   hint: z.string().max(500).optional(),

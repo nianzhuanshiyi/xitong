@@ -7,6 +7,8 @@ import {
   isPublicEmailDomain,
 } from "@/lib/mail/public-domains";
 
+export const dynamic = "force-dynamic";
+
 const bodySchema = z.object({
   supplierId: z.string(),
   applyDomain: z.boolean().optional().default(false),
