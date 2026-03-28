@@ -260,6 +260,7 @@ export function estimateScanTokens(filters: SmartSelectionFilters): {
   aiDeepCount: number;
   tokensApprox: number;
 } {
+  void filters;
   const pullCount = 100;
   const aiDeepCount = 10;
   const tokensApprox = pullCount * 50 + aiDeepCount * 3500;

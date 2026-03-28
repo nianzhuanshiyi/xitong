@@ -194,7 +194,7 @@ export function AiImagesWorkspace() {
 
   useEffect(() => {
     void refreshProjects();
-  }, []);
+  }, [refreshProjects]);
 
   useEffect(() => {
     if (projectId) void loadProject(projectId);

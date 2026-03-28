@@ -37,7 +37,7 @@ function heuristicScore(ctx: {
   let marketSpace = 12;
   let competition = 12;
   let profit = 12;
-  let differentiation = 12;
+  const differentiation = 12;
   let barrier = 12;
 
   if (ctx.marginPct >= 28) profit = 18;
