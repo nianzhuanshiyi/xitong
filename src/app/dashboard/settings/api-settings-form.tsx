@@ -207,10 +207,12 @@ export function ApiSettingsForm() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
+    <div className="mx-auto max-w-3xl space-y-6 sm:space-y-8">
       <div>
-        <h2 className="font-heading text-xl font-semibold text-slate-900">API 与集成</h2>
-        <p className="mt-1 text-sm text-slate-600">
+        <h2 className="font-heading text-lg font-semibold text-slate-900 sm:text-xl">
+          API 与集成
+        </h2>
+        <p className="mt-1 text-xs leading-relaxed text-slate-600 sm:text-sm">
           密钥优先读取 <code className="rounded bg-slate-100 px-1 text-xs">.env</code>{" "}
           ；此处保存的密钥写入数据库作为备用。请勿将密钥提交到 Git。
         </p>

@@ -1,0 +1,58 @@
+---
+description: 全站响应式与断点规范（仪表盘、新页面必遵）
+globs: "**/*.{tsx,jsx,css}"
+alwaysApply: false
+---
+
+# 响应式布局规范
+
+后续新增或修改页面时，须按以下标准实现自适应，与现有仪表盘保持一致。
+
+## 断点（Tailwind 默认）
+
+| 前缀 | 宽度 | 用途 |
+|------|------|------|
+| 默认 | &lt;640px | 手机：单列、全宽、底部安全区 |
+| `sm:` | ≥640px | 大手机 / 小平板 |
+| `md:` | ≥768px | 平板：可与桌面不同的导航/布局 |
+| `lg:` | ≥1024px | 小桌面：完整侧栏、多列网格 |
+| `xl:` | ≥1280px | 宽屏：三列卡片等 |
+
+## 仪表盘壳（`DashboardShell`）
+
+- **lg+**：完整左侧导航（约 15.5rem）。
+- **md～lg**：窄条图标导航（约 4.5rem），`title` 提示文案。
+- **&lt;md**：侧栏隐藏；顶栏汉堡打开全屏侧滑菜单；底部固定快捷栏（首页/选品/供应商/历史/菜单）+ `pb-[calc(3.5rem+env(safe-area-inset-bottom))]` 留给主内容。
+
+新页面勿再单独实现全局侧栏，放在 `dashboard` 布局内即可。
+
+## 布局与排版
+
+- 页面标题：`text-lg sm:text-xl` 或 `text-xl sm:text-2xl` 分级加大。
+- 正文说明：`text-xs sm:text-sm`。
+- 主内容区横向间距：`px-4 sm:px-6 lg:px-8`（与 `DashboardShell` 的 `main` 一致或在其内不再重复过大 padding）。
+- 复杂两栏（如选品输入+结果）：`flex-col lg:flex-row`，小屏上下堆叠；折叠/次要控件仅在 `lg:` 以上显示。
+
+## 表格
+
+- 外层包一层 `overflow-x-auto`；表体使用 `min-w-[640px]`（或按列数调整）保证可横向滚动。
+- 可选：在 `md` 以下增加卡片列表视图，与表格二选一或并存。
+
+## 弹窗（`Dialog`）
+
+- 已在 `DialogContent` 默认样式中为 **`max-sm:` 全屏**（贴边、`100dvh`、无圆角）。业务侧用 `sm:max-w-md` 等仅在 `sm+` 限制宽度即可。
+
+## 抽屉（`Sheet`）
+
+- 左侧抽屉在超小屏使用 `w-full`（已在组件层处理）。导航类抽屉需满高 `100dvh`。
+
+## 图表（Recharts 等）
+
+- 外层容器：`min-w-0 w-full max-w-full`，`ResponsiveContainer width="100%" height={固定或 minHeight}`，避免 flex 子项撑破布局。
+
+## 触摸与无障碍
+
+- 重要按钮在移动端高度足够（≥44px 为佳）。
+- 底部导航与刘海屏：使用 `env(safe-area-inset-bottom)`（已在壳层示例）。
+
+修改全局导航/断点行为时，同步更新本文件与 `dashboard-shell.tsx`。

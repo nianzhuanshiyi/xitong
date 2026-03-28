@@ -1,31 +1,57 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
-  ExternalLink,
-  Loader2,
-  Sparkles,
-  Upload,
-  Eye,
   Download,
+  ExternalLink,
+  Eye,
+  Loader2,
+  Pencil,
+  Sparkles,
+  Star,
   Trash2,
+  Upload,
 } from "lucide-react";
+import {
+  PolarAngleAxis,
+  PolarGrid,
+  PolarRadiusAxis,
+  Radar,
+  RadarChart,
+  ResponsiveContainer,
+} from "recharts";
 import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import {
   FILE_CATEGORY_LABEL,
@@ -43,7 +69,6 @@ type FileRow = {
   analysis: {
     summary: string | null;
     structuredJson: string | null;
-    certExpiryDate: string | null;
   } | null;
 };
 
@@ -68,7 +93,6 @@ type FullSupplier = {
   profileSummary: string | null;
   aiEvaluationJson: string | null;
   websiteScrapedAt: string | null;
-  updatedAt: string;
   contacts: Array<{
     id: string;
     name: string;
@@ -122,6 +146,19 @@ type FullSupplier = {
   }>;
 };
 
+const UPLOAD_CATEGORIES = [
+  { value: "CATALOG", label: "产品目录" },
+  { value: "PRICE_LIST", label: "报价单" },
+  { value: "TEST_REPORT", label: "检测报告" },
+  { value: "CERTIFICATION", label: "资质证书" },
+  { value: "CONTRACT", label: "合同" },
+  { value: "PACKAGING", label: "包装方案" },
+  { value: "PRODUCT_IMAGE", label: "产品图片" },
+  { value: "OTHER", label: "其他" },
+] as const;
+
+const COUNTRY_CODE_NONE = "__none__";
+
 function fmtBytes(n: number) {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -132,21 +169,141 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleString("zh-CN");
 }
 
+function fmtMoney(n: number | null, cur: string | null) {
+  if (n == null) return "—";
+  const c = cur ?? "USD";
+  return `${n.toLocaleString("zh-CN")} ${c}`;
+}
+
+type EvalJson = {
+  overallScore?: number;
+  strengths?: string[];
+  risks?: string[];
+  recommendedCategories?: string[];
+  demandMatchNote?: string;
+};
+
+function parseEvalJson(raw: string | null): EvalJson | null {
+  if (!raw?.trim()) return null;
+  try {
+    return JSON.parse(raw) as EvalJson;
+  } catch {
+    return null;
+  }
+}
+
+function StarRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (n: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <div className="flex gap-0.5">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange(n)}
+            className="rounded-md p-1 transition-colors hover:bg-slate-100"
+            aria-label={`${label} ${n} 星`}
+          >
+            <Star
+              className={cn(
+                "size-6",
+                n <= value
+                  ? "fill-amber-400 text-amber-400"
+                  : "text-slate-300"
+              )}
+            />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const fieldLabel = "mb-1 block text-sm text-gray-500";
+const inputArea =
+  "min-h-[72px] w-full min-w-0 rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40";
+
 export function SupplierDetail({ id }: { id: string }) {
+  const router = useRouter();
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN";
+
+  const [tab, setTab] = useState("basic");
   const [data, setData] = useState<FullSupplier | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [scrapeBusy, setScrapeBusy] = useState(false);
+  const [evalBusy, setEvalBusy] = useState(false);
+  const [analyzeId, setAnalyzeId] = useState<string | null>(null);
+  const [drag, setDrag] = useState(false);
+  const [uploadCat, setUploadCat] = useState<string>("OTHER");
+  const fileRef = useRef<HTMLInputElement>(null);
+
   const [preview, setPreview] = useState<{
     fileId: string;
     name: string;
     mime: string;
   } | null>(null);
-  const [drag, setDrag] = useState(false);
-  const [uploadCat, setUploadCat] = useState("");
-  const [matchHint, setMatchHint] = useState("");
-  const [matchResult, setMatchResult] = useState<unknown>(null);
 
   const [form, setForm] = useState<Partial<FullSupplier>>({});
+
+  const [ratingDraft, setRatingDraft] = useState({
+    quality: 3,
+    priceCompete: 3,
+    delivery: 3,
+    communication: 3,
+    cooperation: 3,
+    rdCapability: 3,
+    comment: "",
+  });
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
+
+  const [contactOpen, setContactOpen] = useState(false);
+  const [contactForm, setContactForm] = useState({
+    name: "",
+    title: "",
+    email: "",
+    phone: "",
+    wechat: "",
+    whatsapp: "",
+  });
+
+  const [orderOpen, setOrderOpen] = useState(false);
+  const [orderForm, setOrderForm] = useState({
+    orderDate: "",
+    productDesc: "",
+    quantity: "",
+    amount: "",
+    currency: "USD",
+    status: "",
+  });
+
+  const [sampleOpen, setSampleOpen] = useState(false);
+  const [sampleForm, setSampleForm] = useState({
+    sampleDate: "",
+    productDesc: "",
+    status: "",
+    notes: "",
+  });
+
+  const [qualityOpen, setQualityOpen] = useState(false);
+  const [qualityForm, setQualityForm] = useState({
+    issueDate: "",
+    description: "",
+    severity: "",
+  });
+
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteForm, setNoteForm] = useState({ title: "", content: "" });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -156,6 +313,18 @@ export function SupplierDetail({ id }: { id: string }) {
       if (!res.ok) throw new Error(j.message ?? "加载失败");
       setData(j);
       setForm(j);
+      if (j.ratings?.[0]) {
+        const r = j.ratings[0];
+        setRatingDraft({
+          quality: r.quality,
+          priceCompete: r.priceCompete,
+          delivery: r.delivery,
+          communication: r.communication,
+          cooperation: r.cooperation,
+          rdCapability: r.rdCapability,
+          comment: r.comment ?? "",
+        });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "加载失败");
       setData(null);
@@ -168,9 +337,13 @@ export function SupplierDetail({ id }: { id: string }) {
     load();
   }, [load]);
 
+  const contentUrl = (fileId: string, mode: "inline" | "download") =>
+    `/api/suppliers/${id}/files/${fileId}/content?mode=${mode}`;
+
   async function saveBasic() {
     setSaving(true);
     try {
+      const cc = form.countryCode;
       const res = await fetch(`/api/suppliers/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -178,7 +351,7 @@ export function SupplierDetail({ id }: { id: string }) {
           name: form.name,
           nameEn: form.nameEn,
           country: form.country,
-          countryCode: form.countryCode,
+          countryCode: cc === COUNTRY_CODE_NONE || cc == null ? null : cc,
           website: form.website,
           address: form.address,
           mainCategories: form.mainCategories,
@@ -197,7 +370,7 @@ export function SupplierDetail({ id }: { id: string }) {
       const j = await res.json();
       if (!res.ok) throw new Error(j.message ?? "保存失败");
       toast.success("已保存");
-      setData((d) => (d ? { ...d, ...j } : j));
+      setData((d) => (d ? { ...d, ...j } : null));
       setForm((f) => ({ ...f, ...j }));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "保存失败");
@@ -206,7 +379,8 @@ export function SupplierDetail({ id }: { id: string }) {
     }
   }
 
-  async function scrape() {
+  async function scrapeWebsite() {
+    setScrapeBusy(true);
     try {
       const res = await fetch(`/api/suppliers/${id}/scrape-website`, {
         method: "POST",
@@ -217,49 +391,46 @@ export function SupplierDetail({ id }: { id: string }) {
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "抓取失败");
+    } finally {
+      setScrapeBusy(false);
     }
   }
 
-  async function evaluate() {
+  async function runEvaluate() {
+    setEvalBusy(true);
     try {
       const res = await fetch(`/api/suppliers/${id}/evaluate`, {
         method: "POST",
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.message ?? "评估失败");
-      toast.success("AI 综合评估已更新");
+      toast.success("综合评估已生成");
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "评估失败");
+    } finally {
+      setEvalBusy(false);
     }
   }
 
-  async function runMatch() {
-    if (!matchHint.trim()) {
-      toast.error("请填写品类或需求描述");
-      return;
-    }
+  async function deleteSupplier() {
+    if (!confirm("确定删除该供应商？此操作不可恢复。")) return;
     try {
-      const res = await fetch("/api/suppliers/match", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ categoryHint: matchHint }),
-      });
+      const res = await fetch(`/api/suppliers/${id}`, { method: "DELETE" });
       const j = await res.json();
-      if (!res.ok) throw new Error(j.message ?? "匹配失败");
-      setMatchResult(j.matches ?? j);
-      toast.success("已生成推荐");
+      if (!res.ok) throw new Error(j.message ?? "删除失败");
+      toast.success("已删除");
+      router.push("/dashboard/suppliers");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "匹配失败");
+      toast.error(e instanceof Error ? e.message : "删除失败");
     }
   }
 
-  async function uploadFiles(fileList: FileList | File[]) {
-    const arr = Array.from(fileList);
-    if (!arr.length) return;
+  async function uploadFiles(files: FileList | null) {
+    if (!files?.length) return;
     const fd = new FormData();
-    if (uploadCat) fd.set("category", uploadCat);
-    arr.forEach((f) => fd.append("file", f));
+    fd.set("category", uploadCat);
+    for (const f of Array.from(files)) fd.append("file", f);
     try {
       const res = await fetch(`/api/suppliers/${id}/files`, {
         method: "POST",
@@ -271,70 +442,269 @@ export function SupplierDetail({ id }: { id: string }) {
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "上传失败");
+    } finally {
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  async function deleteFile(fileId: string) {
+    if (!confirm("删除该文件？")) return;
+    try {
+      const res = await fetch(`/api/suppliers/${id}/files/${fileId}`, {
+        method: "DELETE",
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message ?? "删除失败");
+      toast.success("已删除");
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "删除失败");
     }
   }
 
   async function analyzeFile(fileId: string) {
+    setAnalyzeId(fileId);
     try {
-      const res = await fetch(`/api/suppliers/${id}/files/${fileId}/analyze`, {
-        method: "POST",
-      });
+      const res = await fetch(
+        `/api/suppliers/${id}/files/${fileId}/analyze`,
+        { method: "POST" }
+      );
       const j = await res.json();
       if (!res.ok) throw new Error(j.message ?? "分析失败");
-      toast.success("AI 分析完成");
+      toast.success("分析完成");
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "分析失败");
+    } finally {
+      setAnalyzeId(null);
     }
   }
 
-  async function patchFileCategory(fileId: string, category: string) {
-    await fetch(`/api/suppliers/${id}/files/${fileId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ category }),
-    });
-    await load();
+  async function submitRating() {
+    setRatingSubmitting(true);
+    try {
+      const res = await fetch(`/api/suppliers/${id}/ratings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          quality: ratingDraft.quality,
+          priceCompete: ratingDraft.priceCompete,
+          delivery: ratingDraft.delivery,
+          communication: ratingDraft.communication,
+          cooperation: ratingDraft.cooperation,
+          rdCapability: ratingDraft.rdCapability,
+          comment: ratingDraft.comment.trim() || null,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message ?? "提交失败");
+      toast.success("评分已保存");
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "提交失败");
+    } finally {
+      setRatingSubmitting(false);
+    }
   }
 
-  async function deleteFile(fileId: string) {
-    if (!confirm("确定删除该文件？")) return;
-    const res = await fetch(`/api/suppliers/${id}/files/${fileId}`, {
-      method: "DELETE",
-    });
-    if (res.ok) {
+  async function addContact() {
+    if (!contactForm.name.trim()) {
+      toast.error("请填写姓名");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/suppliers/${id}/contacts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: contactForm.name.trim(),
+          title: contactForm.title || null,
+          email: contactForm.email || null,
+          phone: contactForm.phone || null,
+          wechat: contactForm.wechat || null,
+          whatsapp: contactForm.whatsapp || null,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message ?? "添加失败");
+      toast.success("已添加联系人");
+      setContactOpen(false);
+      setContactForm({
+        name: "",
+        title: "",
+        email: "",
+        phone: "",
+        wechat: "",
+        whatsapp: "",
+      });
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "添加失败");
+    }
+  }
+
+  async function removeContact(cid: string) {
+    if (!confirm("删除该联系人？")) return;
+    try {
+      const res = await fetch(`/api/suppliers/${id}/contacts/${cid}`, {
+        method: "DELETE",
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message ?? "删除失败");
       toast.success("已删除");
       await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "删除失败");
     }
   }
 
-  const contentUrl = (fileId: string, mode: "inline" | "download") =>
-    `/api/suppliers/${id}/files/${fileId}/content?mode=${mode}`;
+  async function addOrder() {
+    if (!orderForm.productDesc.trim() || !orderForm.orderDate) {
+      toast.error("请填写日期与产品");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/suppliers/${id}/orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderDate: new Date(orderForm.orderDate).toISOString(),
+          productDesc: orderForm.productDesc.trim(),
+          quantity: orderForm.quantity ? Number(orderForm.quantity) : null,
+          amount: orderForm.amount ? Number(orderForm.amount) : null,
+          currency: orderForm.currency || null,
+          status: orderForm.status || null,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message ?? "添加失败");
+      toast.success("已添加订单记录");
+      setOrderOpen(false);
+      setOrderForm({
+        orderDate: "",
+        productDesc: "",
+        quantity: "",
+        amount: "",
+        currency: "USD",
+        status: "",
+      });
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "添加失败");
+    }
+  }
 
-  const evalParsed = data?.aiEvaluationJson
-    ? (() => {
-        try {
-          return JSON.parse(data.aiEvaluationJson!) as Record<string, unknown>;
-        } catch {
-          return null;
-        }
-      })()
-    : null;
+  async function addSample() {
+    if (!sampleForm.productDesc.trim() || !sampleForm.sampleDate) {
+      toast.error("请填写日期与产品");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/suppliers/${id}/samples`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sampleDate: new Date(sampleForm.sampleDate).toISOString(),
+          productDesc: sampleForm.productDesc.trim(),
+          status: sampleForm.status || null,
+          notes: sampleForm.notes || null,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message ?? "添加失败");
+      toast.success("已添加打样记录");
+      setSampleOpen(false);
+      setSampleForm({
+        sampleDate: "",
+        productDesc: "",
+        status: "",
+        notes: "",
+      });
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "添加失败");
+    }
+  }
 
-  const certAlerts =
-    data?.files.flatMap((f) => {
-      const raw = f.analysis?.certExpiryDate;
-      if (!raw) return [];
-      const exp = new Date(raw);
-      const now = new Date();
-      const diff = exp.getTime() - now.getTime();
-      if (diff <= 0 || diff > 30 * 86400000) return [];
-      return [exp];
-    }) ?? [];
+  async function addQuality() {
+    if (!qualityForm.description.trim()) {
+      toast.error("请填写问题描述");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/suppliers/${id}/quality`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          issueDate: qualityForm.issueDate
+            ? new Date(qualityForm.issueDate).toISOString()
+            : undefined,
+          description: qualityForm.description.trim(),
+          severity: qualityForm.severity || null,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message ?? "添加失败");
+      toast.success("已添加质量记录");
+      setQualityOpen(false);
+      setQualityForm({ issueDate: "", description: "", severity: "" });
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "添加失败");
+    }
+  }
+
+  async function addNote() {
+    if (!noteForm.content.trim()) {
+      toast.error("请填写内容");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/suppliers/${id}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: noteForm.title || null,
+          content: noteForm.content.trim(),
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message ?? "添加失败");
+      toast.success("已添加备忘");
+      setNoteOpen(false);
+      setNoteForm({ title: "", content: "" });
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "添加失败");
+    }
+  }
+
+  const radarData = useMemo(
+    () => [
+      { dimension: "产品质量", value: ratingDraft.quality },
+      { dimension: "价格竞争力", value: ratingDraft.priceCompete },
+      { dimension: "交期准时率", value: ratingDraft.delivery },
+      { dimension: "沟通效率", value: ratingDraft.communication },
+      { dimension: "配合度", value: ratingDraft.cooperation },
+      { dimension: "研发能力", value: ratingDraft.rdCapability },
+    ],
+    [ratingDraft]
+  );
+
+  const ratingAvg =
+    (ratingDraft.quality +
+      ratingDraft.priceCompete +
+      ratingDraft.delivery +
+      ratingDraft.communication +
+      ratingDraft.cooperation +
+      ratingDraft.rdCapability) /
+    6;
+
+  const evalParsed = data ? parseEvalJson(data.aiEvaluationJson) : null;
 
   if (loading) {
     return (
-      <div className="flex justify-center py-24 text-slate-500">
+      <div className="mx-auto flex max-w-5xl justify-center py-24 text-slate-500">
         <Loader2 className="size-8 animate-spin" />
       </div>
     );
@@ -342,256 +712,433 @@ export function SupplierDetail({ id }: { id: string }) {
 
   if (!data) {
     return (
-      <p className="py-12 text-center text-slate-500">
+      <div className="mx-auto max-w-5xl py-12 text-center text-slate-500">
         未找到供应商。{" "}
         <Link href="/dashboard/suppliers" className="text-indigo-600 underline">
           返回列表
         </Link>
-      </p>
+      </div>
     );
   }
 
+  const countrySelectValue = form.countryCode ?? COUNTRY_CODE_NONE;
+
   return (
-    <div className="mx-auto max-w-5xl space-y-6 pb-16">
-      <div className="flex flex-wrap items-center gap-3">
-        <Link
-          href="/dashboard/suppliers"
-          className={buttonVariants({ variant: "ghost", size: "sm" })}
-        >
-          <ArrowLeft className="mr-1 size-4" />
-          返回列表
-        </Link>
-        <Separator orientation="vertical" className="hidden h-6 sm:block" />
-        <h1 className="font-heading text-2xl font-semibold text-slate-900">
-          {data.name}
-        </h1>
-        <Badge variant="secondary">
-          {countryFlag(data.countryCode)} {data.country}
-        </Badge>
-        <Badge className="bg-indigo-50 text-indigo-800 hover:bg-indigo-50">
-          {SUPPLIER_STATUS_LABEL[data.status] ?? data.status}
-        </Badge>
+    <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-col pb-8">
+      {/* 顶部 */}
+      <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:gap-3">
+          <Link
+            href="/dashboard/suppliers"
+            className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+          >
+            <ArrowLeft className="mr-1 size-4" />
+            返回列表
+          </Link>
+          <h1 className="min-w-0 max-w-full truncate font-heading text-lg font-semibold text-slate-900 sm:text-xl md:text-2xl">
+            {data.name}
+          </h1>
+          <Badge variant="secondary" className="shrink-0">
+            {countryFlag(data.countryCode)} {data.country}
+          </Badge>
+          <Badge className="shrink-0 bg-indigo-50 text-indigo-800 hover:bg-indigo-50">
+            {SUPPLIER_STATUS_LABEL[data.status] ?? data.status}
+          </Badge>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setTab("basic")}
+          >
+            <Pencil className="mr-1 size-3.5" />
+            编辑
+          </Button>
+          {isAdmin ? (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => deleteSupplier()}
+            >
+              <Trash2 className="mr-1 size-3.5" />
+              删除
+            </Button>
+          ) : null}
+        </div>
       </div>
 
-      <Tabs defaultValue="basic" className="w-full">
-        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 bg-slate-100/80 p-1">
-          <TabsTrigger value="basic">基本信息</TabsTrigger>
-          <TabsTrigger value="files">文件资料</TabsTrigger>
-          <TabsTrigger value="ai">AI 分析</TabsTrigger>
-          <TabsTrigger value="records">合作记录</TabsTrigger>
-          <TabsTrigger value="rating">评分</TabsTrigger>
+      <Tabs
+        value={tab}
+        onValueChange={setTab}
+        className="flex min-h-0 min-w-0 flex-1 flex-col gap-0"
+      >
+        <TabsList
+          variant="line"
+          className="mb-4 h-auto w-full min-w-0 flex-wrap justify-start gap-1 rounded-none border-b border-slate-200 bg-transparent p-0"
+        >
+          <TabsTrigger value="basic" className="rounded-md text-xs sm:text-sm">
+            基本信息
+          </TabsTrigger>
+          <TabsTrigger value="files" className="rounded-md text-xs sm:text-sm">
+            文件资料
+          </TabsTrigger>
+          <TabsTrigger value="ai" className="rounded-md text-xs sm:text-sm">
+            AI 分析
+          </TabsTrigger>
+          <TabsTrigger value="records" className="rounded-md text-xs sm:text-sm">
+            合作记录
+          </TabsTrigger>
+          <TabsTrigger value="rating" className="rounded-md text-xs sm:text-sm">
+            评分
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="basic" className="mt-6 space-y-6">
+        {/* Tab 1 基本信息 */}
+        <TabsContent
+          value="basic"
+          className="mt-0 min-w-0 flex-1 space-y-6 outline-none"
+        >
           <Card className="border-slate-200/80 shadow-sm">
-            <CardHeader>
+            <CardHeader className="pb-2">
               <CardTitle className="text-base">公司信息</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2 sm:col-span-2">
-                <Label>公司名称（中文）</Label>
-                <Input
-                  value={form.name ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>英文名称</Label>
-                <Input
-                  value={form.nameEn ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, nameEn: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>国家代码</Label>
-                <select
-                  className="flex h-9 w-full rounded-lg border border-input bg-white px-2 text-sm"
-                  value={form.countryCode ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, countryCode: e.target.value || null }))
-                  }
-                >
-                  <option value="">未设置</option>
-                  <option value="US">美国 US</option>
-                  <option value="KR">韩国 KR</option>
-                  <option value="CN">中国 CN</option>
-                  <option value="OTHER">其他</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label>国家/地区（显示）</Label>
-                <Input
-                  value={form.country ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, country: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Label className="mb-0">官网</Label>
-                  {form.website && (
-                    <a
-                      href={
-                        form.website.startsWith("http")
-                          ? form.website
-                          : `https://${form.website}`
-                      }
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-sm text-indigo-600 hover:underline"
-                    >
-                      打开 <ExternalLink className="size-3.5" />
-                    </a>
-                  )}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => scrape()}
-                  >
-                    <Sparkles className="mr-1 size-3.5" />
-                    AI 抓取网站信息
-                  </Button>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="min-w-0">
+                  <label className={fieldLabel}>公司名称（中文）</label>
+                  <Input
+                    value={form.name ?? ""}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, name: e.target.value }))
+                    }
+                  />
                 </div>
-                <Input
-                  value={form.website ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, website: e.target.value }))
-                  }
-                  placeholder="https://"
-                />
+                <div className="min-w-0">
+                  <label className={fieldLabel}>英文名称</label>
+                  <Input
+                    value={form.nameEn ?? ""}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, nameEn: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="min-w-0">
+                  <label className={fieldLabel}>国家/地区</label>
+                  <Input
+                    value={form.country ?? ""}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, country: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="min-w-0">
+                  <label className={fieldLabel}>国家代码</label>
+                  <Select
+                    value={countrySelectValue}
+                    onValueChange={(v) =>
+                      setForm((f) => ({
+                        ...f,
+                        countryCode: v === COUNTRY_CODE_NONE ? null : v,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="w-full min-w-0">
+                      <SelectValue placeholder="选择国家代码" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={COUNTRY_CODE_NONE}>未设置</SelectItem>
+                      <SelectItem value="US">美国 US</SelectItem>
+                      <SelectItem value="KR">韩国 KR</SelectItem>
+                      <SelectItem value="CN">中国 CN</SelectItem>
+                      <SelectItem value="OTHER">其他</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="min-w-0 space-y-2 md:col-span-2">
+                  <label className={fieldLabel}>官网</label>
+                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+                    <Input
+                      className="min-w-0 flex-1"
+                      value={form.website ?? ""}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, website: e.target.value }))
+                      }
+                      placeholder="https://"
+                    />
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      {form.website ? (
+                        <a
+                          href={
+                            form.website.startsWith("http")
+                              ? form.website
+                              : `https://${form.website}`
+                          }
+                          target="_blank"
+                          rel="noreferrer"
+                          className={cn(
+                            buttonVariants({ variant: "outline", size: "sm" }),
+                            "inline-flex items-center gap-1"
+                          )}
+                        >
+                          打开 <ExternalLink className="size-3.5" />
+                        </a>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={scrapeBusy}
+                        onClick={() => scrapeWebsite()}
+                      >
+                        {scrapeBusy ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="size-3.5" />
+                        )}
+                        <span className="ml-1">AI 抓取网站信息</span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="min-w-0 md:col-span-2">
+                  <label className={fieldLabel}>详细地址</label>
+                  <textarea
+                    className={cn(inputArea, "min-h-[88px]")}
+                    value={form.address ?? ""}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, address: e.target.value }))
+                    }
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label className={fieldLabel}>主营品类（逗号分隔）</label>
+                  <Input
+                    value={form.mainCategories ?? ""}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        mainCategories: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="min-w-0">
+                  <label className={fieldLabel}>合作状态</label>
+                  <Select
+                    value={form.status ?? "EVALUATING"}
+                    onValueChange={(v) =>
+                      setForm((f) => ({
+                        ...f,
+                        status: v ?? f.status ?? "EVALUATING",
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="w-full min-w-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="COOPERATING">已合作</SelectItem>
+                      <SelectItem value="EVALUATING">评估中</SelectItem>
+                      <SelectItem value="CANDIDATE">备选</SelectItem>
+                      <SelectItem value="REJECTED">已淘汰</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="min-w-0 md:col-span-2">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="min-w-0">
+                      <label className={fieldLabel}>付款方式</label>
+                      <Input
+                        value={form.paymentTerms ?? ""}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            paymentTerms: e.target.value,
+                          }))
+                        }
+                        placeholder="T/T…"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <label className={fieldLabel}>最小起订 MOQ</label>
+                      <Input
+                        value={form.moq ?? ""}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, moq: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <label className={fieldLabel}>打样周期（天）</label>
+                      <Input
+                        type="number"
+                        value={form.sampleLeadDays ?? ""}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            sampleLeadDays: e.target.value
+                              ? Number(e.target.value)
+                              : null,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <label className={fieldLabel}>生产周期（天）</label>
+                      <Input
+                        type="number"
+                        value={form.productionLeadDays ?? ""}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            productionLeadDays: e.target.value
+                              ? Number(e.target.value)
+                              : null,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="min-w-0">
+                  <label className={fieldLabel}>合作开始日期</label>
+                  <Input
+                    type="datetime-local"
+                    value={
+                      form.cooperationStartDate
+                        ? new Date(form.cooperationStartDate)
+                            .toISOString()
+                            .slice(0, 16)
+                        : ""
+                    }
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        cooperationStartDate: e.target.value
+                          ? new Date(e.target.value).toISOString()
+                          : null,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="min-w-0">
+                  <label className={fieldLabel}>备注</label>
+                  <textarea
+                    className={cn(inputArea, "min-h-[100px]")}
+                    value={form.remarks ?? ""}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, remarks: e.target.value }))
+                    }
+                  />
+                </div>
               </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>详细地址</Label>
-                <textarea
-                  className="min-h-[72px] w-full rounded-lg border border-input bg-white px-3 py-2 text-sm"
-                  value={form.address ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, address: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>主营品类（逗号分隔）</Label>
-                <Input
-                  value={form.mainCategories ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, mainCategories: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>合作状态</Label>
-                <select
-                  className="flex h-9 w-full rounded-lg border border-input bg-white px-2 text-sm"
-                  value={form.status ?? "EVALUATING"}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, status: e.target.value }))
-                  }
-                >
-                  <option value="COOPERATING">已合作</option>
-                  <option value="EVALUATING">评估中</option>
-                  <option value="CANDIDATE">备选</option>
-                  <option value="REJECTED">已淘汰</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label>付款方式</Label>
-                <Input
-                  value={form.paymentTerms ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, paymentTerms: e.target.value }))
-                  }
-                  placeholder="T/T、信用证、账期…"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>最小起订 MOQ</Label>
-                <Input
-                  value={form.moq ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, moq: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>打样周期（天）</Label>
-                <Input
-                  type="number"
-                  value={form.sampleLeadDays ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      sampleLeadDays: e.target.value
-                        ? Number(e.target.value)
-                        : null,
-                    }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>生产周期（天）</Label>
-                <Input
-                  type="number"
-                  value={form.productionLeadDays ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      productionLeadDays: e.target.value
-                        ? Number(e.target.value)
-                        : null,
-                    }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>合作开始日期</Label>
-                <Input
-                  type="datetime-local"
-                  value={
-                    form.cooperationStartDate
-                      ? new Date(form.cooperationStartDate)
-                          .toISOString()
-                          .slice(0, 16)
-                      : ""
-                  }
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      cooperationStartDate: e.target.value
-                        ? new Date(e.target.value).toISOString()
-                        : null,
-                    }))
-                  }
-                />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>备注</Label>
-                <textarea
-                  className="min-h-[88px] w-full rounded-lg border border-input bg-white px-3 py-2 text-sm"
-                  value={form.remarks ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, remarks: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="flex gap-2 sm:col-span-2">
-                <Button onClick={() => saveBasic()} disabled={saving}>
-                  {saving ? <Loader2 className="size-4 animate-spin" /> : "保存"}
-                </Button>
-              </div>
+              <Button type="button" onClick={() => saveBasic()} disabled={saving}>
+                {saving ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : null}
+                保存
+              </Button>
             </CardContent>
           </Card>
 
-          <ContactsSection supplierId={id} contacts={data.contacts} onChange={load} />
+          <Card className="border-slate-200/80 shadow-sm">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-base">联系人管理</CardTitle>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setContactOpen(true)}
+              >
+                添加联系人
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>姓名</TableHead>
+                    <TableHead>职位</TableHead>
+                    <TableHead>邮箱</TableHead>
+                    <TableHead>电话</TableHead>
+                    <TableHead className="min-w-[140px]">
+                      微信 / WhatsApp
+                    </TableHead>
+                    <TableHead className="text-right">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.contacts.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="py-8 text-center text-muted-foreground"
+                      >
+                        暂无联系人
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    data.contacts.map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell className="font-medium">
+                          {c.name}
+                          {c.isPrimary ? (
+                            <Badge variant="secondary" className="ml-2">
+                              主联系人
+                            </Badge>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>{c.title ?? "—"}</TableCell>
+                        <TableCell className="max-w-[160px] truncate">
+                          {c.email ?? "—"}
+                        </TableCell>
+                        <TableCell>{c.phone ?? "—"}</TableCell>
+                        <TableCell className="whitespace-normal text-xs">
+                          {[c.wechat && `微信:${c.wechat}`, c.whatsapp && `WA:${c.whatsapp}`]
+                            .filter(Boolean)
+                            .join(" · ") || "—"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeContact(c.id)}
+                          >
+                            删除
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="files" className="mt-6 space-y-6">
+        {/* Tab 2 文件 */}
+        <TabsContent
+          value="files"
+          className="mt-0 min-w-0 flex-1 space-y-6 outline-none"
+        >
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => uploadFiles(e.target.files)}
+          />
           <Card
             className={cn(
               "border-2 border-dashed transition-colors",
-              drag ? "border-indigo-400 bg-indigo-50/40" : "border-slate-200"
+              drag ? "border-indigo-400 bg-indigo-50/50" : "border-slate-300"
             )}
             onDragOver={(e) => {
               e.preventDefault();
@@ -604,312 +1151,910 @@ export function SupplierDetail({ id }: { id: string }) {
               uploadFiles(e.dataTransfer.files);
             }}
           >
-            <CardContent className="flex flex-col items-center gap-3 py-12">
+            <CardContent className="flex flex-col items-center gap-4 py-12">
               <Upload className="size-10 text-indigo-400" />
               <p className="text-sm font-medium text-slate-700">
-                拖拽文件到此处，或选择文件（支持批量）
+                拖拽文件到此处上传，或点击选择（支持多选）
               </p>
-              <p className="text-center text-xs text-slate-500">
-                PDF、Word、Excel、PPT、jpg/png/webp
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <select
-                  className="h-9 rounded-lg border border-input bg-white px-2 text-sm"
-                  value={uploadCat}
-                  onChange={(e) => setUploadCat(e.target.value)}
+              <div className="flex w-full max-w-md flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <label className={fieldLabel}>文件类型</label>
+                  <Select
+                    value={uploadCat}
+                    onValueChange={(v) => {
+                      if (v) setUploadCat(v);
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {UPLOAD_CATEGORIES.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
                 >
-                  <option value="">上传后 AI 自动分类</option>
-                  {Object.entries(FILE_CATEGORY_LABEL).map(([k, v]) => (
-                    <option key={k} value={k}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-                <Input
-                  type="file"
-                  multiple
-                  className="max-w-xs cursor-pointer text-sm"
-                  onChange={(e) => {
-                    if (e.target.files) uploadFiles(e.target.files);
-                    e.target.value = "";
-                  }}
-                />
+                  选择文件
+                </Button>
               </div>
             </CardContent>
           </Card>
 
-          <div className="space-y-3">
-            {data.files.map((f) => (
-              <Card key={f.id} className="border-slate-200/80 shadow-sm">
-                <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="font-medium text-slate-900">{f.originalName}</div>
-                    <div className="flex flex-wrap gap-2 text-xs text-slate-500">
-                      <select
-                        className="rounded border border-slate-200 bg-white px-1 py-0.5 text-xs"
-                        value={f.category}
-                        onChange={(e) => patchFileCategory(f.id, e.target.value)}
+          <Card className="border-slate-200/80 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">已上传文件</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>文件名</TableHead>
+                    <TableHead>类型</TableHead>
+                    <TableHead>大小</TableHead>
+                    <TableHead>上传时间</TableHead>
+                    <TableHead>上传人</TableHead>
+                    <TableHead className="text-right">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.files.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="py-8 text-center text-muted-foreground"
                       >
-                        {Object.entries(FILE_CATEGORY_LABEL).map(([k, v]) => (
-                          <option key={k} value={k}>
-                            {v}
-                          </option>
-                        ))}
-                      </select>
-                      <span>{fmtBytes(f.size)}</span>
-                      <span>{fmtTime(f.uploadedAt)}</span>
-                    </div>
-                    {f.analysis?.summary && (
-                      <p className="text-sm text-slate-600 line-clamp-2">
-                        {f.analysis.summary}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {(f.mimeType.startsWith("image/") ||
-                      f.mimeType === "application/pdf") && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          setPreview({
-                            fileId: f.id,
-                            name: f.originalName,
-                            mime: f.mimeType,
-                          })
-                        }
-                      >
-                        <Eye className="mr-1 size-3.5" />
-                        预览
-                      </Button>
-                    )}
-                    <a
-                      href={contentUrl(f.id, "download")}
-                      className={buttonVariants({ variant: "outline", size: "sm" })}
-                    >
-                      <Download className="mr-1 size-3.5" />
-                      下载
-                    </a>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => analyzeFile(f.id)}
-                    >
-                      <Sparkles className="mr-1 size-3.5" />
-                      AI 分析
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="text-red-600"
-                      onClick={() => deleteFile(f.id)}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-            {data.files.length === 0 && (
-              <p className="text-center text-sm text-slate-500">暂无文件</p>
-            )}
-          </div>
+                        暂无文件
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    data.files.map((f) => (
+                      <TableRow key={f.id}>
+                        <TableCell className="max-w-[200px] truncate font-medium">
+                          {f.originalName}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-normal">
+                            {FILE_CATEGORY_LABEL[f.category] ?? f.category}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{fmtBytes(f.size)}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {fmtTime(f.uploadedAt)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">—</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex flex-wrap justify-end gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setPreview({
+                                  fileId: f.id,
+                                  name: f.originalName,
+                                  mime: f.mimeType,
+                                })
+                              }
+                            >
+                              <Eye className="size-3.5" />
+                            </Button>
+                            <a
+                              href={contentUrl(f.id, "download")}
+                              className={cn(
+                                buttonVariants({ variant: "ghost", size: "sm" })
+                              )}
+                            >
+                              <Download className="size-3.5" />
+                            </a>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={analyzeId === f.id}
+                              onClick={() => analyzeFile(f.id)}
+                            >
+                              {analyzeId === f.id ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <Sparkles className="size-3.5" />
+                              )}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive"
+                              onClick={() => deleteFile(f.id)}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="ai" className="mt-6 space-y-6">
-          {certAlerts.length > 0 && (
-            <Card className="border-amber-200 bg-amber-50/80">
-              <CardHeader>
-                <CardTitle className="text-base text-amber-900">
-                  资质证书即将到期（30 天内）
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-amber-900">
-                {certAlerts.map((d, i) => (
-                  <div key={i}>{d.toLocaleDateString("zh-CN")}</div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
+        {/* Tab 3 AI */}
+        <TabsContent
+          value="ai"
+          className="mt-0 min-w-0 flex-1 space-y-6 outline-none"
+        >
           <Card className="border-slate-200/80 shadow-sm">
-            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-              <CardTitle className="text-base">供应商画像摘要</CardTitle>
-              <Button size="sm" variant="secondary" onClick={() => evaluate()}>
-                <Sparkles className="mr-1 size-3.5" />
-                生成 / 刷新综合评估
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+              <CardTitle className="text-base">网站信息抓取</CardTitle>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={scrapeBusy}
+                onClick={() => scrapeWebsite()}
+              >
+                {scrapeBusy ? (
+                  <Loader2 className="mr-1 size-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1 size-3.5" />
+                )}
+                AI 抓取网站信息
               </Button>
             </CardHeader>
-            <CardContent className="space-y-4 text-sm text-slate-700">
-              <div>
-                <div className="mb-1 font-medium text-slate-900">画像</div>
-                <p className="rounded-lg bg-slate-50 p-3 leading-relaxed">
-                  {data.profileSummary || "暂无，可先使用「AI 抓取网站信息」或上传资料后综合评估。"}
+            <CardContent className="space-y-3 text-sm">
+              {data.websiteScrapedAt ? (
+                <p className="text-xs text-muted-foreground">
+                  最近抓取：{fmtTime(data.websiteScrapedAt)}
                 </p>
-              </div>
-              {data.websiteScrapedAt && (
-                <p className="text-xs text-slate-500">
-                  最近网站抓取：{fmtTime(data.websiteScrapedAt)}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {evalParsed && (
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card className="border-indigo-100 bg-indigo-50/40 shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-base text-indigo-950">
-                    综合评分（AI）
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-3xl font-semibold text-indigo-800">
-                  {String(evalParsed.overallScore ?? "—")} / 5
-                </CardContent>
-              </Card>
-              <Card className="border-emerald-100 bg-emerald-50/30 shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-base">优势</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="list-inside list-disc space-y-1 text-sm">
-                    {(evalParsed.strengths as string[] | undefined)?.map((x, i) => (
-                      <li key={i}>{x}</li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-              <Card className="border-rose-100 bg-rose-50/30 shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-base">风险</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="list-inside list-disc space-y-1 text-sm">
-                    {(evalParsed.risks as string[] | undefined)?.map((x, i) => (
-                      <li key={i}>{x}</li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-              <Card className="border-slate-200 shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-base">推荐品类 & 匹配度</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <div>
-                    {(evalParsed.recommendedCategories as string[] | undefined)?.join(
-                      "、"
-                    )}
-                  </div>
-                  <p className="text-slate-600">
-                    {String(evalParsed.demandMatchNote ?? "")}
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          <Card className="border-slate-200/80 shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base">选品智能匹配（全库）</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <textarea
-                className="min-h-[100px] w-full rounded-lg border border-input bg-white px-3 py-2 text-sm"
-                placeholder="描述目标品类、材质、认证或价格带…"
-                value={matchHint}
-                onChange={(e) => setMatchHint(e.target.value)}
-              />
-              <Button type="button" onClick={() => runMatch()}>
-                从供应商库匹配推荐
-              </Button>
-              {Array.isArray(matchResult) && matchResult.length > 0 && (
-                <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
-                  {matchResult.map(
-                    (
-                      m: {
-                        supplierId: string;
-                        score: number;
-                        reason: string;
-                        keyFacts: string;
-                        supplier?: { name: string };
-                      },
-                      i: number
-                    ) => (
-                      <div
-                        key={i}
-                        className="rounded-md border border-white bg-white p-3 text-sm shadow-sm"
-                      >
-                        <div className="font-medium">
-                          {m.supplier?.name ?? m.supplierId}{" "}
-                          <Badge variant="outline" className="ml-2">
-                            匹配 {m.score}
-                          </Badge>
-                        </div>
-                        <p className="mt-1 text-slate-600">{m.reason}</p>
-                        <p className="mt-1 text-xs text-slate-500">{m.keyFacts}</p>
-                        {m.supplierId && (
-                          <Link
-                            href={`/dashboard/suppliers/${m.supplierId}`}
-                            className="mt-2 inline-block text-xs text-indigo-600 hover:underline"
-                          >
-                            查看档案
-                          </Link>
-                        )}
-                      </div>
-                    )
-                  )}
+              ) : null}
+              {data.profileSummary ? (
+                <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-4 whitespace-pre-wrap">
+                  {data.profileSummary}
                 </div>
+              ) : (
+                <p className="text-muted-foreground">
+                  尚无抓取摘要，请先填写官网并点击抓取。
+                </p>
               )}
+              {data.contact ? (
+                <div>
+                  <p className="mb-1 font-medium text-slate-700">联系信息摘要</p>
+                  <p className="text-muted-foreground whitespace-pre-wrap">
+                    {data.contact}
+                  </p>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 
           <Card className="border-slate-200/80 shadow-sm">
             <CardHeader>
-              <CardTitle className="text-base">文件分析结构化结果</CardTitle>
+              <CardTitle className="text-base">文件分析摘要</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {data.files
-                .filter((f) => f.analysis?.structuredJson)
-                .map((f) => (
-                  <div
-                    key={f.id}
-                    className="rounded-lg border border-slate-100 bg-slate-50/80 p-3"
-                  >
-                    <div className="mb-2 text-sm font-medium">{f.originalName}</div>
-                    <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs text-slate-700">
-                      {(() => {
-                        try {
-                          return JSON.stringify(
-                            JSON.parse(f.analysis!.structuredJson!),
-                            null,
-                            2
-                          );
-                        } catch {
-                          return f.analysis!.structuredJson;
-                        }
-                      })()}
-                    </pre>
-                  </div>
-                ))}
-              {data.files.every((f) => !f.analysis?.structuredJson) && (
-                <p className="text-sm text-slate-500">尚无文件分析结果</p>
+              {data.files.filter((f) => f.analysis?.summary).length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  尚未有文件分析结果，请在「文件资料」中对文件执行 AI 分析。
+                </p>
+              ) : (
+                data.files
+                  .filter((f) => f.analysis?.summary)
+                  .map((f) => (
+                    <div
+                      key={f.id}
+                      className="rounded-lg border border-slate-100 bg-white p-3"
+                    >
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{f.originalName}</span>
+                        <Badge variant="secondary" className="text-xs">
+                          {FILE_CATEGORY_LABEL[f.category] ?? f.category}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-slate-600 whitespace-pre-wrap">
+                        {f.analysis!.summary}
+                      </p>
+                    </div>
+                  ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-200/80 shadow-sm">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+              <CardTitle className="text-base">综合评估</CardTitle>
+              <Button
+                type="button"
+                disabled={evalBusy}
+                onClick={() => runEvaluate()}
+              >
+                {evalBusy ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-2 size-4" />
+                )}
+                生成综合评估
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              {evalParsed ? (
+                <>
+                  <p>
+                    <span className="font-medium">综合得分（AI）：</span>
+                    {evalParsed.overallScore ?? "—"} / 5
+                  </p>
+                  {evalParsed.strengths?.length ? (
+                    <div>
+                      <p className="mb-1 font-medium">优势</p>
+                      <ul className="list-inside list-disc text-muted-foreground">
+                        {evalParsed.strengths.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {evalParsed.risks?.length ? (
+                    <div>
+                      <p className="mb-1 font-medium">风险</p>
+                      <ul className="list-inside list-disc text-muted-foreground">
+                        {evalParsed.risks.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {evalParsed.recommendedCategories?.length ? (
+                    <div>
+                      <p className="mb-1 font-medium">推荐品类</p>
+                      <p className="text-muted-foreground">
+                        {evalParsed.recommendedCategories.join("、")}
+                      </p>
+                    </div>
+                  ) : null}
+                  {evalParsed.demandMatchNote ? (
+                    <div>
+                      <p className="mb-1 font-medium">匹配说明</p>
+                      <p className="whitespace-pre-wrap text-muted-foreground">
+                        {evalParsed.demandMatchNote}
+                      </p>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-muted-foreground">
+                  尚未生成综合评估，点击按钮将结合档案与文件分析生成报告。
+                </p>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="records" className="mt-6 space-y-6">
-          <RecordsBlock supplierId={id} data={data} onRefresh={load} />
+        {/* Tab 4 合作记录 */}
+        <TabsContent
+          value="records"
+          className="mt-0 min-w-0 flex-1 space-y-6 outline-none"
+        >
+          <Card>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+              <CardTitle className="text-base">订单记录</CardTitle>
+              <Button type="button" size="sm" onClick={() => setOrderOpen(true)}>
+                新增
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>日期</TableHead>
+                    <TableHead>产品</TableHead>
+                    <TableHead>数量</TableHead>
+                    <TableHead>金额</TableHead>
+                    <TableHead>状态</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.orders.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="py-6 text-center text-muted-foreground"
+                      >
+                        暂无记录
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    data.orders.map((o) => (
+                      <TableRow key={o.id}>
+                        <TableCell>{fmtTime(o.orderDate)}</TableCell>
+                        <TableCell className="max-w-[200px] whitespace-normal">
+                          {o.productDesc}
+                        </TableCell>
+                        <TableCell>{o.quantity ?? "—"}</TableCell>
+                        <TableCell>
+                          {fmtMoney(o.amount, o.currency)}
+                        </TableCell>
+                        <TableCell>{o.status ?? "—"}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+              <CardTitle className="text-base">打样记录</CardTitle>
+              <Button type="button" size="sm" onClick={() => setSampleOpen(true)}>
+                新增
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>日期</TableHead>
+                    <TableHead>产品</TableHead>
+                    <TableHead>结果</TableHead>
+                    <TableHead>备注</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.samples.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={4}
+                        className="py-6 text-center text-muted-foreground"
+                      >
+                        暂无记录
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    data.samples.map((s) => (
+                      <TableRow key={s.id}>
+                        <TableCell>{fmtTime(s.sampleDate)}</TableCell>
+                        <TableCell className="max-w-[200px] whitespace-normal">
+                          {s.productDesc}
+                        </TableCell>
+                        <TableCell>{s.status ?? "—"}</TableCell>
+                        <TableCell className="max-w-[220px] whitespace-normal text-xs">
+                          {s.notes ?? "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+              <CardTitle className="text-base">质量问题记录</CardTitle>
+              <Button type="button" size="sm" onClick={() => setQualityOpen(true)}>
+                新增
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>日期</TableHead>
+                    <TableHead>问题描述</TableHead>
+                    <TableHead>严重程度</TableHead>
+                    <TableHead>处理结果</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.qualityIssues.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={4}
+                        className="py-6 text-center text-muted-foreground"
+                      >
+                        暂无记录
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    data.qualityIssues.map((q) => (
+                      <TableRow key={q.id}>
+                        <TableCell>{fmtTime(q.issueDate)}</TableCell>
+                        <TableCell className="max-w-[240px] whitespace-normal">
+                          {q.description}
+                        </TableCell>
+                        <TableCell>{q.severity ?? "—"}</TableCell>
+                        <TableCell className="text-muted-foreground">—</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+              <CardTitle className="text-base">沟通备忘</CardTitle>
+              <Button type="button" size="sm" onClick={() => setNoteOpen(true)}>
+                新增
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {data.supplierNotes.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  暂无备忘
+                </p>
+              ) : (
+                data.supplierNotes.map((n) => (
+                  <div
+                    key={n.id}
+                    className="rounded-lg border border-slate-100 bg-slate-50/50 p-3"
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="font-medium">
+                        {n.title || "（无标题）"}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {fmtTime(n.createdAt)}
+                      </span>
+                    </div>
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">
+                      {n.content}
+                    </p>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="rating" className="mt-6 space-y-6">
-          <RatingSection supplierId={id} ratings={data.ratings} onRefresh={load} />
+        {/* Tab 5 评分 */}
+        <TabsContent
+          value="rating"
+          className="mt-0 min-w-0 flex-1 space-y-6 outline-none"
+        >
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">维度评分（1–5 星）</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <StarRow
+                  label="产品质量"
+                  value={ratingDraft.quality}
+                  onChange={(n) =>
+                    setRatingDraft((d) => ({ ...d, quality: n }))
+                  }
+                />
+                <StarRow
+                  label="价格竞争力"
+                  value={ratingDraft.priceCompete}
+                  onChange={(n) =>
+                    setRatingDraft((d) => ({ ...d, priceCompete: n }))
+                  }
+                />
+                <StarRow
+                  label="交期准时率"
+                  value={ratingDraft.delivery}
+                  onChange={(n) =>
+                    setRatingDraft((d) => ({ ...d, delivery: n }))
+                  }
+                />
+                <StarRow
+                  label="沟通效率"
+                  value={ratingDraft.communication}
+                  onChange={(n) =>
+                    setRatingDraft((d) => ({ ...d, communication: n }))
+                  }
+                />
+                <StarRow
+                  label="配合度"
+                  value={ratingDraft.cooperation}
+                  onChange={(n) =>
+                    setRatingDraft((d) => ({ ...d, cooperation: n }))
+                  }
+                />
+                <StarRow
+                  label="研发能力"
+                  value={ratingDraft.rdCapability}
+                  onChange={(n) =>
+                    setRatingDraft((d) => ({ ...d, rdCapability: n }))
+                  }
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">雷达图</CardTitle>
+              </CardHeader>
+              <CardContent className="h-[320px] w-full min-w-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart
+                    data={radarData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius="78%"
+                  >
+                    <PolarGrid />
+                    <PolarAngleAxis
+                      dataKey="dimension"
+                      tick={{ fontSize: 11, fill: "#64748b" }}
+                    />
+                    <PolarRadiusAxis
+                      angle={30}
+                      domain={[0, 5]}
+                      tickCount={6}
+                      tick={{ fontSize: 10 }}
+                    />
+                    <Radar
+                      name="得分"
+                      dataKey="value"
+                      stroke="#6366f1"
+                      fill="#6366f1"
+                      fillOpacity={0.35}
+                    />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">综合得分与评语</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-baseline gap-3">
+                <span className="text-sm text-muted-foreground">
+                  当前草稿平均分
+                </span>
+                <span className="text-2xl font-semibold text-slate-900">
+                  {ratingAvg.toFixed(1)}
+                </span>
+                <span className="text-sm text-muted-foreground">/ 5</span>
+                {data.overallScore != null ? (
+                  <Badge variant="secondary" className="ml-2">
+                    系统记录：{data.overallScore.toFixed(1)}
+                  </Badge>
+                ) : null}
+              </div>
+              <div>
+                <label className={fieldLabel}>评语</label>
+                <textarea
+                  className={cn(inputArea, "min-h-[96px]")}
+                  value={ratingDraft.comment}
+                  onChange={(e) =>
+                    setRatingDraft((d) => ({
+                      ...d,
+                      comment: e.target.value,
+                    }))
+                  }
+                  placeholder="填写本次评分说明…"
+                />
+              </div>
+              <Button
+                type="button"
+                onClick={() => submitRating()}
+                disabled={ratingSubmitting}
+              >
+                {ratingSubmitting ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : null}
+                保存评分
+              </Button>
+              {data.ratings[0]?.comment ? (
+                <div className="rounded-md border border-slate-100 bg-slate-50/80 p-3 text-sm">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">
+                    最近一条已保存评语（{fmtTime(data.ratings[0].createdAt)}）
+                  </p>
+                  <p className="whitespace-pre-wrap">{data.ratings[0].comment}</p>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={contactOpen} onOpenChange={setContactOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>添加联系人</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div>
+              <label className={fieldLabel}>姓名 *</label>
+              <Input
+                value={contactForm.name}
+                onChange={(e) =>
+                  setContactForm((f) => ({ ...f, name: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <label className={fieldLabel}>职位</label>
+              <Input
+                value={contactForm.title}
+                onChange={(e) =>
+                  setContactForm((f) => ({ ...f, title: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <label className={fieldLabel}>邮箱</label>
+              <Input
+                value={contactForm.email}
+                onChange={(e) =>
+                  setContactForm((f) => ({ ...f, email: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <label className={fieldLabel}>电话</label>
+              <Input
+                value={contactForm.phone}
+                onChange={(e) =>
+                  setContactForm((f) => ({ ...f, phone: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <label className={fieldLabel}>微信</label>
+              <Input
+                value={contactForm.wechat}
+                onChange={(e) =>
+                  setContactForm((f) => ({ ...f, wechat: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <label className={fieldLabel}>WhatsApp</label>
+              <Input
+                value={contactForm.whatsapp}
+                onChange={(e) =>
+                  setContactForm((f) => ({ ...f, whatsapp: e.target.value }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setContactOpen(false)}>
+              取消
+            </Button>
+            <Button type="button" onClick={() => addContact()}>
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={orderOpen} onOpenChange={setOrderOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>新增订单记录</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div>
+              <label className={fieldLabel}>日期 *</label>
+              <Input
+                type="datetime-local"
+                value={orderForm.orderDate}
+                onChange={(e) =>
+                  setOrderForm((f) => ({ ...f, orderDate: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <label className={fieldLabel}>产品 *</label>
+              <Input
+                value={orderForm.productDesc}
+                onChange={(e) =>
+                  setOrderForm((f) => ({ ...f, productDesc: e.target.value }))
+                }
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className={fieldLabel}>数量</label>
+                <Input
+                  value={orderForm.quantity}
+                  onChange={(e) =>
+                    setOrderForm((f) => ({ ...f, quantity: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className={fieldLabel}>金额</label>
+                <Input
+                  value={orderForm.amount}
+                  onChange={(e) =>
+                    setOrderForm((f) => ({ ...f, amount: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className={fieldLabel}>币种</label>
+                <Input
+                  value={orderForm.currency}
+                  onChange={(e) =>
+                    setOrderForm((f) => ({ ...f, currency: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className={fieldLabel}>状态</label>
+                <Input
+                  value={orderForm.status}
+                  onChange={(e) =>
+                    setOrderForm((f) => ({ ...f, status: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOrderOpen(false)}>
+              取消
+            </Button>
+            <Button type="button" onClick={() => addOrder()}>
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={sampleOpen} onOpenChange={setSampleOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>新增打样记录</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div>
+              <label className={fieldLabel}>日期 *</label>
+              <Input
+                type="datetime-local"
+                value={sampleForm.sampleDate}
+                onChange={(e) =>
+                  setSampleForm((f) => ({ ...f, sampleDate: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <label className={fieldLabel}>产品 *</label>
+              <Input
+                value={sampleForm.productDesc}
+                onChange={(e) =>
+                  setSampleForm((f) => ({ ...f, productDesc: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <label className={fieldLabel}>结果</label>
+              <Input
+                value={sampleForm.status}
+                onChange={(e) =>
+                  setSampleForm((f) => ({ ...f, status: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <label className={fieldLabel}>备注</label>
+              <textarea
+                className={inputArea}
+                value={sampleForm.notes}
+                onChange={(e) =>
+                  setSampleForm((f) => ({ ...f, notes: e.target.value }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setSampleOpen(false)}>
+              取消
+            </Button>
+            <Button type="button" onClick={() => addSample()}>
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={qualityOpen} onOpenChange={setQualityOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>新增质量问题记录</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div>
+              <label className={fieldLabel}>日期（可选）</label>
+              <Input
+                type="datetime-local"
+                value={qualityForm.issueDate}
+                onChange={(e) =>
+                  setQualityForm((f) => ({ ...f, issueDate: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <label className={fieldLabel}>问题描述 *</label>
+              <textarea
+                className={inputArea}
+                value={qualityForm.description}
+                onChange={(e) =>
+                  setQualityForm((f) => ({
+                    ...f,
+                    description: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div>
+              <label className={fieldLabel}>严重程度</label>
+              <Input
+                value={qualityForm.severity}
+                onChange={(e) =>
+                  setQualityForm((f) => ({ ...f, severity: e.target.value }))
+                }
+                placeholder="如：高 / 中 / 低"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setQualityOpen(false)}>
+              取消
+            </Button>
+            <Button type="button" onClick={() => addQuality()}>
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={noteOpen} onOpenChange={setNoteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>新增沟通备忘</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div>
+              <label className={fieldLabel}>标题</label>
+              <Input
+                value={noteForm.title}
+                onChange={(e) =>
+                  setNoteForm((f) => ({ ...f, title: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <label className={fieldLabel}>内容 *</label>
+              <textarea
+                className={inputArea}
+                value={noteForm.content}
+                onChange={(e) =>
+                  setNoteForm((f) => ({ ...f, content: e.target.value }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setNoteOpen(false)}>
+              取消
+            </Button>
+            <Button type="button" onClick={() => addNote()}>
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!preview} onOpenChange={(o) => !o && setPreview(null)}>
         <DialogContent className="max-w-4xl">
@@ -931,485 +2076,15 @@ export function SupplierDetail({ id }: { id: string }) {
               className="h-[75vh] w-full rounded-md border"
             />
           )}
+          {preview &&
+            !preview.mime.startsWith("image/") &&
+            preview.mime !== "application/pdf" && (
+              <p className="text-sm text-muted-foreground">
+                该类型请使用下载查看。
+              </p>
+            )}
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-function ContactsSection({
-  supplierId,
-  contacts,
-  onChange,
-}: {
-  supplierId: string;
-  contacts: FullSupplier["contacts"];
-  onChange: () => void;
-}) {
-  const [form, setForm] = useState({
-    name: "",
-    title: "",
-    email: "",
-    phone: "",
-    wechat: "",
-    whatsapp: "",
-    lineId: "",
-  });
-
-  async function add() {
-    if (!form.name.trim()) {
-      toast.error("请填写姓名");
-      return;
-    }
-    const res = await fetch(`/api/suppliers/${supplierId}/contacts`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: form.name,
-        title: form.title || null,
-        email: form.email || null,
-        phone: form.phone || null,
-        wechat: form.wechat || null,
-        whatsapp: form.whatsapp || null,
-        lineId: form.lineId || null,
-      }),
-    });
-    if (res.ok) {
-      toast.success("已添加联系人");
-      setForm({
-        name: "",
-        title: "",
-        email: "",
-        phone: "",
-        wechat: "",
-        whatsapp: "",
-        lineId: "",
-      });
-      onChange();
-    } else {
-      const j = await res.json();
-      toast.error(j.message ?? "失败");
-    }
-  }
-
-  async function remove(cid: string) {
-    if (!confirm("删除该联系人？")) return;
-    const res = await fetch(`/api/suppliers/${supplierId}/contacts/${cid}`, {
-      method: "DELETE",
-    });
-    if (res.ok) {
-      toast.success("已删除");
-      onChange();
-    }
-  }
-
-  return (
-    <Card className="border-slate-200/80 shadow-sm">
-      <CardHeader>
-        <CardTitle className="text-base">主要联系人</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {contacts.map((c) => (
-          <div
-            key={c.id}
-            className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/50 p-3 text-sm"
-          >
-            <div>
-              <div className="font-medium">
-                {c.name}
-                {c.isPrimary && (
-                  <Badge className="ml-2" variant="secondary">
-                    主联系人
-                  </Badge>
-                )}
-              </div>
-              <div className="mt-1 text-slate-600">
-                {[c.title, c.email, c.phone, c.wechat, c.whatsapp, c.lineId]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </div>
-            </div>
-            <Button size="sm" variant="ghost" onClick={() => remove(c.id)}>
-              删除
-            </Button>
-          </div>
-        ))}
-        <Separator />
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Input
-            placeholder="姓名 *"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          />
-          <Input
-            placeholder="职位"
-            value={form.title}
-            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-          />
-          <Input
-            placeholder="邮箱"
-            value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-          />
-          <Input
-            placeholder="电话"
-            value={form.phone}
-            onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-          />
-          <Input
-            placeholder="微信"
-            value={form.wechat}
-            onChange={(e) => setForm((f) => ({ ...f, wechat: e.target.value }))}
-          />
-          <Input
-            placeholder="WhatsApp"
-            value={form.whatsapp}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, whatsapp: e.target.value }))
-            }
-          />
-          <Input
-            placeholder="Line"
-            value={form.lineId}
-            onChange={(e) => setForm((f) => ({ ...f, lineId: e.target.value }))}
-          />
-        </div>
-        <Button type="button" onClick={() => add()}>
-          添加联系人
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function RecordsBlock({
-  supplierId,
-  data,
-  onRefresh,
-}: {
-  supplierId: string;
-  data: FullSupplier;
-  onRefresh: () => void;
-}) {
-  const [order, setOrder] = useState({
-    productDesc: "",
-    quantity: "",
-    amount: "",
-    status: "",
-  });
-  const [sample, setSample] = useState({ productDesc: "", status: "", notes: "" });
-  const [quality, setQuality] = useState({ description: "", severity: "" });
-  const [note, setNote] = useState({ title: "", content: "" });
-
-  async function postOrder() {
-    const res = await fetch(`/api/suppliers/${supplierId}/orders`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        orderDate: new Date().toISOString(),
-        productDesc: order.productDesc,
-        quantity: order.quantity ? Number(order.quantity) : null,
-        amount: order.amount ? Number(order.amount) : null,
-        status: order.status || null,
-      }),
-    });
-    if (res.ok) {
-      toast.success("已添加订单记录");
-      setOrder({ productDesc: "", quantity: "", amount: "", status: "" });
-      onRefresh();
-    }
-  }
-
-  async function postSample() {
-    const res = await fetch(`/api/suppliers/${supplierId}/samples`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sampleDate: new Date().toISOString(),
-        productDesc: sample.productDesc,
-        status: sample.status || null,
-        notes: sample.notes || null,
-      }),
-    });
-    if (res.ok) {
-      toast.success("已添加打样记录");
-      setSample({ productDesc: "", status: "", notes: "" });
-      onRefresh();
-    }
-  }
-
-  async function postQuality() {
-    const res = await fetch(`/api/suppliers/${supplierId}/quality`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        description: quality.description,
-        severity: quality.severity || null,
-      }),
-    });
-    if (res.ok) {
-      toast.success("已记录质量问题");
-      setQuality({ description: "", severity: "" });
-      onRefresh();
-    }
-  }
-
-  async function postNote() {
-    const res = await fetch(`/api/suppliers/${supplierId}/notes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: note.title || null,
-        content: note.content,
-      }),
-    });
-    if (res.ok) {
-      toast.success("已添加备忘");
-      setNote({ title: "", content: "" });
-      onRefresh();
-    }
-  }
-
-  return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">订单记录</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {data.orders.map((o) => (
-            <div key={o.id} className="rounded border border-slate-100 p-2 text-sm">
-              <div className="font-medium">{fmtTime(o.orderDate)}</div>
-              <div>{o.productDesc}</div>
-              <div className="text-slate-500">
-                数量 {o.quantity ?? "—"} · 金额 {o.amount ?? "—"} {o.currency ?? ""}{" "}
-                · {o.status ?? ""}
-              </div>
-            </div>
-          ))}
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Input
-              placeholder="产品描述"
-              value={order.productDesc}
-              onChange={(e) =>
-                setOrder((x) => ({ ...x, productDesc: e.target.value }))
-              }
-            />
-            <Input
-              placeholder="数量"
-              value={order.quantity}
-              onChange={(e) =>
-                setOrder((x) => ({ ...x, quantity: e.target.value }))
-              }
-            />
-            <Input
-              placeholder="金额"
-              value={order.amount}
-              onChange={(e) =>
-                setOrder((x) => ({ ...x, amount: e.target.value }))
-              }
-            />
-            <Input
-              placeholder="状态"
-              value={order.status}
-              onChange={(e) => setOrder((x) => ({ ...x, status: e.target.value }))}
-            />
-          </div>
-          <Button type="button" size="sm" onClick={() => postOrder()}>
-            添加订单
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">打样记录</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {data.samples.map((s) => (
-            <div key={s.id} className="rounded border border-slate-100 p-2 text-sm">
-              <div>{fmtTime(s.sampleDate)}</div>
-              <div>{s.productDesc}</div>
-              <div className="text-slate-500">{s.status} {s.notes}</div>
-            </div>
-          ))}
-          <Input
-            placeholder="产品"
-            value={sample.productDesc}
-            onChange={(e) =>
-              setSample((x) => ({ ...x, productDesc: e.target.value }))
-            }
-          />
-          <Input
-            placeholder="状态"
-            value={sample.status}
-            onChange={(e) => setSample((x) => ({ ...x, status: e.target.value }))}
-          />
-          <Input
-            placeholder="备注"
-            value={sample.notes}
-            onChange={(e) => setSample((x) => ({ ...x, notes: e.target.value }))}
-          />
-          <Button type="button" size="sm" onClick={() => postSample()}>
-            添加打样
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">质量问题</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {data.qualityIssues.map((q) => (
-            <div key={q.id} className="rounded border border-slate-100 p-2 text-sm">
-              <div>{fmtTime(q.issueDate)}</div>
-              <div>{q.description}</div>
-              <div className="text-slate-500">{q.severity}</div>
-            </div>
-          ))}
-          <textarea
-            className="min-h-[72px] w-full rounded-lg border px-2 py-1 text-sm"
-            placeholder="问题描述"
-            value={quality.description}
-            onChange={(e) =>
-              setQuality((x) => ({ ...x, description: e.target.value }))
-            }
-          />
-          <Input
-            placeholder="严重程度"
-            value={quality.severity}
-            onChange={(e) =>
-              setQuality((x) => ({ ...x, severity: e.target.value }))
-            }
-          />
-          <Button type="button" size="sm" onClick={() => postQuality()}>
-            添加记录
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">沟通备忘</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {data.supplierNotes.map((n) => (
-            <div key={n.id} className="rounded border border-slate-100 p-2 text-sm">
-              <div className="font-medium">{n.title || "备忘"}</div>
-              <div className="text-slate-600">{n.content}</div>
-              <div className="text-xs text-slate-400">{fmtTime(n.createdAt)}</div>
-            </div>
-          ))}
-          <Input
-            placeholder="标题（可选）"
-            value={note.title}
-            onChange={(e) => setNote((x) => ({ ...x, title: e.target.value }))}
-          />
-          <textarea
-            className="min-h-[72px] w-full rounded-lg border px-2 py-1 text-sm"
-            placeholder="内容"
-            value={note.content}
-            onChange={(e) => setNote((x) => ({ ...x, content: e.target.value }))}
-          />
-          <Button type="button" size="sm" onClick={() => postNote()}>
-            添加备忘
-          </Button>
-        </CardContent>
-      </Card>
-    </>
-  );
-}
-
-function RatingSection({
-  supplierId,
-  ratings,
-  onRefresh,
-}: {
-  supplierId: string;
-  ratings: FullSupplier["ratings"];
-  onRefresh: () => void;
-}) {
-  const [f, setF] = useState({
-    quality: 4,
-    priceCompete: 4,
-    delivery: 4,
-    communication: 4,
-    cooperation: 4,
-    rdCapability: 4,
-    comment: "",
-  });
-
-  async function submit() {
-    const res = await fetch(`/api/suppliers/${supplierId}/ratings`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...f, comment: f.comment || null }),
-    });
-    if (res.ok) {
-      toast.success("评分已保存");
-      onRefresh();
-    } else {
-      const j = await res.json();
-      toast.error(j.message ?? "失败");
-    }
-  }
-
-  const dims = [
-    ["产品质量", "quality"],
-    ["价格竞争力", "priceCompete"],
-    ["交期准时率", "delivery"],
-    ["沟通效率", "communication"],
-    ["配合度", "cooperation"],
-    ["研发能力", "rdCapability"],
-  ] as const;
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">手动评分（每项 1–5）</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {dims.map(([label, key]) => (
-          <div key={key} className="flex flex-wrap items-center gap-3">
-            <span className="w-28 text-sm text-slate-600">{label}</span>
-            <Input
-              type="number"
-              min={1}
-              max={5}
-              className="w-20"
-              value={f[key]}
-              onChange={(e) =>
-                setF((x) => ({ ...x, [key]: Number(e.target.value) }))
-              }
-            />
-          </div>
-        ))}
-        <div className="space-y-1">
-          <Label>备注</Label>
-          <textarea
-            className="min-h-[64px] w-full rounded-lg border px-2 py-1 text-sm"
-            value={f.comment}
-            onChange={(e) => setF((x) => ({ ...x, comment: e.target.value }))}
-          />
-        </div>
-        <Button type="button" onClick={() => submit()}>
-          提交评分
-        </Button>
-
-        <Separator className="my-4" />
-        <div className="text-sm font-medium text-slate-900">历史记录</div>
-        {ratings.map((r) => (
-          <div key={r.id} className="rounded border border-slate-100 p-2 text-xs text-slate-600">
-            <div>
-              质量{r.quality} 价格{r.priceCompete} 交期{r.delivery} 沟通
-              {r.communication} 配合{r.cooperation} 研发{r.rdCapability}
-            </div>
-            {r.comment && <div className="mt-1">{r.comment}</div>}
-            <div className="mt-1 text-slate-400">{fmtTime(r.createdAt)}</div>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
   );
 }

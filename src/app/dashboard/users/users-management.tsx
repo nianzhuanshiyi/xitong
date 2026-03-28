@@ -65,23 +65,29 @@ export function UsersManagement() {
   }, [load]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-4 sm:space-y-6">
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-4">
-          <div>
-            <CardTitle className="font-heading text-lg text-slate-900">团队成员</CardTitle>
-            <CardDescription className="text-slate-600">
+        <CardHeader className="flex flex-col gap-3 space-y-0 pb-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <CardTitle className="font-heading text-base text-slate-900 sm:text-lg">
+              团队成员
+            </CardTitle>
+            <CardDescription className="text-xs text-slate-600 sm:text-sm">
               管理角色权限与 AI 功能授权（仅管理员）
             </CardDescription>
           </div>
-          <Button size="sm" className="gap-1.5 shadow-md" onClick={() => setCreateOpen(true)}>
+          <Button
+            size="sm"
+            className="w-full shrink-0 gap-1.5 shadow-md sm:w-auto"
+            onClick={() => setCreateOpen(true)}
+          >
             <Plus className="size-4" />
             添加用户
           </Button>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-slate-50/40 shadow-inner">
-            <Table>
+        <CardContent className="px-3 sm:px-6">
+          <div className="-mx-1 overflow-x-auto rounded-xl border border-slate-200/90 bg-slate-50/40 shadow-inner sm:mx-0">
+            <Table className="min-w-[640px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>姓名</TableHead>

@@ -113,12 +113,12 @@ export function SuppliersDashboard() {
   }, [load]);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
+    <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8">
       <div>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight text-slate-900">
+        <h1 className="font-heading text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
           供应商资源库
         </h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 text-xs text-slate-600 sm:text-sm">
           集中管理美、韩、中供应商资料，支持 AI 分析与选品匹配。
         </p>
       </div>
@@ -329,8 +329,9 @@ export function SuppliersDashboard() {
           ))}
         </div>
       ) : (
-        <Card className="border-slate-200/80 shadow-sm">
-          <Table>
+        <Card className="overflow-hidden border-slate-200/80 shadow-sm">
+          <div className="overflow-x-auto">
+            <Table className="min-w-[720px]">
             <TableHeader>
               <TableRow>
                 <TableHead>公司</TableHead>
@@ -371,6 +372,7 @@ export function SuppliersDashboard() {
               ))}
             </TableBody>
           </Table>
+          </div>
         </Card>
       )}
 

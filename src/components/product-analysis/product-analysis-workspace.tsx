@@ -122,6 +122,16 @@ export function ProductAnalysisWorkspace() {
     setLoadingSaved(false);
   }, [searchParams]);
 
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const reset = () => {
+      if (mq.matches) setSidebarCollapsed(false);
+    };
+    mq.addEventListener("change", reset);
+    reset();
+    return () => mq.removeEventListener("change", reset);
+  }, []);
+
   const loadPreview = useCallback(async () => {
     const parsedLocal = parseAsinInput(rawInput);
     if (parsedLocal.asins.length === 0) {
@@ -294,19 +304,21 @@ export function ProductAnalysisWorkspace() {
   }
 
   return (
-    <div className="mx-auto flex max-w-[1800px] flex-col gap-4">
-      <div>
-        <h2 className="font-heading text-xl font-semibold text-slate-900">选品分析</h2>
-        <p className="mt-1 text-sm text-slate-600">
+    <div className="mx-auto flex max-w-[1800px] flex-col gap-3 sm:gap-4">
+      <div className="px-0 sm:px-0">
+        <h2 className="font-heading text-lg font-semibold text-slate-900 sm:text-xl lg:text-2xl">
+          选品分析
+        </h2>
+        <p className="mt-1 text-xs leading-relaxed text-slate-600 sm:text-sm">
           输入竞品 ASIN 或链接；3 个月内相同产品将优先使用缓存，节省 Token。
         </p>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-slate-50/40 shadow-sm">
-        <div className="flex min-h-[min(720px,85vh)] flex-col lg:flex-row">
+        <div className="flex min-h-0 flex-col lg:min-h-[min(720px,85vh)] lg:flex-row">
         <aside
           className={cn(
-            "relative flex flex-col border-b border-slate-200 bg-white transition-all duration-200 ease-out lg:min-h-0 lg:border-b-0 lg:border-r",
+            "relative flex w-full flex-col border-b border-slate-200 bg-white transition-all duration-200 ease-out lg:min-h-0 lg:w-auto lg:border-b-0 lg:border-r",
             sidebarCollapsed
               ? "lg:w-11 lg:max-w-none lg:shrink-0"
               : "lg:min-w-0 lg:flex-[1]"
@@ -315,7 +327,7 @@ export function ProductAnalysisWorkspace() {
           <button
             type="button"
             onClick={() => setSidebarCollapsed((c) => !c)}
-            className="absolute -right-3 top-3 z-20 flex size-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-md hover:bg-slate-50"
+            className="absolute -right-2 top-3 z-20 hidden size-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-md hover:bg-slate-50 lg:flex"
             aria-label={sidebarCollapsed ? "展开输入区" : "折叠输入区"}
           >
             {sidebarCollapsed ? (
@@ -326,7 +338,7 @@ export function ProductAnalysisWorkspace() {
           </button>
 
           {!sidebarCollapsed && (
-            <div className="flex max-h-[calc(100vh-8rem)] flex-col gap-4 overflow-y-auto p-3 pt-12">
+            <div className="flex max-h-[min(520px,65vh)] flex-col gap-4 overflow-y-auto p-3 pt-10 sm:max-h-[min(600px,70vh)] lg:max-h-[calc(100vh-8rem)] lg:pt-12">
               <Card className="border-slate-200/90 shadow-none">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">1. 竞品输入</CardTitle>
@@ -497,7 +509,7 @@ export function ProductAnalysisWorkspace() {
           )}
 
           {sidebarCollapsed && (
-            <div className="flex flex-1 flex-col items-center justify-start pt-14 text-[10px] text-slate-500 [writing-mode:vertical-rl]">
+            <div className="hidden flex-1 flex-col items-center justify-start pt-14 text-[10px] text-slate-500 [writing-mode:vertical-rl] lg:flex">
               输入与利润
             </div>
           )}
@@ -505,7 +517,7 @@ export function ProductAnalysisWorkspace() {
 
         <main
           className={cn(
-            "min-w-0 max-w-full overflow-x-hidden p-4 print:p-2",
+            "min-w-0 w-full max-w-full overflow-x-hidden p-3 sm:p-4 print:p-2",
             sidebarCollapsed ? "lg:flex-1" : "lg:min-w-0 lg:flex-[2]"
           )}
           style={{ overflowWrap: "break-word", wordBreak: "break-word" }}
@@ -560,7 +572,7 @@ export function ProductAnalysisWorkspace() {
         </div>
 
         {result && (
-          <div className="border-t border-slate-200 bg-white px-3 py-6 sm:px-6">
+          <div className="border-t border-slate-200 bg-white px-3 py-5 sm:px-5 sm:py-6 lg:px-8">
             <AnalysisAiReportSection
               result={result}
               onFactorySpecUpdate={(factorySpecMarkdown) =>

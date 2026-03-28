@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { Bell, LogOut, Search, UserRound } from "lucide-react";
+import { Bell, LogOut, Menu, Search, UserRound } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +17,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getDashboardTitle } from "@/config/dashboard-nav";
 
-export function DashboardHeader() {
+export function DashboardHeader({
+  onMenuClick,
+}: {
+  onMenuClick?: () => void;
+} = {}) {
   const pathname = usePathname();
   const title = getDashboardTitle(pathname ?? "");
   const { data: session } = useSession();
@@ -25,8 +29,20 @@ export function DashboardHeader() {
   const initial = user?.name?.charAt(0) ?? user?.email?.charAt(0) ?? "?";
 
   return (
-    <header className="sticky top-0 z-30 flex h-[3.75rem] shrink-0 items-center gap-4 border-b border-slate-200/90 bg-white/80 px-5 backdrop-blur-xl supports-[backdrop-filter]:bg-white/70 sm:px-6">
-      <h1 className="min-w-0 shrink-0 text-base font-semibold tracking-tight text-slate-900 sm:text-lg">
+    <header className="sticky top-0 z-30 flex h-[3.75rem] shrink-0 items-center gap-2 border-b border-slate-200/90 bg-white/80 px-3 backdrop-blur-xl supports-[backdrop-filter]:bg-white/70 sm:gap-4 sm:px-5 lg:px-6">
+      {onMenuClick ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="shrink-0 text-slate-700 md:hidden"
+          onClick={onMenuClick}
+          aria-label="打开导航菜单"
+        >
+          <Menu className="size-5" strokeWidth={2} />
+        </Button>
+      ) : null}
+      <h1 className="min-w-0 flex-1 text-sm font-semibold tracking-tight text-slate-900 sm:shrink-0 sm:flex-none sm:text-base lg:text-lg">
         {title}
       </h1>
 

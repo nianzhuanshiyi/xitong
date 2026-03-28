@@ -108,31 +108,31 @@ export function AnalysisResultPanel({
               <TabsList className="flex h-auto w-full max-w-full flex-wrap justify-start gap-1 bg-transparent p-0 print:hidden">
                 <TabsTrigger
                   value="score"
-                  className="rounded-lg px-3 py-2 text-xs data-[selected]:bg-indigo-100 data-[selected]:text-indigo-900 sm:text-sm"
+                  className="rounded-lg px-2 py-1.5 text-[11px] data-[selected]:bg-indigo-100 data-[selected]:text-indigo-900 sm:px-3 sm:py-2 sm:text-xs md:text-sm"
                 >
                   综合评分
                 </TabsTrigger>
                 <TabsTrigger
                   value="market"
-                  className="rounded-lg px-3 py-2 text-xs data-[selected]:bg-indigo-100 data-[selected]:text-indigo-900 sm:text-sm"
+                  className="rounded-lg px-2 py-1.5 text-[11px] data-[selected]:bg-indigo-100 data-[selected]:text-indigo-900 sm:px-3 sm:py-2 sm:text-xs md:text-sm"
                 >
                   市场分析
                 </TabsTrigger>
                 <TabsTrigger
                   value="traffic"
-                  className="rounded-lg px-3 py-2 text-xs data-[selected]:bg-indigo-100 data-[selected]:text-indigo-900 sm:text-sm"
+                  className="rounded-lg px-2 py-1.5 text-[11px] data-[selected]:bg-indigo-100 data-[selected]:text-indigo-900 sm:px-3 sm:py-2 sm:text-xs md:text-sm"
                 >
                   流量分析
                 </TabsTrigger>
                 <TabsTrigger
                   value="reviews"
-                  className="rounded-lg px-3 py-2 text-xs data-[selected]:bg-indigo-100 data-[selected]:text-indigo-900 sm:text-sm"
+                  className="rounded-lg px-2 py-1.5 text-[11px] data-[selected]:bg-indigo-100 data-[selected]:text-indigo-900 sm:px-3 sm:py-2 sm:text-xs md:text-sm"
                 >
                   评价分析
                 </TabsTrigger>
                 <TabsTrigger
                   value="profit"
-                  className="rounded-lg px-3 py-2 text-xs data-[selected]:bg-indigo-100 data-[selected]:text-indigo-900 sm:text-sm"
+                  className="rounded-lg px-2 py-1.5 text-[11px] data-[selected]:bg-indigo-100 data-[selected]:text-indigo-900 sm:px-3 sm:py-2 sm:text-xs md:text-sm"
                 >
                   利润分析
                 </TabsTrigger>

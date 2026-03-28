@@ -82,7 +82,7 @@ function ConcentrationChart({ slices }: { slices: PieSlice[] }) {
 
   if (useBar) {
     return (
-      <div className="h-[280px] w-full">
+      <div className="h-[240px] w-full min-w-0 max-w-full sm:h-[280px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200" />
@@ -109,7 +109,7 @@ function ConcentrationChart({ slices }: { slices: PieSlice[] }) {
   }
 
   return (
-    <div className="mx-auto h-[280px] w-full max-w-md">
+    <div className="mx-auto h-[240px] w-full min-w-0 max-w-full sm:h-[280px] sm:max-w-md">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
@@ -216,11 +216,11 @@ export function MarketAnalysisTab({ market }: { market: AnalysisResult["market"]
       {products.length > 0 && (
         <Card className="border-slate-200">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">TOP10 商品</CardTitle>
-            <CardDescription>按接口返回顺序展示</CardDescription>
+            <CardTitle className="text-sm sm:text-base">TOP10 商品</CardTitle>
+            <CardDescription className="text-xs">按接口返回顺序展示</CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto p-0 sm:p-6">
-            <table className="w-full min-w-[720px] border-collapse text-left text-xs sm:text-sm">
+            <table className="w-full min-w-[720px] max-w-full border-collapse text-left text-xs sm:text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
                   <th className="px-2 py-2 font-semibold">排名</th>
@@ -326,13 +326,13 @@ export function TrafficAnalysisTab({ result }: { result: AnalysisResult }) {
 
       <Card className="border-slate-200">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">搜索关键词 TOP20</CardTitle>
+          <CardTitle className="text-sm sm:text-base">搜索关键词 TOP20</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0 sm:p-6">
           {kw.length === 0 ? (
             <EmptyData />
           ) : (
-            <table className="w-full min-w-[520px] border-collapse text-left text-xs sm:text-sm">
+            <table className="w-full min-w-[520px] max-w-full border-collapse text-left text-xs sm:text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
                   <th className="px-3 py-2 font-semibold">关键词</th>
@@ -375,7 +375,7 @@ export function TrafficAnalysisTab({ result }: { result: AnalysisResult }) {
             {pieData.length === 0 ? (
               <EmptyData />
             ) : (
-              <div className="mx-auto h-[260px] w-full max-w-sm">
+              <div className="mx-auto h-[220px] w-full min-w-0 max-w-full sm:h-[260px] sm:max-w-sm">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -413,7 +413,7 @@ export function TrafficAnalysisTab({ result }: { result: AnalysisResult }) {
             {trend.length < 2 ? (
               <EmptyData />
             ) : (
-              <div className="h-[260px] w-full">
+              <div className="h-[220px] w-full min-w-0 max-w-full sm:h-[260px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200" />
@@ -519,7 +519,7 @@ export function ReviewsAnalysisTab({ result }: { result: AnalysisResult }) {
             {pieData.length === 0 ? (
               <EmptyData />
             ) : (
-              <div className="mx-auto h-[260px] w-full max-w-sm">
+              <div className="mx-auto h-[220px] w-full min-w-0 max-w-full sm:h-[260px] sm:max-w-sm">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -555,7 +555,7 @@ export function ReviewsAnalysisTab({ result }: { result: AnalysisResult }) {
             {!starHasData ? (
               <EmptyData />
             ) : (
-              <div className="h-[260px] w-full">
+              <div className="h-[220px] w-full min-w-0 max-w-full sm:h-[260px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={barData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200" />
@@ -619,7 +619,7 @@ export function ScoreAnalysisTab({ score }: { score: AnalysisResult["score"] }) 
     <div className="space-y-10">
       <div className="flex flex-col items-center gap-2">
         <p className="text-sm font-medium text-slate-600">综合得分</p>
-        <div className="relative h-[240px] w-[240px]">
+        <div className="relative mx-auto h-[200px] w-[200px] min-w-0 sm:h-[240px] sm:w-[240px]">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie

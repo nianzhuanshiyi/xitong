@@ -62,7 +62,7 @@ export function AnalysisAiReportSection({
     >
       <Card className="max-w-full border-slate-200/90 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-lg text-slate-900">AI 分析报告</CardTitle>
+          <CardTitle className="text-base text-slate-900 sm:text-lg">AI 分析报告</CardTitle>
           <CardDescription className="max-w-full">
             以下为 Claude 生成的 Markdown 完整报告；工厂指示单可在底部按需生成或重新生成。
           </CardDescription>
