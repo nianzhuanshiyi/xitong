@@ -32,7 +32,7 @@ yarn-error.log*
 # local supplier uploads (dev)
 /public/uploads/
 
-# prisma sqlite
+# prisma 本地 SQLite 遗留（已改用 PostgreSQL 时可忽略）
 /prisma/dev.db
 /prisma/dev.db-journal
 
