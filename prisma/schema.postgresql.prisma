@@ -1,10 +1,10 @@
-// 本地默认 SQLite。线上 PostgreSQL 使用 prisma/schema.postgresql.prisma（见 .env.example 中 Railway 构建说明）。
 generator client {
   provider = "prisma-client-js"
 }
 
+/// 与 `schema.prisma` 模型一致；仅线上（Railway）用 `--schema` 指向本文件。本地默认用 SQLite。
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
