@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   CalendarCheck,
+  ChevronDown,
+  Crown,
   FlaskConical,
   Loader2,
   Radar,
@@ -114,6 +116,17 @@ export function BeautyIdeasDashboard() {
     status: string;
   } | null>(null);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [topPick, setTopPick] = useState<{
+    id: string;
+    productName: string;
+    productNameEn: string;
+    executiveSummary: string;
+    status: string;
+    estimatedMargin: string | null;
+    idea?: { totalScore: number; recommendation: string } | null;
+  } | null>(null);
+  const [generatingTopPick, setGeneratingTopPick] = useState(false);
+  const [ideasExpanded, setIdeasExpanded] = useState(false);
 
   const loadIdeas = useCallback(async () => {
     setLoading(true);
@@ -157,9 +170,20 @@ export function BeautyIdeasDashboard() {
     } catch { /* ignore */ }
   }, []);
 
+  const loadTopPick = useCallback(async () => {
+    try {
+      const r = await fetch("/api/beauty-ideas/top-pick");
+      const j = await r.json();
+      if (j.report && j.report.status === "completed") {
+        setTopPick(j.report);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => { loadIdeas(); }, [loadIdeas]);
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => { loadReport(); }, [loadReport]);
+  useEffect(() => { loadTopPick(); }, [loadTopPick]);
 
   const handleScan = async () => {
     setScanning(true);
@@ -205,6 +229,23 @@ export function BeautyIdeasDashboard() {
     }
   };
 
+  const handleGenerateTopPick = async () => {
+    setGeneratingTopPick(true);
+    try {
+      toast.info("AI 正在分析并精选最佳产品…");
+      const r = await fetch("/api/beauty-ideas/top-pick", { method: "POST" });
+      const j = await r.json();
+      if (!r.ok) { toast.error(j.message ?? "生成失败"); return; }
+      if (j.skipped) { toast.info("本期精选方案已存在"); }
+      else { toast.success("精选方案已生成"); }
+      loadTopPick();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "生成失败");
+    } finally {
+      setGeneratingTopPick(false);
+    }
+  };
+
   const draftCount = ideas.filter((i) => i.status === "draft").length;
   const highScoreCount = ideas.filter((i) => i.totalScore >= 70).length;
 
@@ -241,6 +282,69 @@ export function BeautyIdeasDashboard() {
           <CardContent><p className="text-sm font-medium">{lastScan ?? "从未扫描"}</p></CardContent>
         </Card>
       </div>
+
+      {/* Top Pick Hero */}
+      {topPick ? (
+        <div className="relative overflow-hidden rounded-2xl border-2 border-amber-200/80 bg-gradient-to-br from-amber-50 via-orange-50/50 to-yellow-50/30 p-5 shadow-sm sm:p-6">
+          <div className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-amber-200/20 blur-3xl" aria-hidden />
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
+            <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg">
+              <Crown className="size-7" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-amber-600">本期精选</p>
+                {topPick.idea && (
+                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                    topPick.idea.recommendation === "strong_go" ? "bg-emerald-100 text-emerald-800" :
+                    topPick.idea.recommendation === "go" ? "bg-blue-100 text-blue-800" :
+                    "bg-amber-100 text-amber-800"
+                  )}>
+                    {topPick.idea.totalScore}分
+                  </span>
+                )}
+                {topPick.estimatedMargin && (
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                    利润率 {topPick.estimatedMargin}
+                  </span>
+                )}
+              </div>
+              <h2 className="mt-1 font-heading text-lg font-bold text-slate-900 sm:text-xl">
+                {topPick.productName}
+              </h2>
+              {topPick.productNameEn && (
+                <p className="text-xs text-slate-500">{topPick.productNameEn}</p>
+              )}
+              <p className="mt-1.5 text-sm leading-relaxed text-slate-600 line-clamp-2">
+                {topPick.executiveSummary}
+              </p>
+            </div>
+            <Link href={`/dashboard/beauty-ideas/top-pick/${topPick.id}`}>
+              <Button className="gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow hover:from-amber-600 hover:to-orange-600">
+                查看完整方案
+              </Button>
+            </Link>
+          </div>
+        </div>
+      ) : ideas.length > 0 ? (
+        <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-amber-300/60 bg-gradient-to-br from-amber-50/50 to-orange-50/30 p-6 text-center">
+          <Crown className="mx-auto size-10 text-amber-400/60" />
+          <h3 className="mt-3 font-heading text-base font-semibold text-slate-700">
+            从 {ideas.length} 个创意中，AI 精选最值得做的 1 个产品
+          </h3>
+          <p className="mt-1 text-sm text-slate-500">
+            生成一份完整的可落地执行方案：产品规格、竞品分析、财务预估、供应商对接、上架策略
+          </p>
+          <Button
+            onClick={handleGenerateTopPick}
+            disabled={generatingTopPick}
+            className="mt-4 gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow hover:from-amber-600 hover:to-orange-600"
+          >
+            {generatingTopPick ? <Loader2 className="size-4 animate-spin" /> : <Crown className="size-4" />}
+            {generatingTopPick ? "AI 分析中…" : "生成本期精选新品方案"}
+          </Button>
+        </div>
+      ) : null}
 
       {/* Today's Report */}
       {todayReport && todayReport.status === "completed" && (
@@ -322,7 +426,7 @@ export function BeautyIdeasDashboard() {
         </div>
       </div>
 
-      {/* Ideas Grid */}
+      {/* Ideas Grid (collapsible) */}
       {loading ? (
         <div className="flex justify-center py-16">
           <Loader2 className="size-8 animate-spin text-slate-400" />
@@ -332,6 +436,18 @@ export function BeautyIdeasDashboard() {
           暂无创意，点击「扫描趋势」开始
         </div>
       ) : (
+        <div>
+          <button
+            onClick={() => setIdeasExpanded(!ideasExpanded)}
+            className="mb-4 flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            <ChevronDown className={cn("size-4 transition-transform", ideasExpanded && "rotate-180")} />
+            查看全部创意（{ideas.length}）
+            <span className="ml-auto text-xs text-slate-400">
+              {highScoreCount} 个高分 · {draftCount} 个待评估
+            </span>
+          </button>
+          {ideasExpanded && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {ideas.map((idea) => {
             const rec = REC_CONFIG[idea.recommendation] ?? REC_CONFIG.watch;
@@ -388,6 +504,8 @@ export function BeautyIdeasDashboard() {
               </Link>
             );
           })}
+        </div>
+          )}
         </div>
       )}
     </div>
