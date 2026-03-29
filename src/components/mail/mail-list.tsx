@@ -5,7 +5,6 @@ import {
   Archive,
   CheckSquare,
   Loader2,
-  Mail,
   MailOpen,
   Paperclip,
   Square,

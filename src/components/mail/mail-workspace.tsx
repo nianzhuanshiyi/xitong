@@ -5,8 +5,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
-  ChevronDown,
-  ChevronUp,
   Loader2,
   PenSquare,
   RefreshCw,
