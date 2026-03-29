@@ -24,11 +24,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from "@/components/ui/resizable";
 import { cn } from "@/lib/utils";
 import type { MailDetail as MailDetailType } from "@/lib/mail/fixtures";
 import type { MailSyncStreamEvent } from "@/lib/mail/sync-stream-types";
@@ -641,23 +636,14 @@ export function MailWorkspace() {
 
   const desktopLayout = (
     <div className="flex h-[calc(100dvh-8rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="w-[240px] shrink-0 overflow-hidden border-r border-slate-200">
+      <div className="h-full w-[250px] shrink-0 overflow-hidden border-r border-slate-200">
         <MailSidebar />
       </div>
-      <div className="flex h-full min-w-0 flex-1">
-        <ResizablePanelGroup orientation="horizontal">
-          <ResizablePanel defaultSize={35} minSize={25} maxSize={50}>
-            <div className="h-full overflow-hidden">
-              <MailList />
-            </div>
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={65} minSize={40}>
-            <div className="h-full overflow-hidden">
-              <MailDetail />
-            </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
+      <div className="h-full w-[350px] shrink-0 overflow-hidden border-r border-slate-200">
+        <MailList />
+      </div>
+      <div className="h-full min-w-0 flex-1 overflow-hidden">
+        <MailDetail />
       </div>
     </div>
   );

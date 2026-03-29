@@ -92,15 +92,15 @@ export function MailSidebar() {
                 )}
               >
                 <div className="flex items-start justify-between gap-1">
-                  <span className="min-w-0 break-words font-medium text-slate-900">{s.name}</span>
+                  <span className="min-w-0 truncate font-medium text-slate-900">{s.name}</span>
                   {s.unreadCount > 0 && (
                     <span className="shrink-0 rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
                       {s.unreadCount > 9 ? "9+" : s.unreadCount}
                     </span>
                   )}
                 </div>
-                <div className="mt-0.5 flex items-center justify-between gap-1">
-                  <p className="line-clamp-1 text-[10px] text-slate-500">
+                <div className="mt-0.5 flex items-center justify-between gap-1 overflow-hidden">
+                  <p className="min-w-0 truncate text-[10px] text-slate-500">
                     {s.lastSnippet || "—"}
                   </p>
                   {s.lastAt && (
