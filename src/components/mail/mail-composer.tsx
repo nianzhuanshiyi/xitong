@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { Loader2, Paperclip, Reply, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useMailContext } from "./mail-context";
+import { EmailTagInput } from "./email-tag-input";
 
 export function MailComposer() {
   const ctx = useMailContext();
@@ -49,6 +52,8 @@ export function MailComposer() {
         </div>
       ) : (
         <div className="space-y-2">
+          {/* Recipient fields */}
+          <ReplyRecipients />
           <textarea
             className="min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm leading-relaxed"
             placeholder="用中文写回复大意（不必很正式）…"
@@ -111,6 +116,47 @@ export function MailComposer() {
               收起
             </Button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReplyRecipients() {
+  const ctx = useMailContext();
+  const [showCc, setShowCc] = useState(ctx.replyCc.length > 0);
+  const [showBcc, setShowBcc] = useState(ctx.replyBcc.length > 0);
+
+  return (
+    <div className="space-y-1.5 rounded-md border border-slate-200 bg-slate-50/80 p-2">
+      <div>
+        <div className="flex items-center justify-between">
+          <Label className="text-[11px] text-slate-500">收件人</Label>
+          <div className="flex gap-2 text-[10px]">
+            {!showCc && (
+              <button type="button" className="text-indigo-600 hover:underline" onClick={() => setShowCc(true)}>
+                +CC
+              </button>
+            )}
+            {!showBcc && (
+              <button type="button" className="text-indigo-600 hover:underline" onClick={() => setShowBcc(true)}>
+                +BCC
+              </button>
+            )}
+          </div>
+        </div>
+        <EmailTagInput value={ctx.replyTo} onChange={ctx.setReplyTo} placeholder="输入邮箱后回车" className="mt-0.5 bg-white" />
+      </div>
+      {showCc && (
+        <div>
+          <Label className="text-[11px] text-slate-500">抄送 (CC)</Label>
+          <EmailTagInput value={ctx.replyCc} onChange={ctx.setReplyCc} placeholder="输入邮箱后回车" className="mt-0.5 bg-white" />
+        </div>
+      )}
+      {showBcc && (
+        <div>
+          <Label className="text-[11px] text-slate-500">密送 (BCC)</Label>
+          <EmailTagInput value={ctx.replyBcc} onChange={ctx.setReplyBcc} placeholder="输入邮箱后回车" className="mt-0.5 bg-white" />
         </div>
       )}
     </div>
