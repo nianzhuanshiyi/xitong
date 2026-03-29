@@ -71,30 +71,6 @@ export async function POST(req: NextRequest) {
 
   const today = getBeijingDate();
 
-  const body = await req.text();
-  let forceRegenerate = false;
-  try {
-    if (body) {
-      const parsed = JSON.parse(body);
-      forceRegenerate = parsed.force === true;
-    }
-  } catch { /* empty body is fine */ }
-
-  const existing = await prisma.europeTopPickReport.findUnique({
-    where: { reportDate: today },
-    include: { idea: { select: ideaSelect } },
-  });
-
-  if (
-    existing &&
-    existing.status === "completed" &&
-    !existing.dismissed &&
-    !forceRegenerate &&
-    existing.briefScore > 0
-  ) {
-    return NextResponse.json({ report: existing, skipped: true });
-  }
-
   const dismissed = await prisma.europeTopPickReport.findMany({
     where: { dismissed: true },
     select: { dismissedCategories: true },
@@ -113,14 +89,25 @@ export async function POST(req: NextRequest) {
       ? `\n\n注意：用户对以下方向不感兴趣，请避开：${avoidCategories.join("、")}`
       : "";
 
-  const report = existing
-    ? await prisma.europeTopPickReport.update({
-        where: { id: existing.id },
-        data: { status: "generating", dismissed: false, phase: "brief" },
-      })
-    : await prisma.europeTopPickReport.create({
-        data: { reportDate: today, status: "generating", createdBy: userId },
-      });
+  // Gather historical product names to avoid duplicates
+  const historyReports = await prisma.europeTopPickReport.findMany({
+    where: { status: "completed" },
+    select: { productName: true },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+  const pastProducts = historyReports
+    .map((r) => r.productName)
+    .filter(Boolean);
+  const avoidProductsHint =
+    pastProducts.length > 0
+      ? `\n\n重要：请不要推荐以下已推荐过的产品，必须推荐一个全新的不同的产品方向：${pastProducts.join("、")}`
+      : "";
+
+  // Always create a new report (preserve history)
+  const report = await prisma.europeTopPickReport.create({
+    data: { reportDate: today, status: "generating", createdBy: userId },
+  });
 
   try {
     console.info("[europe-top-pick-brief] 开始生成简报...");
@@ -139,7 +126,7 @@ export async function POST(req: NextRequest) {
 - 中国供应链有优势，可快速出货
 - 优先季节性需求产品、欧洲本土品牌少的品类、复购率高的消耗品
 
-排除品类：食品、保健品、医疗器械、儿童玩具、电池类产品、化学品、大件家具${avoidHint}
+排除品类：食品、保健品、医疗器械、儿童玩具、电池类产品、化学品、大件家具${avoidHint}${avoidProductsHint}
 
 返回JSON对象：
 {
@@ -319,18 +306,8 @@ export async function GET() {
     return NextResponse.json({ message: "未登录" }, { status: 401 });
   }
 
-  const today = getBeijingDate();
-
-  let report = await prisma.europeTopPickReport.findUnique({
-    where: { reportDate: today },
-    include: { idea: { select: ideaSelect } },
-  });
-
-  if (report && report.status === "completed" && !report.dismissed) {
-    return NextResponse.json({ report });
-  }
-
-  report = await prisma.europeTopPickReport.findFirst({
+  // Return the latest non-dismissed completed report
+  const report = await prisma.europeTopPickReport.findFirst({
     where: { dismissed: false, status: "completed" },
     orderBy: { createdAt: "desc" },
     include: { idea: { select: ideaSelect } },

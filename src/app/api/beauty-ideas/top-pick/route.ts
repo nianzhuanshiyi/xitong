@@ -78,33 +78,6 @@ export async function POST(req: NextRequest) {
 
   const today = getBeijingDate();
 
-  // Check if force regeneration is requested
-  const body = await req.text();
-  let forceRegenerate = false;
-  try {
-    if (body) {
-      const parsed = JSON.parse(body);
-      forceRegenerate = parsed.force === true;
-    }
-  } catch { /* empty body is fine */ }
-
-  // Already have a completed brief/deep for today?
-  const existing = await prisma.topPickReport.findUnique({
-    where: { reportDate: today },
-    include: { idea: { select: ideaSelect } },
-  });
-
-  if (
-    existing &&
-    existing.status === "completed" &&
-    !existing.dismissed &&
-    !forceRegenerate &&
-    // Has valid brief data (not old format)
-    existing.briefScore > 0
-  ) {
-    return NextResponse.json({ report: existing, skipped: true });
-  }
-
   // Gather dismissed categories to avoid
   const dismissed = await prisma.topPickReport.findMany({
     where: { dismissed: true },
@@ -124,15 +97,25 @@ export async function POST(req: NextRequest) {
       ? `\n\n注意：用户对以下方向不感兴趣，请避开：${avoidCategories.join("、")}`
       : "";
 
-  // Create / reset report
-  const report = existing
-    ? await prisma.topPickReport.update({
-        where: { id: existing.id },
-        data: { status: "generating", dismissed: false, phase: "brief" },
-      })
-    : await prisma.topPickReport.create({
-        data: { reportDate: today, status: "generating", createdBy: userId },
-      });
+  // Gather historical product names to avoid duplicates
+  const historyReports = await prisma.topPickReport.findMany({
+    where: { status: "completed" },
+    select: { productName: true },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+  const pastProducts = historyReports
+    .map((r) => r.productName)
+    .filter(Boolean);
+  const avoidProductsHint =
+    pastProducts.length > 0
+      ? `\n\n重要：请不要推荐以下已推荐过的产品，必须推荐一个全新的不同的产品方向：${pastProducts.join("、")}`
+      : "";
+
+  // Always create a new report (preserve history)
+  const report = await prisma.topPickReport.create({
+    data: { reportDate: today, status: "generating", createdBy: userId },
+  });
 
   try {
     console.info("[top-pick-brief] 开始生成简报...");
@@ -146,7 +129,7 @@ export async function POST(req: NextRequest) {
 3. 给出详细的推荐简报
 
 选择标准：趋势热度高、竞争可进入、毛利率≥60%、我们供应链能做、适合线上销售。
-避开已饱和品类（普通保湿面霜、基础洁面等）。${avoidHint}
+避开已饱和品类（普通保湿面霜、基础洁面等）。${avoidHint}${avoidProductsHint}
 
 返回JSON对象：
 {
@@ -334,21 +317,8 @@ export async function GET() {
     return NextResponse.json({ message: "未登录" }, { status: 401 });
   }
 
-  const today = getBeijingDate();
-
-  // Try today's report first (Beijing time)
-  let report = await prisma.topPickReport.findUnique({
-    where: { reportDate: today },
-    include: { idea: { select: ideaSelect } },
-  });
-
-  // Show today's report if it's completed and not dismissed
-  if (report && report.status === "completed" && !report.dismissed) {
-    return NextResponse.json({ report });
-  }
-
-  // Otherwise, get the latest non-dismissed completed report
-  report = await prisma.topPickReport.findFirst({
+  // Return the latest non-dismissed completed report
+  const report = await prisma.topPickReport.findFirst({
     where: { dismissed: false, status: "completed" },
     orderBy: { createdAt: "desc" },
     include: { idea: { select: ideaSelect } },

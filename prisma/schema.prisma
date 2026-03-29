@@ -849,7 +849,7 @@ model IdeaComment {
 /// 精选新品方案
 model TopPickReport {
   id                   String   @id @default(cuid())
-  reportDate           String   @unique /// YYYY-MM-DD
+  reportDate           String   /// YYYY-MM-DD
   ideaId               String?
   idea                 ProductIdea? @relation(fields: [ideaId], references: [id], onDelete: SetNull)
   productName          String   @default("")
@@ -1014,7 +1014,7 @@ model IdeaComment3C {
 /// 3C精选新品方案
 model ThreeCTopPickReport {
   id                   String   @id @default(cuid())
-  reportDate           String   @unique /// YYYY-MM-DD
+  reportDate           String   /// YYYY-MM-DD
   ideaId               String?
   idea                 ThreeCProductIdea? @relation(fields: [ideaId], references: [id], onDelete: SetNull)
   productName          String   @default("")
@@ -1179,7 +1179,7 @@ model IdeaCommentEurope {
 /// 欧洲精选方案
 model EuropeTopPickReport {
   id                   String   @id @default(cuid())
-  reportDate           String   @unique /// YYYY-MM-DD
+  reportDate           String   /// YYYY-MM-DD
   ideaId               String?
   idea                 EuropeProductIdea? @relation(fields: [ideaId], references: [id], onDelete: SetNull)
   productName          String   @default("")

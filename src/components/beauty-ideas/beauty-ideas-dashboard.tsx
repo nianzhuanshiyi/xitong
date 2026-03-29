@@ -169,16 +169,8 @@ export function BeautyIdeasDashboard() {
       const r = await fetch("/api/beauty-ideas/top-pick", { method: "POST" });
       const j = await r.json();
       if (!r.ok) { toast.error(j.message ?? "生成失败"); return; }
-      if (j.skipped) {
-        toast.success("今日方案已存在");
-        // Directly set the returned report
-        if (j.report) setTopPick(j.report);
-      } else {
-        toast.success(`方案已生成：${j.report?.productName ?? ""}`);
-        // Directly set the returned report
-        if (j.report) setTopPick(j.report);
-      }
-      // Also reload history
+      toast.success(`新方案已生成：${j.report?.productName ?? ""}`);
+      if (j.report) setTopPick(j.report);
       await loadHistory();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "生成失败");
@@ -379,7 +371,7 @@ export function BeautyIdeasDashboard() {
                 className="gap-1 text-xs"
               >
                 {generating ? <Loader2 className="size-3 animate-spin" /> : <Crown className="size-3" />}
-                重新生成
+                生成新方案
               </Button>
             </div>
           </div>
@@ -405,7 +397,7 @@ export function BeautyIdeasDashboard() {
             <>
               <Crown className="mx-auto size-12 text-amber-400/60" />
               <h3 className="mt-4 font-heading text-lg font-semibold text-slate-700">
-                {isOldFormat ? "重新生成今日方案" : "一键生成今日新品方案"}
+                一键生成新品方案
               </h3>
               <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
                 AI 自动扫描 Top 5 趋势，精选 1 个最佳方向，生成简报卡片
@@ -421,7 +413,7 @@ export function BeautyIdeasDashboard() {
                 className="mt-5 gap-2 bg-gradient-to-r from-amber-500 to-orange-500 px-8 text-white shadow-lg hover:from-amber-600 hover:to-orange-600"
               >
                 <Crown className="size-5" />
-                {isOldFormat ? "重新生成（新格式）" : "生成今日新品方案"}
+                生成新品方案
               </Button>
             </>
           )}
