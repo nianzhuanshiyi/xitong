@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Eye, EyeOff, Loader2, RefreshCw } from "lucide-react";
+import { Database, Download, Eye, EyeOff, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -395,6 +395,62 @@ export function ApiSettingsForm() {
           </div>
         </CardContent>
       </Card>
+      <Separator />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-heading text-lg">
+            <Database className="mr-1.5 inline size-5 align-text-bottom" />
+            数据库备份
+          </CardTitle>
+          <CardDescription>
+            导出所有表的数据为 JSON 文件下载到本地，可用于灾难恢复或迁移。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <BackupButton />
+        </CardContent>
+      </Card>
     </div>
+  );
+}
+
+function BackupButton() {
+  const [busy, setBusy] = useState(false);
+
+  async function doBackup() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/admin/backup", { method: "POST" });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        toast.error((j as { message?: string }).message ?? "备份失败");
+        return;
+      }
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="(.+)"/);
+      const filename = match?.[1] ?? "backup.json";
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("备份已下载");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "备份失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Button type="button" onClick={doBackup} disabled={busy} className="gap-1.5">
+      {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+      导出数据库备份
+    </Button>
   );
 }
