@@ -16,6 +16,7 @@ const patchSchema = z.object({
   smtpHost: z.string().optional().nullable(),
   smtpPort: z.number().int().optional().nullable(),
   smtpPassword: z.string().optional().nullable(),
+  signature: z.string().max(2000).optional().nullable(),
   isActive: z.boolean().optional(),
 });
 
@@ -61,6 +62,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (parsed.data.smtpPassword) {
       data.smtpPassword = encryptPassword(parsed.data.smtpPassword);
     }
+    // signature 是明文存储
+    if (parsed.data.signature !== undefined) {
+      data.signature = parsed.data.signature?.trim() || null;
+    }
 
     const row = await prisma.emailAccount.update({
       where: { id },
@@ -73,6 +78,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
         imapPort: true,
         smtpHost: true,
         smtpPort: true,
+        signature: true,
         isActive: true,
         lastSyncAt: true,
         updatedAt: true,

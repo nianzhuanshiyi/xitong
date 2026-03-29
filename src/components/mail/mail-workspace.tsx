@@ -97,7 +97,7 @@ function AccountSelector({
   value,
   onChange,
 }: {
-  accounts: { id: string; email: string; displayName: string | null }[];
+  accounts: { id: string; email: string; displayName: string | null; signature?: string | null }[];
   value: string;
   onChange: (v: string) => void;
 }) {
@@ -206,8 +206,20 @@ export function MailWorkspace() {
   const composeFileInputRef = useRef<HTMLInputElement>(null);
 
   // Email accounts
-  const [accounts, setAccounts] = useState<{ id: string; email: string; displayName: string | null }[]>([]);
+  const [accounts, setAccounts] = useState<{ id: string; email: string; displayName: string | null; signature?: string | null }[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
+
+  /** Get the signature for the currently selected account */
+  const currentSignature = useMemo(() => {
+    const acct = accounts.find((a) => a.id === selectedAccountId);
+    return acct?.signature?.trim() || "";
+  }, [accounts, selectedAccountId]);
+
+  /** Append signature separator + signature to text */
+  function appendSignature(text: string): string {
+    if (!currentSignature) return text;
+    return text.trimEnd() + "\n\n--\n" + currentSignature;
+  }
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 1023px)");
@@ -238,7 +250,7 @@ export function MailWorkspace() {
       try {
         const r = await fetch("/api/mail/accounts");
         if (r.ok) {
-          const list = (await r.json()) as { id: string; email: string; displayName: string | null }[];
+          const list = (await r.json()) as { id: string; email: string; displayName: string | null; signature?: string | null }[];
           setAccounts(list);
           if (list.length > 0 && !selectedAccountId) {
             setSelectedAccountId(list[0].id);
@@ -491,7 +503,8 @@ export function MailWorkspace() {
         toast.error((j as { message?: string }).message ?? "AI 优化失败");
         return;
       }
-      setReplyEnPreview((j as { bodyEn?: string }).bodyEn ?? "");
+      const bodyEn = (j as { bodyEn?: string }).bodyEn ?? "";
+      setReplyEnPreview(appendSignature(bodyEn));
       setSendOpen(true);
     } finally {
       setPreviewBusy(false);
@@ -601,7 +614,8 @@ export function MailWorkspace() {
         toast.error((j as { message?: string }).message ?? "AI 翻译失败");
         return;
       }
-      setComposeBodyEn((j as { bodyEn?: string }).bodyEn ?? "");
+      const bodyEn = (j as { bodyEn?: string }).bodyEn ?? "";
+      setComposeBodyEn(appendSignature(bodyEn));
       setComposeSendStep("preview");
     } finally {
       setComposeBusy(false);
@@ -1039,7 +1053,7 @@ export function MailWorkspace() {
         {/* Dialogs */}
         {/* Reply send preview */}
         <Dialog open={sendOpen} onOpenChange={setSendOpen}>
-          <DialogContent className="max-h-[92dvh] w-[900px] max-w-[95vw] overflow-y-auto p-6 sm:p-8">
+          <DialogContent className="max-h-[92dvh] !max-w-none overflow-y-auto p-6 sm:p-8" style={{ width: "min(900px, 95vw)" }}>
             <DialogHeader>
               <DialogTitle>确认发送</DialogTitle>
               <DialogDescription>
@@ -1166,7 +1180,7 @@ export function MailWorkspace() {
 
         {/* Compose new email */}
         <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
-          <DialogContent className="max-h-[92dvh] w-[900px] max-w-[95vw] overflow-y-auto p-6 sm:p-8">
+          <DialogContent className="max-h-[92dvh] !max-w-none overflow-y-auto p-6 sm:p-8" style={{ width: "min(900px, 95vw)" }}>
             <DialogHeader>
               <DialogTitle>写邮件</DialogTitle>
             </DialogHeader>
