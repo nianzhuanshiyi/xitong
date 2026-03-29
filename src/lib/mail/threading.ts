@@ -19,6 +19,7 @@ export type ThreadableEmail = Pick<
   | "aiBucket"
 > & {
   actionItems?: { isCompleted: boolean }[];
+  supplier?: { name: string } | null;
 };
 
 function normMsgId(raw: string | null | undefined): string {

@@ -241,6 +241,11 @@ export function MailList() {
                         <Star className="size-3 shrink-0 fill-amber-400 text-amber-500" />
                       )}
                       {t.latest.hasAttachments && <Paperclip className="size-3" />}
+                      {t.latest.supplierName && (
+                        <span className="rounded bg-indigo-100 px-1 text-[10px] font-medium text-indigo-700">
+                          {t.latest.supplierName}
+                        </span>
+                      )}
                       {t.latest.openTodoCount > 0 && (
                         <span className="ml-auto rounded-full bg-red-100 px-1.5 text-[10px] font-medium text-red-600">
                           待办

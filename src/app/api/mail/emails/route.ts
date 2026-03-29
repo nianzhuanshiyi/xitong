@@ -93,6 +93,7 @@ export async function GET(req: Request) {
       referencesIds: true,
       priority: true,
       actionItems: { select: { id: true, isCompleted: true } },
+      supplier: { select: { name: true } },
     },
     orderBy: { receivedAt: "desc" },
     take: 300,
@@ -113,6 +114,7 @@ export async function GET(req: Request) {
     hasAttachments: e.hasAttachments,
     aiBucket: e.aiBucket,
     actionItems: e.actionItems,
+    supplier: e.supplier,
   }));
 
   return NextResponse.json({ threads: buildThreadSummaries(threadable) });

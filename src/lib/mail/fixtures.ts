@@ -12,6 +12,7 @@ export type MailSupplierRow = {
 export type MailListItem = {
   id: string;
   supplierId: string | null;
+  supplierName?: string | null;
   direction: "RECEIVED" | "SENT";
   subject: string;
   summaryCn: string | null;

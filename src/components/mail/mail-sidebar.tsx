@@ -31,7 +31,7 @@ export function MailSidebar() {
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="all" className="gap-1 text-xs">
               <Inbox className="size-3.5" />
-              全部
+              收件箱
             </TabsTrigger>
             <TabsTrigger value="suppliers" className="gap-1 text-xs">
               <Building2 className="size-3.5" />
@@ -51,7 +51,10 @@ export function MailSidebar() {
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {ctx.leftTab === "all" ? (
           <div className="space-y-1">
-            <p className="px-1 text-[10px] font-medium text-slate-500">
+            <p className="px-1 text-[10px] text-slate-400 leading-snug">
+              显示未归类邮件，已归入供应商的邮件请在供应商标签页查看
+            </p>
+            <p className="px-1 pt-1 text-[10px] font-medium text-slate-500">
               AI 分类
             </p>
             {BUCKETS.map((b) => (

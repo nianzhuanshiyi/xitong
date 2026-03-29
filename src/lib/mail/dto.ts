@@ -15,6 +15,7 @@ export type EmailListItemSource = Pick<
   | "aiBucket"
 > & {
   actionItems?: Pick<ActionItem, "isCompleted">[];
+  supplier?: { name: string } | null;
 };
 
 export function emailListItem(e: EmailListItemSource) {
@@ -23,6 +24,7 @@ export function emailListItem(e: EmailListItemSource) {
   return {
     id: e.id,
     supplierId: e.supplierId,
+    supplierName: e.supplier?.name ?? null,
     direction: e.direction,
     subject: e.subject,
     summaryCn: e.summaryCn,
