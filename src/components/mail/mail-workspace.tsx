@@ -752,9 +752,13 @@ export function MailWorkspace() {
     }
     toast.success((j as { message?: string }).message ?? "已归类");
     setClassifyOpen(false);
+    // Clear current selection — the classified email no longer belongs in current view
+    setEmailId(null);
+    setDetail(null);
+    setThreadMessages([]);
     void loadEmails();
-    if (emailId) void loadThread(emailId);
     void loadSuppliers();
+    window.dispatchEvent(new Event("xitong-mail-stats-refresh"));
   }
 
   async function regenerateSummaryFor(targetEmailId: string) {
