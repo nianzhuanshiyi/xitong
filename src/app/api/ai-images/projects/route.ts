@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 
 const createSchema = z.object({
   name: z.string().min(1).max(200),
+  asin: z.string().max(20).optional().nullable(),
   category: z.string().max(200).default(""),
   description: z.string().max(5000).default(""),
 });
@@ -27,6 +28,7 @@ export async function GET() {
     select: {
       id: true,
       name: true,
+      asin: true,
       category: true,
       description: true,
       bundlePlanJson: true,
@@ -58,7 +60,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { name, category, description } = parsed.data;
+  const { name, asin, category, description } = parsed.data;
   const aiSlots = await generateBundlePlanWithClaude({
     name,
     category,
@@ -72,6 +74,7 @@ export async function POST(req: Request) {
     data: {
       userId: session.user.id,
       name,
+      asin: asin?.trim() || null,
       category,
       description,
       bundlePlanJson: JSON.stringify(bundle),

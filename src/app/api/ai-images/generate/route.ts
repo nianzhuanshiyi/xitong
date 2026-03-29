@@ -1,32 +1,23 @@
 import { NextResponse } from "next/server";
-import fs from "node:fs";
-import path from "node:path";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { requireDashboardSession } from "@/lib/supplier-auth";
 import { getGoogleAiApiKey } from "@/lib/integration-keys";
-import { imagenPredict } from "@/lib/google-imagen";
-import { aiImageTypeZ, generateFormZ } from "@/lib/ai-images/api-schemas";
-import { ensureProjectDirs, publicRoot } from "@/lib/ai-images/paths";
+import {
+  buildFullPrompt,
+  generateGeminiProductImage,
+} from "@/lib/ai-images/gemini-generate";
+import { geminiStyleZ, styleToAiImageType } from "@/lib/ai-images/gemini-styles";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 const bodySchema = z.object({
   projectId: z.string(),
-  promptEn: z.string().min(8).max(8000),
-  promptZh: z.string().max(5000).optional().default(""),
-  imageType: aiImageTypeZ,
-  form: generateFormZ,
-  parentImageId: z.string().optional().nullable(),
+  productDescription: z.string().min(1).max(8000),
+  style: geminiStyleZ,
+  extraNotes: z.string().max(2000).optional().default(""),
 });
-
-function enhancePrompt(base: string, form: z.infer<typeof generateFormZ>): string {
-  const strength = form.styleStrength;
-  const suffix = ` Stylistic interpretation level ${strength}/10 (higher = more artistic).`;
-  if (base.length + suffix.length > 3500) return base;
-  return base + suffix;
-}
 
 export async function POST(req: Request) {
   const session = await requireDashboardSession();
@@ -48,8 +39,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { projectId, promptEn, promptZh, imageType, form, parentImageId } =
-    parsed.data;
+  const { projectId, productDescription, style, extraNotes } = parsed.data;
 
   const project = await prisma.imageProject.findFirst({
     where: { id: projectId, userId: session.user.id },
@@ -58,90 +48,76 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "项目不存在" }, { status: 404 });
   }
 
-  if (parentImageId) {
-    const parent = await prisma.generatedImage.findFirst({
-      where: { id: parentImageId, projectId },
-    });
-    if (!parent) {
-      return NextResponse.json({ message: "父图片不存在" }, { status: 400 });
-    }
-  }
-
   const apiKey = getGoogleAiApiKey();
-  const finalPrompt = enhancePrompt(promptEn, form);
-
-  const personGeneration =
-    form.imageType === "MODEL_USE" ||
-    form.imageType === "LIFESTYLE" ||
-    form.imageType === "BEFORE_AFTER"
-      ? "allow_adult"
-      : "dont_allow";
+  const fullPrompt = buildFullPrompt(style, productDescription, extraNotes);
 
   if (!apiKey) {
-    return NextResponse.json({
-      ok: false,
-      degraded: true,
-      promptOnly: true,
-      message:
-        "未配置 GOOGLE_AI_API_KEY：已保留 Prompt，可复制到 Midjourney 等工具使用。",
-      promptEn: finalPrompt,
-    });
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "未配置 GOOGLE_AI_API_KEY（或 GEMINI_API_KEY）。",
+        fullPrompt,
+      },
+      { status: 503 }
+    );
   }
 
-  const imagen = await imagenPredict(apiKey, {
-    prompt: finalPrompt,
-    sampleCount: form.count,
-    aspectRatio: "1:1",
-    imageSize: form.specPreset === "amazon_1600" ? "2K" : "2K",
-    personGeneration,
+  const gen = await generateGeminiProductImage(apiKey, fullPrompt);
+  if (!gen.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        message: gen.message,
+        fullPrompt,
+      },
+      { status: 502 }
+    );
+  }
+
+  const imageType = styleToAiImageType(style);
+  const paramsJson = JSON.stringify({
+    source: "gemini-2.5-flash-image",
+    style,
+    extraNotes: extraNotes || null,
+    mimeType: gen.mimeType,
   });
 
-  if (!imagen.ok) {
-    return NextResponse.json({
-      ok: false,
-      degraded: true,
-      promptOnly: true,
-      message: imagen.error,
-      promptEn: finalPrompt,
-    });
-  }
+  const row = await prisma.generatedImage.create({
+    data: {
+      projectId,
+      imageType,
+      prompt: productDescription,
+      fullPrompt,
+      promptEn: fullPrompt,
+      promptZh: "",
+      paramsJson,
+      imageUrl: "",
+      imageData: gen.base64,
+      style,
+      status: "completed",
+      width: 1024,
+      height: 1024,
+      filePath: "",
+    },
+  });
 
-  ensureProjectDirs(projectId);
-  const genDir = path.join(publicRoot(), "uploads", "ai-images", projectId, "gen");
+  await prisma.imageProject.update({
+    where: { id: projectId },
+    data: { updatedAt: new Date() },
+  });
 
-  const paramsJson = JSON.stringify({ form, parentImageId: parentImageId ?? null });
-
-  const created: {
-    id: string;
-    url: string;
-    filePath: string;
-  }[] = [];
-
-  for (const buf of imagen.buffers) {
-    const fname = `gen-${crypto.randomUUID()}.png`;
-    const rel = path
-      .join("uploads", "ai-images", projectId, "gen", fname)
-      .replace(/\\/g, "/");
-    const abs = path.join(genDir, fname);
-    await fs.promises.writeFile(abs, buf);
-
-    const row = await prisma.generatedImage.create({
-      data: {
-        projectId,
-        imageType,
-        promptEn: finalPrompt,
-        promptZh: promptZh ?? "",
-        paramsJson,
-        filePath: rel,
-        parentImageId: parentImageId ?? null,
-      },
-    });
-    created.push({
+  return NextResponse.json({
+    ok: true,
+    image: {
       id: row.id,
-      filePath: rel,
-      url: `/${rel}`,
-    });
-  }
-
-  return NextResponse.json({ ok: true, images: created });
+      style: row.style,
+      status: row.status,
+      width: row.width,
+      height: row.height,
+      prompt: row.prompt,
+      fullPrompt: row.fullPrompt,
+      imageData: row.imageData,
+      createdAt: row.createdAt,
+    },
+  });
 }

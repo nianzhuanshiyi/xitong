@@ -56,7 +56,14 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 
-  const abs = path.join(publicRoot(), row.filePath.replace(/^\/+/, ""));
+  const relPath = row.filePath?.trim().replace(/^\/+/, "") ?? "";
+  if (!relPath) {
+    return NextResponse.json(
+      { message: "此图片为内联存储，无法在此接口做本地文件处理" },
+      { status: 400 }
+    );
+  }
+  const abs = path.join(publicRoot(), relPath);
   if (!fs.existsSync(abs)) {
     return NextResponse.json({ message: "文件已丢失" }, { status: 410 });
   }
@@ -117,12 +124,17 @@ export async function POST(req: Request, ctx: Ctx) {
     data: {
       projectId,
       imageType: row.imageType,
+      prompt: row.prompt,
+      fullPrompt: row.fullPrompt,
       promptEn: row.promptEn,
       promptZh: row.promptZh ? `${row.promptZh}\n${note}` : note,
       paramsJson: JSON.stringify({
         sourceId,
         action: parsed.data,
       }),
+      style: row.style,
+      width: row.width,
+      height: row.height,
       filePath: rel,
       parentImageId: sourceId,
     },

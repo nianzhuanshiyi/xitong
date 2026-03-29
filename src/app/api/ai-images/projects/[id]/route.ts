@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 
 const patchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
+  asin: z.string().max(20).nullable().optional(),
   category: z.string().max(200).optional(),
   description: z.string().max(5000).optional(),
 });
@@ -72,9 +73,15 @@ export async function PATCH(req: Request, ctx: Ctx) {
     );
   }
 
+  const data = { ...parsed.data };
+  if (data.asin !== undefined) {
+    data.asin =
+      data.asin === null ? null : data.asin.trim() === "" ? null : data.asin.trim();
+  }
+
   const row = await prisma.imageProject.update({
     where: { id },
-    data: parsed.data,
+    data,
   });
   return NextResponse.json(row);
 }

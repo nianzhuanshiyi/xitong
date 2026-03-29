@@ -55,6 +55,8 @@ model ImageProject {
   userId           String
   user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   name             String
+  /// 关联亚马逊 ASIN（可选）
+  asin             String?
   category         String           @default("")
   description      String           @default("")
   /// 参考图相对路径 JSON 数组，最多 5 张：["uploads/ai-images/{id}/ref/xxx.jpg"]
@@ -66,17 +68,30 @@ model ImageProject {
   generatedImages  GeneratedImage[]
 }
 
-/// Imagen 等生成的图片记录
+/// Imagen / Gemini 等生成的图片记录
 model GeneratedImage {
   id             String      @id @default(cuid())
   projectId      String
   project        ImageProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
   imageType      AiImageType
+  /// 用户侧简短描述（Gemini 流程：产品描述原文）
+  prompt         String      @default("")
+  /// 实际送模型的完整提示词
+  fullPrompt     String      @default("")
   promptEn       String
   promptZh       String      @default("")
   paramsJson     String      @default("{}")
-  /// 相对网站根路径，如 uploads/ai-images/{projectId}/gen-xxx.png
-  filePath       String
+  /// 外链或占位（可选）
+  imageUrl       String      @default("")
+  /// Base64 图片数据（Gemini 等内联存储）
+  imageData      String?     @db.Text
+  /// 风格：main_image / lifestyle / white_bg / infographic / custom
+  style          String      @default("main_image")
+  status         String      @default("completed")
+  width          Int         @default(1024)
+  height         Int         @default(1024)
+  /// 相对网站根路径；纯 Base64 时可为空字符串
+  filePath       String      @default("")
   isFavorite     Boolean     @default(false)
   /// 亚马逊 7 张套装中的位置 0–6，未编入套装则为 null
   sortPosition   Int?

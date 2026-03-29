@@ -66,11 +66,14 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     return NextResponse.json({ message: "图片不存在" }, { status: 404 });
   }
 
-  const abs = path.join(publicRoot(), row.filePath.replace(/^\/+/, ""));
-  try {
-    await fs.promises.unlink(abs);
-  } catch {
-    /* ignore */
+  const rel = row.filePath?.trim().replace(/^\/+/, "") ?? "";
+  if (rel.length > 0) {
+    const abs = path.join(publicRoot(), rel);
+    try {
+      await fs.promises.unlink(abs);
+    } catch {
+      /* ignore */
+    }
   }
 
   await prisma.generatedImage.delete({ where: { id } });
