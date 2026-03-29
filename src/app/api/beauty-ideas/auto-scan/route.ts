@@ -83,32 +83,47 @@ export async function POST(req: NextRequest) {
       sourceUrl?: string | null;
     };
 
-    const trends = await claudeJson<TrendItem[]>({
-      system: SCAN_PROMPT,
-      user: `请扫描当前最新的美妆市场趋势（${today}），覆盖美国、韩国、中国三个市场。返回JSON数组。`,
+    // Reuse today's existing trends if already scanned
+    const todayStart = new Date(today + "T00:00:00Z");
+    const todayEnd = new Date(today + "T23:59:59Z");
+    let createdTrends = await prisma.beautyTrend.findMany({
+      where: { createdAt: { gte: todayStart, lte: todayEnd } },
+      orderBy: { trendScore: "desc" },
     });
 
-    if (!trends || !Array.isArray(trends)) {
-      throw new Error("AI 趋势扫描返回格式错误");
-    }
+    if (createdTrends.length === 0) {
+      console.info("[beauty-auto-scan] 开始扫描趋势...");
+      const trends = await claudeJson<TrendItem[]>({
+        system: SCAN_PROMPT,
+        user: `请扫描当前最新的美妆市场趋势（${today}），覆盖美国、韩国、中国三个市场。只返回JSON数组，不要包含任何其他文字说明。`,
+        maxTokens: 16384,
+      });
 
-    const createdTrends = await prisma.$transaction(
-      trends.map((t) =>
-        prisma.beautyTrend.create({
-          data: {
-            source: t.source || "social_media",
-            market: t.market || "US",
-            title: t.title,
-            content: t.content,
-            ingredients: JSON.stringify(t.ingredients || []),
-            category: t.category || "skincare",
-            trendScore: Math.min(100, Math.max(1, t.trendScore || 50)),
-            sourceUrl: t.sourceUrl || null,
-            scannedAt: new Date(),
-          },
-        })
-      )
-    );
+      if (!trends || !Array.isArray(trends)) {
+        throw new Error("AI 趋势扫描返回格式错误");
+      }
+
+      createdTrends = await prisma.$transaction(
+        trends.map((t) =>
+          prisma.beautyTrend.create({
+            data: {
+              source: t.source || "social_media",
+              market: t.market || "US",
+              title: t.title,
+              content: t.content,
+              ingredients: JSON.stringify(t.ingredients || []),
+              category: t.category || "skincare",
+              trendScore: Math.min(100, Math.max(1, t.trendScore || 50)),
+              sourceUrl: t.sourceUrl || null,
+              scannedAt: new Date(),
+            },
+          })
+        )
+      );
+      console.info(`[beauty-auto-scan] 扫描到 ${createdTrends.length} 条趋势`);
+    } else {
+      console.info(`[beauty-auto-scan] 复用今日已有 ${createdTrends.length} 条趋势`);
+    }
 
     // ── Step 2: Generate ideas ──
     const IDEA_PROMPT = `你是一位资深美妆产品经理，服务于亚马逊跨境美妆卖家。
@@ -154,9 +169,11 @@ export async function POST(req: NextRequest) {
       trendScore: t.trendScore,
     }));
 
+    console.info("[beauty-auto-scan] 开始生成创意...");
     const ideas = await claudeJson<IdeaItem[]>({
       system: IDEA_PROMPT,
-      user: `以下是最新扫描到的美妆趋势，请为每条趋势生成1-2个新品创意：\n\n${JSON.stringify(trendsForAI, null, 2)}\n\n请返回JSON数组。`,
+      user: `以下是最新扫描到的美妆趋势，请为每条趋势生成1-2个新品创意：\n\n${JSON.stringify(trendsForAI, null, 2)}\n\n只返回JSON数组，不要包含任何其他文字说明。`,
+      maxTokens: 16384,
     });
 
     let ideasCreated = 0;
