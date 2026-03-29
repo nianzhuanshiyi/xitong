@@ -1039,7 +1039,7 @@ export function MailWorkspace() {
         {/* Dialogs */}
         {/* Reply send preview */}
         <Dialog open={sendOpen} onOpenChange={setSendOpen}>
-          <DialogContent className="max-h-[92dvh] max-w-[800px] overflow-y-auto p-6 sm:p-8">
+          <DialogContent className="max-h-[92dvh] w-[900px] max-w-[95vw] overflow-y-auto p-6 sm:p-8">
             <DialogHeader>
               <DialogTitle>确认发送</DialogTitle>
               <DialogDescription>
@@ -1064,17 +1064,17 @@ export function MailWorkspace() {
               />
             </div>
 
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div className="min-h-0">
+            <div className="flex gap-4">
+              <div className="min-h-0 flex-1">
                 <p className="mb-1.5 text-xs font-medium text-slate-600">中文大意</p>
-                <div className="h-[400px] overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-800">
+                <div className="min-h-[350px] overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-800">
                   {replyZh.trim() || "（未填写）"}
                 </div>
               </div>
-              <div className="min-h-0">
+              <div className="min-h-0 flex-1">
                 <p className="mb-1.5 text-xs font-medium text-slate-600">英文正文（可编辑）</p>
                 <textarea
-                  className="h-[400px] w-full rounded-md border border-input p-3 text-sm leading-relaxed"
+                  className="min-h-[350px] w-full rounded-md border border-input p-3 text-sm leading-relaxed"
                   value={replyEnPreview}
                   onChange={(e) => setReplyEnPreview(e.target.value)}
                   spellCheck={false}
@@ -1166,7 +1166,7 @@ export function MailWorkspace() {
 
         {/* Compose new email */}
         <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
-          <DialogContent className="max-h-[92dvh] max-w-[800px] overflow-y-auto p-6 sm:p-8">
+          <DialogContent className="max-h-[92dvh] w-[900px] max-w-[95vw] overflow-y-auto p-6 sm:p-8">
             <DialogHeader>
               <DialogTitle>写邮件</DialogTitle>
             </DialogHeader>
@@ -1245,17 +1245,17 @@ export function MailWorkspace() {
               </div>
             ) : (
               /* Preview step */
-              <div className="grid gap-5 sm:grid-cols-2">
-                <div className="min-h-0">
+              <div className="flex gap-4">
+                <div className="min-h-0 flex-1">
                   <p className="mb-1.5 text-xs font-medium text-slate-600">中文原文</p>
-                  <div className="h-[400px] overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-800">
+                  <div className="min-h-[350px] overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-800">
                     {composeBodyZh.trim() || "（未填写）"}
                   </div>
                 </div>
-                <div className="min-h-0">
+                <div className="min-h-0 flex-1">
                   <p className="mb-1.5 text-xs font-medium text-slate-600">英文正文（可编辑）</p>
                   <textarea
-                    className="h-[400px] w-full rounded-md border border-input p-3 text-sm leading-relaxed"
+                    className="min-h-[350px] w-full rounded-md border border-input p-3 text-sm leading-relaxed"
                     value={composeBodyEn}
                     onChange={(e) => setComposeBodyEn(e.target.value)}
                     spellCheck={false}
