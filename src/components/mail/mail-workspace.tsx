@@ -149,7 +149,8 @@ export function MailWorkspace() {
       const j = (await r.json()) as { threads?: MailThreadSummary[] };
       setThreads(j.threads ?? []);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "加载失败");
+      console.warn("[mail] loadEmails failed:", e);
+      setThreads([]);
     } finally {
       setLoadingList(false);
     }
@@ -187,7 +188,7 @@ export function MailWorkspace() {
           setDetail((d) => (d ? { ...d, isRead: true } : d));
         }
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "加载失败");
+        console.warn("[mail] loadThread failed:", e);
         setThreadMessages([]);
         setDetail(null);
       } finally {

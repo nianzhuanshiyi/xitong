@@ -119,7 +119,12 @@ export function MailAnalysisPanel() {
       if (r.ok) {
         const j = (await r.json()) as { items: AnalysisListItem[] };
         setHistory(j.items);
+      } else {
+        setHistory([]);
       }
+    } catch {
+      console.warn("[mail] loadHistory failed");
+      setHistory([]);
     } finally {
       setHistoryLoading(false);
     }
@@ -131,15 +136,19 @@ export function MailAnalysisPanel() {
 
   // Load analysis detail
   async function loadDetail(id: string) {
-    const r = await fetch(`/api/mail/ai-analysis/${id}`);
-    if (!r.ok) {
-      toast.error("加载分析详情失败");
-      return;
+    try {
+      const r = await fetch(`/api/mail/ai-analysis/${id}`);
+      if (!r.ok) {
+        console.warn("[mail] loadDetail failed:", r.status);
+        return;
+      }
+      const j = (await r.json()) as { analysis: AnalysisDetail };
+      setCurrent(j.analysis);
+      setView("detail");
+      scrollToBottom();
+    } catch {
+      console.warn("[mail] loadDetail fetch error");
     }
-    const j = (await r.json()) as { analysis: AnalysisDetail };
-    setCurrent(j.analysis);
-    setView("detail");
-    scrollToBottom();
   }
 
   // Create new analysis
