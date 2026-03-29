@@ -70,7 +70,7 @@ export async function register() {
       if (beautyScanRunning) return;
       beautyScanRunning = true;
       try {
-        const r = await fetch(`${baseUrl}/api/beauty-ideas/auto-scan`, {
+        const r = await fetch(`${baseUrl}/api/beauty-ideas/top-pick`, {
           method: "POST",
           headers: {
             "x-auto-sync-secret":
@@ -81,7 +81,7 @@ export async function register() {
           const j = await r.json();
           if (!j.skipped) {
             console.info(
-              `[beauty-auto-scan] 完成: ${j.trendsFound ?? 0} 趋势, ${j.ideasGenerated ?? 0} 创意`
+              `[beauty-auto-scan] 完成: ${j.report?.productName ?? "unknown"}`
             );
           }
         }

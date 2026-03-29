@@ -3,14 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  CalendarCheck,
   ChevronDown,
   Crown,
   FlaskConical,
   Loader2,
-  Radar,
-  Sparkles,
-  Star,
   TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -18,32 +14,46 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-type Idea = {
+/* ── Types ────────────────────────────────────────────────────── */
+
+type TopPick = {
   id: string;
-  name: string;
-  category: string;
-  targetMarket: string;
-  keyIngredients: string[];
-  totalScore: number;
-  trendScore: number;
-  marketScore: number;
-  competitionScore: number;
-  profitScore: number;
-  recommendation: string;
-  searchVolume: number | null;
-  competitionLevel: string | null;
-  estimatedPrice: string | null;
+  reportDate: string;
+  productName: string;
+  productNameEn: string;
+  executiveSummary: string;
+  estimatedMargin: string | null;
+  estimatedRetailPrice: string | null;
+  estimatedProfit: string | null;
   status: string;
   createdAt: string;
-  trend?: { title: string; market: string } | null;
+  idea?: {
+    totalScore: number;
+    recommendation: string;
+    searchVolume: number | null;
+  } | null;
 };
 
-const CATEGORY_LABELS: Record<string, string> = {
-  skincare: "护肤",
-  makeup: "彩妆",
-  haircare: "护发",
-  bodycare: "身体护理",
-  fragrance: "香水香氛",
+type HistoryItem = {
+  id: string;
+  reportDate: string;
+  productName: string;
+  productNameEn: string;
+  executiveSummary: string;
+  estimatedMargin: string | null;
+  status: string;
+  createdAt: string;
+  idea?: { totalScore: number; recommendation: string } | null;
+};
+
+type TrendItem = {
+  id: string;
+  title: string;
+  market: string;
+  category: string;
+  trendScore: number;
+  content: string;
+  scannedAt: string;
 };
 
 const REC_CONFIG: Record<string, { label: string; color: string }> = {
@@ -53,14 +63,9 @@ const REC_CONFIG: Record<string, { label: string; color: string }> = {
   pass: { label: "放弃", color: "bg-slate-100 text-slate-600" },
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: "草稿",
-  validated: "已验证",
-  developing: "开发中",
-  abandoned: "已放弃",
-};
+/* ── Score Ring ────────────────────────────────────────────────── */
 
-function ScoreRing({ score, size = 48 }: { score: number; size?: number }) {
+function ScoreRing({ score, size = 56 }: { score: number; size?: number }) {
   const r = (size - 6) / 2;
   const c = 2 * Math.PI * r;
   const pct = Math.min(score, 100) / 100;
@@ -81,94 +86,15 @@ function ScoreRing({ score, size = 48 }: { score: number; size?: number }) {
   );
 }
 
-function SubScoreBar({ label, value, max = 25 }: { label: string; value: number; max?: number }) {
-  return (
-    <div className="flex items-center gap-1.5 text-[11px]">
-      <span className="w-8 shrink-0 text-right text-slate-500">{label}</span>
-      <div className="h-1.5 flex-1 rounded-full bg-slate-100">
-        <div
-          className="h-full rounded-full bg-indigo-400"
-          style={{ width: `${Math.min((value / max) * 100, 100)}%` }}
-        />
-      </div>
-      <span className="w-5 text-right font-medium text-slate-700">{value}</span>
-    </div>
-  );
-}
+/* ── Main Dashboard ───────────────────────────────────────────── */
 
 export function BeautyIdeasDashboard() {
-  const [ideas, setIdeas] = useState<Idea[]>([]);
+  const [topPick, setTopPick] = useState<TopPick | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [trends, setTrends] = useState<TrendItem[]>([]);
+  const [generating, setGenerating] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [scanning, setScanning] = useState(false);
-  const [filterCat, setFilterCat] = useState("");
-  const [filterRec, setFilterRec] = useState("");
-  const [filterStatus, setFilterStatus] = useState("");
-  const [trendCount, setTrendCount] = useState(0);
-  const [lastScan, setLastScan] = useState<string | null>(null);
-  const [todayReport, setTodayReport] = useState<{
-    id: string;
-    reportDate: string;
-    trendsFound: number;
-    ideasGenerated: number;
-    highScoreIdeas: number;
-    trendsSummary: string;
-    ideasSummary: string;
-    status: string;
-  } | null>(null);
-  const [generatingReport, setGeneratingReport] = useState(false);
-  const [topPick, setTopPick] = useState<{
-    id: string;
-    productName: string;
-    productNameEn: string;
-    executiveSummary: string;
-    status: string;
-    estimatedMargin: string | null;
-    idea?: { totalScore: number; recommendation: string } | null;
-  } | null>(null);
-  const [generatingTopPick, setGeneratingTopPick] = useState(false);
-  const [ideasExpanded, setIdeasExpanded] = useState(false);
-
-  const loadIdeas = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (filterCat) params.set("category", filterCat);
-      if (filterRec) params.set("recommendation", filterRec);
-      if (filterStatus) params.set("status", filterStatus);
-      const r = await fetch(`/api/beauty-ideas?${params}`);
-      const j = await r.json();
-      setIdeas(j.ideas ?? []);
-    } catch {
-      toast.error("加载失败");
-    } finally {
-      setLoading(false);
-    }
-  }, [filterCat, filterRec, filterStatus]);
-
-  const loadStats = useCallback(async () => {
-    try {
-      const r = await fetch("/api/beauty-ideas/trends?");
-      const j = await r.json();
-      const trends = j.trends ?? [];
-      const weekAgo = Date.now() - 7 * 86400_000;
-      const recent = trends.filter((t: { createdAt: string }) => new Date(t.createdAt).getTime() > weekAgo);
-      setTrendCount(recent.length);
-      if (trends.length > 0) {
-        setLastScan(new Date(trends[0].scannedAt).toLocaleString("zh-CN"));
-      }
-    } catch { /* ignore */ }
-  }, []);
-
-  const loadReport = useCallback(async () => {
-    try {
-      const r = await fetch("/api/beauty-ideas/reports");
-      const j = await r.json();
-      const reports = j.reports ?? [];
-      if (reports.length > 0) {
-        setTodayReport(reports[0]);
-      }
-    } catch { /* ignore */ }
-  }, []);
+  const [trendsExpanded, setTrendsExpanded] = useState(false);
 
   const loadTopPick = useCallback(async () => {
     try {
@@ -180,127 +106,88 @@ export function BeautyIdeasDashboard() {
     } catch { /* ignore */ }
   }, []);
 
-  useEffect(() => { loadIdeas(); }, [loadIdeas]);
-  useEffect(() => { loadStats(); }, [loadStats]);
-  useEffect(() => { loadReport(); }, [loadReport]);
-  useEffect(() => { loadTopPick(); }, [loadTopPick]);
-
-  const handleScan = async () => {
-    setScanning(true);
+  const loadHistory = useCallback(async () => {
     try {
-      toast.info("正在扫描趋势…");
-      const r1 = await fetch("/api/beauty-ideas/scan", { method: "POST" });
-      const j1 = await r1.json();
-      if (!r1.ok) { toast.error(j1.message ?? "扫描失败"); return; }
-      toast.success(j1.message);
-
-      toast.info("正在生成创意…");
-      const r2 = await fetch("/api/beauty-ideas/generate", { method: "POST" });
-      const j2 = await r2.json();
-      if (!r2.ok) { toast.error(j2.message ?? "生成失败"); return; }
-      toast.success(j2.message);
-
-      loadIdeas();
-      loadStats();
-      loadReport();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "操作失败");
-    } finally {
-      setScanning(false);
-    }
-  };
-
-  const handleGenerateReport = async () => {
-    setGeneratingReport(true);
-    try {
-      toast.info("正在生成今日报告…");
-      const r = await fetch("/api/beauty-ideas/reports/generate", { method: "POST" });
+      const r = await fetch("/api/beauty-ideas/top-pick/history");
       const j = await r.json();
-      if (!r.ok) { toast.error(j.message ?? "生成失败"); return; }
-      if (j.skipped) { toast.info("今日报告已存在"); }
-      else { toast.success("今日报告生成完成"); }
-      loadReport();
-      loadIdeas();
-      loadStats();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "生成失败");
-    } finally {
-      setGeneratingReport(false);
-    }
-  };
+      setHistory(j.reports ?? []);
+    } catch { /* ignore */ }
+  }, []);
 
-  const handleGenerateTopPick = async () => {
-    setGeneratingTopPick(true);
+  const loadTrends = useCallback(async () => {
     try {
-      toast.info("AI 正在分析并精选最佳产品…");
+      const r = await fetch("/api/beauty-ideas/trends");
+      const j = await r.json();
+      const all = j.trends ?? [];
+      // Only show last 7 days
+      const weekAgo = Date.now() - 7 * 86400_000;
+      setTrends(
+        all.filter((t: TrendItem) => new Date(t.scannedAt).getTime() > weekAgo)
+      );
+    } catch { /* ignore */ }
+  }, []);
+
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([loadTopPick(), loadHistory(), loadTrends()]);
+    setLoading(false);
+  }, [loadTopPick, loadHistory, loadTrends]);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      toast.info("AI 正在扫描趋势、精选产品、生成方案…", { duration: 10000 });
       const r = await fetch("/api/beauty-ideas/top-pick", { method: "POST" });
       const j = await r.json();
       if (!r.ok) { toast.error(j.message ?? "生成失败"); return; }
-      if (j.skipped) { toast.info("本期精选方案已存在"); }
-      else { toast.success("精选方案已生成"); }
-      loadTopPick();
+      if (j.skipped) {
+        toast.info("今日方案已存在");
+      } else {
+        toast.success(`方案已生成：${j.report?.productName ?? ""}`);
+      }
+      loadAll();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "生成失败");
     } finally {
-      setGeneratingTopPick(false);
+      setGenerating(false);
     }
   };
 
-  const draftCount = ideas.filter((i) => i.status === "draft").length;
-  const highScoreCount = ideas.filter((i) => i.totalScore >= 70).length;
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <Loader2 className="size-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
+
+  const rec = topPick?.idea
+    ? REC_CONFIG[topPick.idea.recommendation] ?? REC_CONFIG.watch
+    : null;
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">本周新趋势</CardTitle>
-            <TrendingUp className="size-4 text-slate-400" />
-          </CardHeader>
-          <CardContent><p className="text-2xl font-bold">{trendCount}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">待评估创意</CardTitle>
-            <FlaskConical className="size-4 text-slate-400" />
-          </CardHeader>
-          <CardContent><p className="text-2xl font-bold">{draftCount}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">高分创意 (≥70)</CardTitle>
-            <Star className="size-4 text-amber-400" />
-          </CardHeader>
-          <CardContent><p className="text-2xl font-bold text-emerald-600">{highScoreCount}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">最新扫描</CardTitle>
-            <Radar className="size-4 text-slate-400" />
-          </CardHeader>
-          <CardContent><p className="text-sm font-medium">{lastScan ?? "从未扫描"}</p></CardContent>
-        </Card>
-      </div>
-
-      {/* Top Pick Hero */}
+      {/* ── Today's Pick (Hero) ──────────────────────────────── */}
       {topPick ? (
         <div className="relative overflow-hidden rounded-2xl border-2 border-amber-200/80 bg-gradient-to-br from-amber-50 via-orange-50/50 to-yellow-50/30 p-5 shadow-sm sm:p-6">
           <div className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-amber-200/20 blur-3xl" aria-hidden />
-          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg">
-              <Crown className="size-7" />
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start">
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg">
+                <Crown className="size-7" />
+              </div>
+              {topPick.idea && <ScoreRing score={topPick.idea.totalScore} size={52} />}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-amber-600">本期精选</p>
-                {topPick.idea && (
-                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                    topPick.idea.recommendation === "strong_go" ? "bg-emerald-100 text-emerald-800" :
-                    topPick.idea.recommendation === "go" ? "bg-blue-100 text-blue-800" :
-                    "bg-amber-100 text-amber-800"
-                  )}>
-                    {topPick.idea.totalScore}分
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-amber-600">
+                  今日精选 · {topPick.reportDate}
+                </p>
+                {rec && (
+                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", rec.color)}>
+                    {rec.label}
                   </span>
                 )}
                 {topPick.estimatedMargin && (
@@ -308,203 +195,182 @@ export function BeautyIdeasDashboard() {
                     利润率 {topPick.estimatedMargin}
                   </span>
                 )}
+                {topPick.idea?.searchVolume && (
+                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                    月搜 {topPick.idea.searchVolume.toLocaleString()}
+                  </span>
+                )}
               </div>
-              <h2 className="mt-1 font-heading text-lg font-bold text-slate-900 sm:text-xl">
+              <h2 className="mt-1.5 font-heading text-lg font-bold text-slate-900 sm:text-xl">
                 {topPick.productName}
               </h2>
               {topPick.productNameEn && (
                 <p className="text-xs text-slate-500">{topPick.productNameEn}</p>
               )}
-              <p className="mt-1.5 text-sm leading-relaxed text-slate-600 line-clamp-2">
+              <p className="mt-2 text-sm leading-relaxed text-slate-600 line-clamp-3">
                 {topPick.executiveSummary}
               </p>
+              {/* Quick financial stats */}
+              {topPick.estimatedRetailPrice && (
+                <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
+                  <span>售价 {topPick.estimatedRetailPrice}</span>
+                  {topPick.estimatedProfit && <span>单品利润 {topPick.estimatedProfit}</span>}
+                </div>
+              )}
             </div>
-            <Link href={`/dashboard/beauty-ideas/top-pick/${topPick.id}`}>
-              <Button className="gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow hover:from-amber-600 hover:to-orange-600">
-                查看完整方案
+            <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+              <Link href={`/dashboard/beauty-ideas/top-pick/${topPick.id}`}>
+                <Button className="gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow hover:from-amber-600 hover:to-orange-600">
+                  查看完整方案
+                </Button>
+              </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGenerate}
+                disabled={generating}
+                className="gap-1 text-xs"
+              >
+                {generating ? <Loader2 className="size-3 animate-spin" /> : <Crown className="size-3" />}
+                重新生成
               </Button>
-            </Link>
+            </div>
           </div>
         </div>
-      ) : ideas.length > 0 ? (
-        <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-amber-300/60 bg-gradient-to-br from-amber-50/50 to-orange-50/30 p-6 text-center">
-          <Crown className="mx-auto size-10 text-amber-400/60" />
-          <h3 className="mt-3 font-heading text-base font-semibold text-slate-700">
-            从 {ideas.length} 个创意中，AI 精选最值得做的 1 个产品
+      ) : (
+        <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-amber-300/60 bg-gradient-to-br from-amber-50/50 to-orange-50/30 p-8 text-center">
+          <div className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-amber-200/15 blur-3xl" aria-hidden />
+          <Crown className="mx-auto size-12 text-amber-400/60" />
+          <h3 className="mt-4 font-heading text-lg font-semibold text-slate-700">
+            一键生成今日新品方案
           </h3>
-          <p className="mt-1 text-sm text-slate-500">
-            生成一份完整的可落地执行方案：产品规格、竞品分析、财务预估、供应商对接、上架策略
+          <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+            AI 自动完成三步：扫描 Top 5 趋势 → 精选 1 个最佳方向 → 生成完整落地方案
+            <br />
+            <span className="text-xs text-slate-400">
+              （产品规格 · 竞品分析 · 财务预估 · 供应商方案 · 上架策略）
+            </span>
           </p>
           <Button
-            onClick={handleGenerateTopPick}
-            disabled={generatingTopPick}
-            className="mt-4 gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow hover:from-amber-600 hover:to-orange-600"
+            onClick={handleGenerate}
+            disabled={generating}
+            size="lg"
+            className="mt-5 gap-2 bg-gradient-to-r from-amber-500 to-orange-500 px-8 text-white shadow-lg hover:from-amber-600 hover:to-orange-600"
           >
-            {generatingTopPick ? <Loader2 className="size-4 animate-spin" /> : <Crown className="size-4" />}
-            {generatingTopPick ? "AI 分析中…" : "生成本期精选新品方案"}
+            {generating ? (
+              <Loader2 className="size-5 animate-spin" />
+            ) : (
+              <Crown className="size-5" />
+            )}
+            {generating ? "AI 分析中，请稍候…" : "生成今日新品方案"}
           </Button>
         </div>
-      ) : null}
-
-      {/* Today's Report */}
-      {todayReport && todayReport.status === "completed" && (
-        <Card className="border-indigo-200 bg-gradient-to-r from-indigo-50/50 to-purple-50/50">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-semibold text-indigo-800">
-              <CalendarCheck className="size-4" />
-              {todayReport.reportDate} 日报
-            </CardTitle>
-            <div className="flex items-center gap-3 text-xs text-slate-500">
-              <span>{todayReport.trendsFound} 趋势</span>
-              <span>{todayReport.ideasGenerated} 创意</span>
-              <span className="font-semibold text-emerald-600">{todayReport.highScoreIdeas} 高分</span>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {todayReport.ideasSummary && (
-              <div className="text-xs leading-relaxed text-slate-700 whitespace-pre-line">
-                {todayReport.ideasSummary}
-              </div>
-            )}
-          </CardContent>
-        </Card>
       )}
 
-      {/* Actions */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={handleScan} disabled={scanning} className="gap-1.5">
-          {scanning ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-          {scanning ? "扫描中…" : "扫描趋势 & 生成创意"}
-        </Button>
-        <Button
-          onClick={handleGenerateReport}
-          disabled={generatingReport || scanning}
-          variant="outline"
-          className="gap-1.5"
-        >
-          {generatingReport ? <Loader2 className="size-4 animate-spin" /> : <CalendarCheck className="size-4" />}
-          {generatingReport ? "生成中…" : "生成今日报告"}
-        </Button>
-        <Link href="/dashboard/beauty-ideas/trends">
-          <Button variant="outline" className="gap-1.5">
-            <TrendingUp className="size-4" />
-            查看趋势
-          </Button>
-        </Link>
+      {/* ── History ──────────────────────────────────────────── */}
+      {history.length > 1 && (
+        <div>
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <FlaskConical className="size-4 text-slate-400" />
+            历史方案
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {history
+              .filter((h) => h.id !== topPick?.id && h.status === "completed")
+              .slice(0, 6)
+              .map((h) => {
+                const hRec = h.idea
+                  ? REC_CONFIG[h.idea.recommendation] ?? REC_CONFIG.watch
+                  : null;
+                return (
+                  <Link
+                    key={h.id}
+                    href={`/dashboard/beauty-ideas/top-pick/${h.id}`}
+                    className="block"
+                  >
+                    <Card className="h-full transition hover:shadow-md">
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-3">
+                          {h.idea && <ScoreRing score={h.idea.totalScore} size={40} />}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[10px] text-slate-400">{h.reportDate}</p>
+                            <h4 className="font-semibold text-slate-900 line-clamp-1">
+                              {h.productName}
+                            </h4>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {hRec && (
+                                <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", hRec.color)}>
+                                  {hRec.label}
+                                </span>
+                              )}
+                              {h.estimatedMargin && (
+                                <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                                  {h.estimatedMargin}
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1.5 text-xs text-slate-500 line-clamp-2">
+                              {h.executiveSummary}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                );
+              })}
+          </div>
+        </div>
+      )}
 
-        <div className="ml-auto flex flex-wrap gap-2">
-          <select
-            className="h-9 rounded-md border border-input bg-background px-3 text-xs"
-            value={filterCat}
-            onChange={(e) => setFilterCat(e.target.value)}
-          >
-            <option value="">全部品类</option>
-            {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
-          <select
-            className="h-9 rounded-md border border-input bg-background px-3 text-xs"
-            value={filterRec}
-            onChange={(e) => setFilterRec(e.target.value)}
-          >
-            <option value="">全部推荐</option>
-            {Object.entries(REC_CONFIG).map(([k, v]) => (
-              <option key={k} value={k}>{v.label}</option>
-            ))}
-          </select>
-          <select
-            className="h-9 rounded-md border border-input bg-background px-3 text-xs"
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-          >
-            <option value="">全部状态</option>
-            {Object.entries(STATUS_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Ideas Grid (collapsible) */}
-      {loading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="size-8 animate-spin text-slate-400" />
-        </div>
-      ) : ideas.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-300 py-16 text-center text-sm text-slate-500">
-          暂无创意，点击「扫描趋势」开始
-        </div>
-      ) : (
+      {/* ── Recent Trends (collapsible) ──────────────────────── */}
+      {trends.length > 0 && (
         <div>
           <button
-            onClick={() => setIdeasExpanded(!ideasExpanded)}
-            className="mb-4 flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            onClick={() => setTrendsExpanded(!trendsExpanded)}
+            className="mb-3 flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50"
           >
-            <ChevronDown className={cn("size-4 transition-transform", ideasExpanded && "rotate-180")} />
-            查看全部创意（{ideas.length}）
-            <span className="ml-auto text-xs text-slate-400">
-              {highScoreCount} 个高分 · {draftCount} 个待评估
+            <TrendingUp className="size-4 text-slate-400" />
+            <ChevronDown className={cn("size-4 transition-transform", trendsExpanded && "rotate-180")} />
+            最近趋势（{trends.length}）
+            <span className="ml-auto">
+              <Link
+                href="/dashboard/beauty-ideas/trends"
+                className="text-xs text-indigo-600 hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                查看全部 →
+              </Link>
             </span>
           </button>
-          {ideasExpanded && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {ideas.map((idea) => {
-            const rec = REC_CONFIG[idea.recommendation] ?? REC_CONFIG.watch;
-            return (
-              <Link key={idea.id} href={`/dashboard/beauty-ideas/${idea.id}`} className="block">
-                <Card className="h-full transition hover:shadow-md">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <ScoreRing score={idea.totalScore} />
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-slate-900 line-clamp-2">{idea.name}</h3>
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
-                            {CATEGORY_LABELS[idea.category] ?? idea.category}
-                          </span>
-                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
-                            {idea.targetMarket}
-                          </span>
-                          <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", rec.color)}>
-                            {rec.label}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Ingredients */}
-                    <div className="mt-2.5 flex flex-wrap gap-1">
-                      {(idea.keyIngredients as string[]).slice(0, 4).map((ing, i) => (
-                        <span key={i} className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-medium text-purple-700">
-                          {ing}
-                        </span>
-                      ))}
-                    </div>
-
-                    {/* Sub scores */}
-                    <div className="mt-3 space-y-1">
-                      <SubScoreBar label="趋势" value={idea.trendScore} />
-                      <SubScoreBar label="市场" value={idea.marketScore} />
-                      <SubScoreBar label="竞争" value={idea.competitionScore} />
-                      <SubScoreBar label="利润" value={idea.profitScore} />
-                    </div>
-
-                    {/* Bottom info */}
-                    <div className="mt-3 flex items-center gap-2 text-[11px] text-slate-500">
-                      {idea.estimatedPrice && <span>{idea.estimatedPrice}</span>}
-                      {idea.searchVolume && <span>月搜{idea.searchVolume.toLocaleString()}</span>}
-                      {idea.competitionLevel && <span>竞争:{idea.competitionLevel}</span>}
-                      <span className="ml-auto rounded bg-slate-50 px-1.5 py-0.5 text-[10px]">
-                        {STATUS_LABELS[idea.status] ?? idea.status}
+          {trendsExpanded && (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {trends.slice(0, 9).map((t) => (
+                <Card key={t.id} className="transition hover:shadow-sm">
+                  <CardHeader className="pb-1 pt-3 px-4">
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                        {t.market}
                       </span>
-                    </div>
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                        {t.category}
+                      </span>
+                      <span className="ml-auto text-xs font-bold text-amber-600">
+                        {t.trendScore}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3 pt-1">
+                    <h4 className="font-medium text-slate-900 text-sm line-clamp-1">
+                      {t.title}
+                    </h4>
+                    <p className="mt-1 text-xs text-slate-500 line-clamp-2">
+                      {t.content}
+                    </p>
                   </CardContent>
                 </Card>
-              </Link>
-            );
-          })}
-        </div>
+              ))}
+            </div>
           )}
         </div>
       )}

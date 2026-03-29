@@ -187,23 +187,10 @@ export function TopPickDetail({ id }: { id: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Use the history endpoint to find by id, or fetch latest and compare
-      const r = await fetch("/api/beauty-ideas/top-pick");
-      const j = await r.json();
-      if (j.report && j.report.id === id) {
-        setReport(j.report);
-      } else {
-        // Try history
-        const r2 = await fetch("/api/beauty-ideas/top-pick/history");
-        const j2 = await r2.json();
-        const found = (j2.reports ?? []).find(
-          (rp: { id: string }) => rp.id === id
-        );
-        if (found) {
-          // Found in history but need full data — refetch via latest (limited)
-          // For now show what we have from history with limited fields
-          setReport(found);
-        }
+      const r = await fetch(`/api/beauty-ideas/top-pick/${id}`);
+      if (r.ok) {
+        const j = await r.json();
+        setReport(j.report ?? null);
       }
     } catch {
       toast.error("加载失败");
