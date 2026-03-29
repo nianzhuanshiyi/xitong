@@ -15,6 +15,7 @@ const createSchema = z.object({
   smtpHost: z.string().optional().nullable(),
   smtpPort: z.number().int().optional().nullable().default(465),
   smtpPassword: z.string().optional().nullable(),
+  signature: z.string().max(2000).optional().nullable(),
 });
 
 /** GET /api/mail/accounts — 当前用户的邮箱列表 */
@@ -36,6 +37,7 @@ export async function GET() {
         imapPort: true,
         smtpHost: true,
         smtpPort: true,
+        signature: true,
         isActive: true,
         lastSyncAt: true,
         createdAt: true,
@@ -72,7 +74,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: first, issues: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { email, displayName, imapHost, imapPort, imapPassword, smtpHost, smtpPort, smtpPassword } = parsed.data;
+  const { email, displayName, imapHost, imapPort, imapPassword, smtpHost, smtpPort, smtpPassword, signature } = parsed.data;
 
   try {
     const existing = await prisma.emailAccount.findUnique({
@@ -93,6 +95,7 @@ export async function POST(req: Request) {
         smtpHost: smtpHost || null,
         smtpPort: smtpPort ?? 465,
         smtpPassword: smtpPassword ? encryptPassword(smtpPassword) : null,
+        signature: signature?.trim() || null,
         isActive: true,
       },
       select: {
@@ -103,6 +106,7 @@ export async function POST(req: Request) {
         imapPort: true,
         smtpHost: true,
         smtpPort: true,
+        signature: true,
         isActive: true,
         createdAt: true,
       },

@@ -39,6 +39,7 @@ interface EmailAccount {
   imapPort: number;
   smtpHost?: string | null;
   smtpPort?: number | null;
+  signature?: string | null;
   isActive: boolean;
   lastSyncAt?: string | null;
   createdAt: string;
@@ -66,6 +67,7 @@ const EMPTY_FORM = {
   smtpHost: "",
   smtpPort: 465,
   smtpPassword: "",
+  signature: "",
 };
 
 /* ------------------------------------------------------------------ */
@@ -134,6 +136,7 @@ export function EmailAccountsManagement() {
         smtpHost: form.smtpHost.trim() || null,
         smtpPort: form.smtpPort,
         smtpPassword: form.smtpPassword.trim() || null,
+        signature: form.signature.trim() || null,
       };
       // 编辑时如果密码字段为 placeholder 不传
       if (editingId && form.imapPassword === "••••••••") {
@@ -212,6 +215,7 @@ export function EmailAccountsManagement() {
       smtpHost: item.smtpHost ?? "",
       smtpPort: item.smtpPort ?? 465,
       smtpPassword: "••••••••",
+      signature: item.signature ?? "",
     });
     setTestResult(null);
     setDialogOpen(true);
@@ -458,6 +462,17 @@ export function EmailAccountsManagement() {
                 onFocus={(e) => {
                   if (e.target.value === "••••••••") setForm((f) => ({ ...f, smtpPassword: "" }));
                 }}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm text-gray-500">邮件签名</label>
+              <textarea
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm leading-relaxed"
+                rows={5}
+                value={form.signature}
+                onChange={(e) => setForm((f) => ({ ...f, signature: e.target.value }))}
+                placeholder={"Best regards,\nParis Zhang\nCEO, Zavyra Beauty\nEmail: paris@zavyrabeauty.com"}
               />
             </div>
           </div>

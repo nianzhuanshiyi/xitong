@@ -375,6 +375,8 @@ model EmailAccount {
   smtpPort     Int?     @default(465)
   /// 加密存储的 SMTP 密码/授权码（为空时复用 imapPassword）
   smtpPassword String?
+  /// 纯文本邮件签名
+  signature    String?
   isActive     Boolean  @default(true)
   lastSyncAt   DateTime?
   createdAt    DateTime @default(now())
