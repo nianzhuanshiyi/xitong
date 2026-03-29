@@ -9,12 +9,17 @@ import { mailEnvConfigured } from "@/lib/mail/config";
 import { claudeTranslateZhToEnForMail } from "@/lib/mail/claude-mail";
 import { buildOriginalMessageQuote, forwardSubject } from "@/lib/mail/compose-quote";
 import { EmailDirection } from "@prisma/client";
+import { decryptPassword } from "@/lib/mail/crypto";
 
 const bodySchema = z.object({
   emailId: z.string().min(1),
   to: z.string().min(3).max(500),
+  cc: z.string().max(2000).optional(),
+  bcc: z.string().max(2000).optional(),
   /** 转发备注（中文），可选 */
   noteZh: z.string().max(20_000).optional(),
+  /** 指定发件邮箱账号 ID */
+  accountId: z.string().optional(),
 });
 
 export const dynamic = "force-dynamic";
@@ -74,10 +79,32 @@ export async function POST(req: Request) {
 
   const bodyEn = `${noteBlock}${quoted}`;
 
-  const user = process.env.EMAIL_USER!.trim();
-  const pass = process.env.EMAIL_AUTH_CODE!.trim();
-  const host = process.env.SMTP_HOST!.trim();
-  const port = Number(process.env.SMTP_PORT?.trim() || "465");
+  // Resolve SMTP credentials: prefer accountId, fallback to env vars
+  let user: string;
+  let pass: string;
+  let host: string;
+  let port: number;
+
+  if (parsed.data.accountId) {
+    const account = await prisma.emailAccount.findFirst({
+      where: { id: parsed.data.accountId, userId: session.user.id, isActive: true },
+    });
+    if (!account || !account.smtpHost) {
+      return NextResponse.json(
+        { message: "邮箱账号不存在或未配置 SMTP" },
+        { status: 400 }
+      );
+    }
+    user = account.email;
+    pass = decryptPassword(account.smtpPassword || account.imapPassword);
+    host = account.smtpHost;
+    port = account.smtpPort ?? 465;
+  } else {
+    user = process.env.EMAIL_USER!.trim();
+    pass = process.env.EMAIL_AUTH_CODE!.trim();
+    host = process.env.SMTP_HOST!.trim();
+    port = Number(process.env.SMTP_PORT?.trim() || "465");
+  }
 
   const transporter = nodemailer.createTransport({
     host,
@@ -112,6 +139,8 @@ export async function POST(req: Request) {
   const info = await transporter.sendMail({
     from: user,
     to: parsed.data.to.trim(),
+    cc: parsed.data.cc || undefined,
+    bcc: parsed.data.bcc || undefined,
     subject,
     text: bodyEn,
     attachments: attachments.length ? attachments : undefined,

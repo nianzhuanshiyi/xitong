@@ -7,6 +7,7 @@ import { mailEnvConfigured } from "@/lib/mail/config";
 import { claudeTranslateZhToEnForMail } from "@/lib/mail/claude-mail";
 import { buildOriginalMessageQuote } from "@/lib/mail/compose-quote";
 import { EmailDirection } from "@prisma/client";
+import { decryptPassword } from "@/lib/mail/crypto";
 
 const attachmentSchema = z.object({
   filename: z.string().min(1).max(500),
@@ -24,6 +25,8 @@ const previewSchema = z.object({
 const sendSchema = z.object({
   phase: z.literal("send"),
   to: z.string().min(3),
+  cc: z.string().max(2000).optional(),
+  bcc: z.string().max(2000).optional(),
   subject: z.string().min(1).max(500),
   bodyEn: z.string().min(1).max(50_000),
   /** 用户中文原文，入库保存 */
@@ -31,6 +34,8 @@ const sendSchema = z.object({
   replyToEmailId: z.string().optional(),
   supplierId: z.string().optional(),
   attachments: z.array(attachmentSchema).max(20).optional(),
+  /** 指定发件邮箱账号 ID */
+  accountId: z.string().optional(),
 });
 
 export const dynamic = "force-dynamic";
@@ -74,22 +79,43 @@ export async function POST(req: Request) {
     );
   }
 
-  const { smtp } = mailEnvConfigured();
-  if (!smtp) {
-    return NextResponse.json(
-      {
-        ok: false,
-        message: "未配置 SMTP，无法发信（已生成英文稿可手动复制）",
-        bodyEn: s.data.bodyEn,
-      },
-      { status: 503 }
-    );
-  }
+  // Resolve SMTP credentials: prefer accountId, fallback to env vars
+  let user: string;
+  let pass: string;
+  let host: string;
+  let port: number;
 
-  const user = process.env.EMAIL_USER!.trim();
-  const pass = process.env.EMAIL_AUTH_CODE!.trim();
-  const host = process.env.SMTP_HOST!.trim();
-  const port = Number(process.env.SMTP_PORT?.trim() || "465");
+  if (s.data.accountId) {
+    const account = await prisma.emailAccount.findFirst({
+      where: { id: s.data.accountId, userId: session.user.id, isActive: true },
+    });
+    if (!account || !account.smtpHost) {
+      return NextResponse.json(
+        { message: "邮箱账号不存在或未配置 SMTP" },
+        { status: 400 }
+      );
+    }
+    user = account.email;
+    pass = decryptPassword(account.smtpPassword || account.imapPassword);
+    host = account.smtpHost;
+    port = account.smtpPort ?? 465;
+  } else {
+    const { smtp } = mailEnvConfigured();
+    if (!smtp) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: "未配置 SMTP，无法发信（已生成英文稿可手动复制）",
+          bodyEn: s.data.bodyEn,
+        },
+        { status: 503 }
+      );
+    }
+    user = process.env.EMAIL_USER!.trim();
+    pass = process.env.EMAIL_AUTH_CODE!.trim();
+    host = process.env.SMTP_HOST!.trim();
+    port = Number(process.env.SMTP_PORT?.trim() || "465");
+  }
 
   const transporter = nodemailer.createTransport({
     host,
@@ -150,6 +176,8 @@ export async function POST(req: Request) {
     info = await transporter.sendMail({
       from: user,
       to: s.data.to,
+      cc: s.data.cc || undefined,
+      bcc: s.data.bcc || undefined,
       subject: s.data.subject,
       text: bodyEn,
       inReplyTo,

@@ -190,6 +190,48 @@ export interface MailContextValue {
   freeQ: string;
   setFreeQ: (v: string) => void;
 
+  // Reply/Forward recipients
+  replyTo: string[];
+  setReplyTo: React.Dispatch<React.SetStateAction<string[]>>;
+  replyCc: string[];
+  setReplyCc: React.Dispatch<React.SetStateAction<string[]>>;
+  replyBcc: string[];
+  setReplyBcc: React.Dispatch<React.SetStateAction<string[]>>;
+  forwardCc: string[];
+  setForwardCc: React.Dispatch<React.SetStateAction<string[]>>;
+  forwardBcc: string[];
+  setForwardBcc: React.Dispatch<React.SetStateAction<string[]>>;
+  forwardToList: string[];
+  setForwardToList: React.Dispatch<React.SetStateAction<string[]>>;
+
+  // Compose (new email)
+  composeOpen: boolean;
+  setComposeOpen: (v: boolean) => void;
+  composeTo: string[];
+  setComposeTo: React.Dispatch<React.SetStateAction<string[]>>;
+  composeCc: string[];
+  setComposeCc: React.Dispatch<React.SetStateAction<string[]>>;
+  composeBcc: string[];
+  setComposeBcc: React.Dispatch<React.SetStateAction<string[]>>;
+  composeSubject: string;
+  setComposeSubject: (v: string) => void;
+  composeBodyZh: string;
+  setComposeBodyZh: (v: string) => void;
+  composeBodyEn: string;
+  setComposeBodyEn: (v: string) => void;
+  composeFiles: File[];
+  setComposeFiles: React.Dispatch<React.SetStateAction<File[]>>;
+  composeBusy: boolean;
+  composeSendStep: "edit" | "preview";
+  setComposeSendStep: (v: "edit" | "preview") => void;
+  composeTranslateAndPreview: () => Promise<void>;
+  composeConfirmSend: () => Promise<void>;
+
+  // Email accounts
+  accounts: { id: string; email: string; displayName: string | null }[];
+  selectedAccountId: string;
+  setSelectedAccountId: (v: string) => void;
+
   // Sync state
   syncBusy: boolean;
   syncMail: () => Promise<void>;

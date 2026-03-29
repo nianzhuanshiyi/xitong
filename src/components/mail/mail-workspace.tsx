@@ -5,7 +5,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
+  ChevronDown,
+  ChevronUp,
   Loader2,
+  PenSquare,
   RefreshCw,
   Send,
   Forward,
@@ -38,8 +41,94 @@ import { MailSidebar } from "./mail-sidebar";
 import { MailList } from "./mail-list";
 import { MailDetail } from "./mail-detail";
 import { MailAnalysisPanel } from "./mail-analysis-panel";
+import { EmailTagInput } from "./email-tag-input";
 
 const SYNC_STEPS = ["连接中", "拉取邮件", "AI 分析中", "完成"] as const;
+
+function CcBccToggle({
+  cc, setCc, bcc, setBcc,
+}: {
+  cc: string[];
+  setCc: React.Dispatch<React.SetStateAction<string[]>>;
+  bcc: string[];
+  setBcc: React.Dispatch<React.SetStateAction<string[]>>;
+}) {
+  const [showCc, setShowCc] = useState(cc.length > 0);
+  const [showBcc, setShowBcc] = useState(bcc.length > 0);
+
+  return (
+    <>
+      <div className="flex gap-3 text-[11px]">
+        {!showCc && (
+          <button
+            type="button"
+            className="text-indigo-600 hover:underline"
+            onClick={() => setShowCc(true)}
+          >
+            + 添加抄送 (CC)
+          </button>
+        )}
+        {!showBcc && (
+          <button
+            type="button"
+            className="text-indigo-600 hover:underline"
+            onClick={() => setShowBcc(true)}
+          >
+            + 添加密送 (BCC)
+          </button>
+        )}
+      </div>
+      {showCc && (
+        <div>
+          <Label className="text-xs">抄送 (CC)</Label>
+          <EmailTagInput value={cc} onChange={setCc} placeholder="输入邮箱后回车添加" />
+        </div>
+      )}
+      {showBcc && (
+        <div>
+          <Label className="text-xs">密送 (BCC)</Label>
+          <EmailTagInput value={bcc} onChange={setBcc} placeholder="输入邮箱后回车添加" />
+        </div>
+      )}
+    </>
+  );
+}
+
+function AccountSelector({
+  accounts,
+  value,
+  onChange,
+}: {
+  accounts: { id: string; email: string; displayName: string | null }[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  if (accounts.length <= 1) {
+    const acct = accounts[0];
+    if (!acct) return null;
+    return (
+      <p className="text-[11px] text-slate-500">
+        发件邮箱: <span className="font-mono">{acct.email}</span>
+      </p>
+    );
+  }
+  return (
+    <div>
+      <Label className="text-xs">发件邮箱</Label>
+      <select
+        className="mt-1 flex h-8 w-full rounded-lg border border-input bg-white px-2 text-sm"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {accounts.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.displayName ? `${a.displayName} <${a.email}>` : a.email}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
 
 export function MailWorkspace() {
   const searchParams = useSearchParams();
@@ -97,6 +186,31 @@ export function MailWorkspace() {
   const [regenTargetId, setRegenTargetId] = useState<string | null>(null);
   const [batchSumBusy, setBatchSumBusy] = useState(false);
 
+  // Reply/Forward recipients
+  const [replyTo, setReplyTo] = useState<string[]>([]);
+  const [replyCc, setReplyCc] = useState<string[]>([]);
+  const [replyBcc, setReplyBcc] = useState<string[]>([]);
+  const [forwardToList, setForwardToList] = useState<string[]>([]);
+  const [forwardCc, setForwardCc] = useState<string[]>([]);
+  const [forwardBcc, setForwardBcc] = useState<string[]>([]);
+
+  // Compose (new email)
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [composeTo, setComposeTo] = useState<string[]>([]);
+  const [composeCc, setComposeCc] = useState<string[]>([]);
+  const [composeBcc, setComposeBcc] = useState<string[]>([]);
+  const [composeSubject, setComposeSubject] = useState("");
+  const [composeBodyZh, setComposeBodyZh] = useState("");
+  const [composeBodyEn, setComposeBodyEn] = useState("");
+  const [composeFiles, setComposeFiles] = useState<File[]>([]);
+  const [composeBusy, setComposeBusy] = useState(false);
+  const [composeSendStep, setComposeSendStep] = useState<"edit" | "preview">("edit");
+  const composeFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Email accounts
+  const [accounts, setAccounts] = useState<{ id: string; email: string; displayName: string | null }[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 1023px)");
     const fn = () => setNarrow(mq.matches);
@@ -118,6 +232,25 @@ export function MailWorkspace() {
     if (!r.ok) return;
     const j = (await r.json()) as SupplierRow[];
     setSuppliers(j);
+  }, []);
+
+  // Load email accounts
+  useEffect(() => {
+    void (async () => {
+      try {
+        const r = await fetch("/api/mail/accounts");
+        if (r.ok) {
+          const list = (await r.json()) as { id: string; email: string; displayName: string | null }[];
+          setAccounts(list);
+          if (list.length > 0 && !selectedAccountId) {
+            setSelectedAccountId(list[0].id);
+          }
+        }
+      } catch {
+        // silent
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -211,7 +344,17 @@ export function MailWorkspace() {
     setReplyEditorOpen(false);
     setReplyZh("");
     setReplyFiles([]);
+    setReplyCc([]);
+    setReplyBcc([]);
   }, [emailId, loadThread]);
+
+  // Auto-set replyTo when detail changes
+  useEffect(() => {
+    if (!detail) return;
+    const addr =
+      detail.direction === "RECEIVED" ? detail.fromAddress : detail.toAddress;
+    setReplyTo(addr ? [addr] : []);
+  }, [detail]);
 
   const filteredSuppliers = useMemo(() => {
     const q = qLeft.trim().toLowerCase();
@@ -359,6 +502,10 @@ export function MailWorkspace() {
 
   async function confirmSend() {
     if (!detail) return;
+    if (replyTo.length === 0) {
+      toast.error("请填写收件人");
+      return;
+    }
     setSendBusy(true);
     try {
       let attachments: Awaited<ReturnType<typeof filesToAttachments>> = [];
@@ -370,16 +517,16 @@ export function MailWorkspace() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phase: "send",
-          to:
-            detail.direction === "RECEIVED"
-              ? detail.fromAddress
-              : detail.toAddress,
+          to: replyTo.join(", "),
+          cc: replyCc.length ? replyCc.join(", ") : undefined,
+          bcc: replyBcc.length ? replyBcc.join(", ") : undefined,
           subject: replySubject(detail.subject),
           bodyEn: replyEnPreview,
           bodyZh: replyZh.trim() || undefined,
           replyToEmailId: detail.id,
           supplierId: detail.supplierId ?? undefined,
           attachments: attachments.length ? attachments : undefined,
+          accountId: selectedAccountId || undefined,
         }),
       });
       const j = await r.json().catch(() => ({}));
@@ -392,6 +539,8 @@ export function MailWorkspace() {
       setReplyEditorOpen(false);
       setReplyZh("");
       setReplyFiles([]);
+      setReplyCc([]);
+      setReplyBcc([]);
       void loadEmails();
       if (emailId) void loadThread(emailId);
       window.dispatchEvent(new Event("xitong-mail-stats-refresh"));
@@ -401,19 +550,23 @@ export function MailWorkspace() {
   }
 
   async function submitForward() {
-    if (!detail || !forwardTo.trim()) {
+    if (!detail || (forwardToList.length === 0 && !forwardTo.trim())) {
       toast.error("请填写收件人邮箱");
       return;
     }
     setForwardBusy(true);
     try {
+      const to = forwardToList.length > 0 ? forwardToList.join(", ") : forwardTo.trim();
       const r = await fetch("/api/mail/forward", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           emailId: detail.id,
-          to: forwardTo.trim(),
+          to,
+          cc: forwardCc.length ? forwardCc.join(", ") : undefined,
+          bcc: forwardBcc.length ? forwardBcc.join(", ") : undefined,
           noteZh: forwardNote.trim() || undefined,
+          accountId: selectedAccountId || undefined,
         }),
       });
       const j = await r.json().catch(() => ({}));
@@ -424,11 +577,88 @@ export function MailWorkspace() {
       toast.success("已转发");
       setForwardOpen(false);
       setForwardTo("");
+      setForwardToList([]);
+      setForwardCc([]);
+      setForwardBcc([]);
       setForwardNote("");
       void loadEmails();
       window.dispatchEvent(new Event("xitong-mail-stats-refresh"));
     } finally {
       setForwardBusy(false);
+    }
+  }
+
+  // Compose new email
+  async function composeTranslateAndPreview() {
+    if (!composeBodyZh.trim()) return;
+    setComposeBusy(true);
+    try {
+      const r = await fetch("/api/mail/reply-polish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bodyZh: composeBodyZh }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        toast.error((j as { message?: string }).message ?? "AI 翻译失败");
+        return;
+      }
+      setComposeBodyEn((j as { bodyEn?: string }).bodyEn ?? "");
+      setComposeSendStep("preview");
+    } finally {
+      setComposeBusy(false);
+    }
+  }
+
+  async function composeConfirmSend() {
+    if (composeTo.length === 0) {
+      toast.error("请填写收件人");
+      return;
+    }
+    if (!composeSubject.trim()) {
+      toast.error("请填写主题");
+      return;
+    }
+    setComposeBusy(true);
+    try {
+      let attachments: Awaited<ReturnType<typeof filesToAttachments>> = [];
+      if (composeFiles.length) {
+        attachments = await filesToAttachments(composeFiles);
+      }
+      const r = await fetch("/api/mail/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phase: "send",
+          to: composeTo.join(", "),
+          cc: composeCc.length ? composeCc.join(", ") : undefined,
+          bcc: composeBcc.length ? composeBcc.join(", ") : undefined,
+          subject: composeSubject.trim(),
+          bodyEn: composeBodyEn,
+          bodyZh: composeBodyZh.trim() || undefined,
+          attachments: attachments.length ? attachments : undefined,
+          accountId: selectedAccountId || undefined,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        toast.error((j as { message?: string }).message ?? "发送失败");
+        return;
+      }
+      toast.success("已发送");
+      setComposeOpen(false);
+      setComposeTo([]);
+      setComposeCc([]);
+      setComposeBcc([]);
+      setComposeSubject("");
+      setComposeBodyZh("");
+      setComposeBodyEn("");
+      setComposeFiles([]);
+      setComposeSendStep("edit");
+      void loadEmails();
+      window.dispatchEvent(new Event("xitong-mail-stats-refresh"));
+    } finally {
+      setComposeBusy(false);
     }
   }
 
@@ -606,10 +836,17 @@ export function MailWorkspace() {
       patchDetailFlags, toggleTodo, regenerateSummaryFor, regenTargetId, openClassify,
       replyEditorOpen, setReplyEditorOpen, replyZh, setReplyZh,
       replyFiles, setReplyFiles, replyFileInputRef, polishReplyAndOpenPreview, previewBusy,
+      replyTo, setReplyTo, replyCc, setReplyCc, replyBcc, setReplyBcc,
       forwardOpen, setForwardOpen, forwardTo, setForwardTo, forwardNote, setForwardNote,
-      forwardBusy, submitForward,
+      forwardBusy, submitForward, forwardToList, setForwardToList, forwardCc, setForwardCc, forwardBcc, setForwardBcc,
       deleteOpen, setDeleteOpen, deleteBusy, confirmSoftDelete,
       sendOpen, setSendOpen, replyEnPreview, setReplyEnPreview, sendBusy, confirmSend,
+      composeOpen, setComposeOpen, composeTo, setComposeTo, composeCc, setComposeCc,
+      composeBcc, setComposeBcc, composeSubject, setComposeSubject,
+      composeBodyZh, setComposeBodyZh, composeBodyEn, setComposeBodyEn,
+      composeFiles, setComposeFiles, composeBusy, composeSendStep, setComposeSendStep,
+      composeTranslateAndPreview, composeConfirmSend,
+      accounts, selectedAccountId, setSelectedAccountId,
       classifyOpen, setClassifyOpen, classifySupplierId, setClassifySupplierId,
       classifyDomain, setClassifyDomain, supplierSearch, setSupplierSearch,
       allSuppliers, submitClassify,
@@ -626,8 +863,12 @@ export function MailWorkspace() {
       threads, emailId, qMid, loadingList, detail, threadMessages, loadingDetail,
       expandedMsgIds, bodyEnOpenById, mailActionBusy, regenTargetId,
       replyEditorOpen, replyZh, replyFiles, previewBusy,
-      forwardOpen, forwardTo, forwardNote, forwardBusy,
+      replyTo, replyCc, replyBcc,
+      forwardOpen, forwardTo, forwardNote, forwardBusy, forwardToList, forwardCc, forwardBcc,
       deleteOpen, deleteBusy, sendOpen, replyEnPreview, sendBusy,
+      composeOpen, composeTo, composeCc, composeBcc, composeSubject,
+      composeBodyZh, composeBodyEn, composeFiles, composeBusy, composeSendStep,
+      accounts, selectedAccountId,
       classifyOpen, classifySupplierId, classifyDomain, supplierSearch, allSuppliers,
       aiOpen, aiTab, aiTranslateIn, aiTranslateOut, aiDecisionOut, asinQ, freeQ,
       syncBusy, syncStep, syncSubtext, syncDoneLabel, syncErrText, lastSyncTime,
@@ -683,6 +924,25 @@ export function MailWorkspace() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => {
+                setComposeTo([]);
+                setComposeCc([]);
+                setComposeBcc([]);
+                setComposeSubject("");
+                setComposeBodyZh("");
+                setComposeBodyEn("");
+                setComposeFiles([]);
+                setComposeSendStep("edit");
+                setComposeOpen(true);
+              }}
+            >
+              <PenSquare className="size-3.5" />
+              写邮件
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -774,6 +1034,7 @@ export function MailWorkspace() {
         {narrow ? mobileFlow : desktopLayout}
 
         {/* Dialogs */}
+        {/* Reply send preview */}
         <Dialog open={sendOpen} onOpenChange={setSendOpen}>
           <DialogContent className="max-h-[92dvh] max-w-3xl overflow-y-auto">
             <DialogHeader>
@@ -782,6 +1043,24 @@ export function MailWorkspace() {
                 左侧为您的中文大意，右侧为可编辑的英文正文，确认后通过 SMTP 发出。
               </DialogDescription>
             </DialogHeader>
+
+            {/* Recipients */}
+            <div className="space-y-2">
+              <div>
+                <Label className="text-xs">收件人</Label>
+                <EmailTagInput value={replyTo} onChange={setReplyTo} placeholder="输入邮箱后回车添加" />
+              </div>
+              <CcBccToggle
+                cc={replyCc} setCc={setReplyCc}
+                bcc={replyBcc} setBcc={setReplyBcc}
+              />
+              <AccountSelector
+                accounts={accounts}
+                value={selectedAccountId}
+                onChange={setSelectedAccountId}
+              />
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="min-h-0">
                 <p className="text-xs font-medium text-slate-600">中文大意</p>
@@ -807,7 +1086,7 @@ export function MailWorkspace() {
                 type="button"
                 className="gap-1.5"
                 onClick={() => void confirmSend()}
-                disabled={sendBusy || !replyEnPreview.trim()}
+                disabled={sendBusy || !replyEnPreview.trim() || replyTo.length === 0}
               >
                 {sendBusy ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -820,21 +1099,35 @@ export function MailWorkspace() {
           </DialogContent>
         </Dialog>
 
+        {/* Forward */}
         <Dialog open={forwardOpen} onOpenChange={setForwardOpen}>
-          <DialogContent>
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>转发邮件</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
               <div>
-                <Label className="text-xs">收件人邮箱</Label>
-                <Input
-                  className="mt-1"
-                  placeholder="name@example.com"
-                  value={forwardTo}
-                  onChange={(e) => setForwardTo(e.target.value)}
+                <Label className="text-xs">收件人</Label>
+                <EmailTagInput
+                  value={forwardToList}
+                  onChange={setForwardToList}
+                  placeholder="输入邮箱后回车添加"
                 />
               </div>
+              <CcBccToggle
+                cc={forwardCc} setCc={setForwardCc}
+                bcc={forwardBcc} setBcc={setForwardBcc}
+              />
+              {detail && (
+                <p className="text-[11px] text-slate-500">
+                  原始发件人: <span className="font-mono">{detail.fromAddress}</span>
+                </p>
+              )}
+              <AccountSelector
+                accounts={accounts}
+                value={selectedAccountId}
+                onChange={setSelectedAccountId}
+              />
               <div>
                 <Label className="text-xs">转发备注（中文，可选）</Label>
                 <textarea
@@ -855,7 +1148,7 @@ export function MailWorkspace() {
               <Button
                 type="button"
                 onClick={() => void submitForward()}
-                disabled={forwardBusy || !forwardTo.trim()}
+                disabled={forwardBusy || forwardToList.length === 0}
               >
                 {forwardBusy ? (
                   <Loader2 className="mr-1 size-4 animate-spin" />
@@ -864,6 +1157,150 @@ export function MailWorkspace() {
                 )}
                 发送转发
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Compose new email */}
+        <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
+          <DialogContent className="max-h-[92dvh] max-w-3xl overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>写邮件</DialogTitle>
+            </DialogHeader>
+
+            {composeSendStep === "edit" ? (
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs">收件人</Label>
+                  <EmailTagInput value={composeTo} onChange={setComposeTo} placeholder="输入邮箱后回车添加" />
+                </div>
+                <CcBccToggle
+                  cc={composeCc} setCc={setComposeCc}
+                  bcc={composeBcc} setBcc={setComposeBcc}
+                />
+                <AccountSelector
+                  accounts={accounts}
+                  value={selectedAccountId}
+                  onChange={setSelectedAccountId}
+                />
+                <div>
+                  <Label className="text-xs">主题</Label>
+                  <Input
+                    className="mt-1"
+                    placeholder="邮件主题"
+                    value={composeSubject}
+                    onChange={(e) => setComposeSubject(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">正文（中文，将自动翻译为英文）</Label>
+                  <textarea
+                    className="mt-1 min-h-[160px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm leading-relaxed"
+                    placeholder="用中文写邮件内容…"
+                    value={composeBodyZh}
+                    onChange={(e) => setComposeBodyZh(e.target.value)}
+                  />
+                </div>
+                {/* File attachments */}
+                <input
+                  ref={composeFileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(ev) => {
+                    const list = ev.target.files;
+                    if (!list?.length) return;
+                    setComposeFiles((prev) => [...prev, ...Array.from(list)]);
+                    ev.target.value = "";
+                  }}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => composeFileInputRef.current?.click()}
+                  >
+                    添加附件
+                  </Button>
+                  {composeFiles.map((f, i) => (
+                    <span
+                      key={`${f.name}-${i}`}
+                      className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px]"
+                    >
+                      {f.name}
+                      <button
+                        type="button"
+                        className="text-red-500"
+                        onClick={() => setComposeFiles((p) => p.filter((_, j) => j !== i))}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              /* Preview step */
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="min-h-0">
+                  <p className="text-xs font-medium text-slate-600">中文原文</p>
+                  <div className="mt-1 max-h-[min(50vh,320px)] overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-800">
+                    {composeBodyZh.trim() || "（未填写）"}
+                  </div>
+                </div>
+                <div className="min-h-0">
+                  <p className="text-xs font-medium text-slate-600">英文正文（可编辑）</p>
+                  <textarea
+                    className="mt-1 max-h-[min(50vh,320px)] min-h-[200px] w-full rounded-md border border-input p-3 text-sm leading-relaxed"
+                    value={composeBodyEn}
+                    onChange={(e) => setComposeBodyEn(e.target.value)}
+                    spellCheck={false}
+                  />
+                </div>
+              </div>
+            )}
+
+            <DialogFooter>
+              {composeSendStep === "edit" ? (
+                <>
+                  <Button type="button" variant="outline" onClick={() => setComposeOpen(false)}>
+                    取消
+                  </Button>
+                  <Button
+                    type="button"
+                    className="gap-1.5"
+                    onClick={() => void composeTranslateAndPreview()}
+                    disabled={composeBusy || !composeBodyZh.trim() || composeTo.length === 0}
+                  >
+                    {composeBusy ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="size-4" />
+                    )}
+                    AI翻译并预览
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button type="button" variant="outline" onClick={() => setComposeSendStep("edit")}>
+                    返回编辑
+                  </Button>
+                  <Button
+                    type="button"
+                    className="gap-1.5"
+                    onClick={() => void composeConfirmSend()}
+                    disabled={composeBusy || !composeBodyEn.trim()}
+                  >
+                    {composeBusy ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Send className="size-4" />
+                    )}
+                    确认发送
+                  </Button>
+                </>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
