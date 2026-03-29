@@ -835,3 +835,18 @@ model IdeaComment {
 
   @@index([ideaId, createdAt])
 }
+
+/// 每日美妆报告
+model DailyBeautyReport {
+  id              String   @id @default(cuid())
+  reportDate      String   @unique /// YYYY-MM-DD
+  trendsFound     Int      @default(0)
+  ideasGenerated  Int      @default(0)
+  highScoreIdeas  Int      @default(0)
+  trendsSummary   String   @default("")
+  ideasSummary    String   @default("")
+  /// pending / generating / completed / failed
+  status          String   @default("pending")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}

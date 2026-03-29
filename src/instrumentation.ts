@@ -50,4 +50,59 @@ export async function register() {
     void tick();
     setInterval(() => void tick(), SYNC_INTERVAL_MS);
   }, 30_000);
+
+  // ── Beauty auto-scan: daily at 9 AM Beijing time (UTC+8 = 01:00 UTC) ──
+  if (process.env.DISABLE_BEAUTY_SCAN !== "1") {
+    let beautyScanRunning = false;
+
+    const msUntilNextBeautyScan = () => {
+      const now = new Date();
+      // Target: 09:00 Beijing time = 01:00 UTC
+      const target = new Date(now);
+      target.setUTCHours(1, 0, 0, 0);
+      if (target.getTime() <= now.getTime()) {
+        target.setUTCDate(target.getUTCDate() + 1);
+      }
+      return target.getTime() - now.getTime();
+    };
+
+    const beautyScanTick = async () => {
+      if (beautyScanRunning) return;
+      beautyScanRunning = true;
+      try {
+        const r = await fetch(`${baseUrl}/api/beauty-ideas/auto-scan`, {
+          method: "POST",
+          headers: {
+            "x-auto-sync-secret":
+              process.env.AUTO_SYNC_SECRET || "__internal__",
+          },
+        });
+        if (r.ok) {
+          const j = await r.json();
+          if (!j.skipped) {
+            console.info(
+              `[beauty-auto-scan] 完成: ${j.trendsFound ?? 0} 趋势, ${j.ideasGenerated ?? 0} 创意`
+            );
+          }
+        }
+      } catch (e) {
+        console.error(
+          "[beauty-auto-scan] 请求失败:",
+          e instanceof Error ? e.message : e
+        );
+      } finally {
+        beautyScanRunning = false;
+      }
+    };
+
+    // Schedule first run, then repeat every 24h
+    const delay = msUntilNextBeautyScan();
+    console.info(
+      `[beauty-auto-scan] 下次扫描: ${new Date(Date.now() + delay).toISOString()} (${Math.round(delay / 3600_000)}h后)`
+    );
+    setTimeout(() => {
+      void beautyScanTick();
+      setInterval(() => void beautyScanTick(), 24 * 60 * 60 * 1000);
+    }, delay);
+  }
 }

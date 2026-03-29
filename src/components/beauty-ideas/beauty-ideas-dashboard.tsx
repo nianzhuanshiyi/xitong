@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  CalendarCheck,
   FlaskConical,
   Loader2,
   Radar,
@@ -102,6 +103,17 @@ export function BeautyIdeasDashboard() {
   const [filterStatus, setFilterStatus] = useState("");
   const [trendCount, setTrendCount] = useState(0);
   const [lastScan, setLastScan] = useState<string | null>(null);
+  const [todayReport, setTodayReport] = useState<{
+    id: string;
+    reportDate: string;
+    trendsFound: number;
+    ideasGenerated: number;
+    highScoreIdeas: number;
+    trendsSummary: string;
+    ideasSummary: string;
+    status: string;
+  } | null>(null);
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   const loadIdeas = useCallback(async () => {
     setLoading(true);
@@ -134,8 +146,20 @@ export function BeautyIdeasDashboard() {
     } catch { /* ignore */ }
   }, []);
 
+  const loadReport = useCallback(async () => {
+    try {
+      const r = await fetch("/api/beauty-ideas/reports");
+      const j = await r.json();
+      const reports = j.reports ?? [];
+      if (reports.length > 0) {
+        setTodayReport(reports[0]);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => { loadIdeas(); }, [loadIdeas]);
   useEffect(() => { loadStats(); }, [loadStats]);
+  useEffect(() => { loadReport(); }, [loadReport]);
 
   const handleScan = async () => {
     setScanning(true);
@@ -154,10 +178,30 @@ export function BeautyIdeasDashboard() {
 
       loadIdeas();
       loadStats();
+      loadReport();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "操作失败");
     } finally {
       setScanning(false);
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    setGeneratingReport(true);
+    try {
+      toast.info("正在生成今日报告…");
+      const r = await fetch("/api/beauty-ideas/reports/generate", { method: "POST" });
+      const j = await r.json();
+      if (!r.ok) { toast.error(j.message ?? "生成失败"); return; }
+      if (j.skipped) { toast.info("今日报告已存在"); }
+      else { toast.success("今日报告生成完成"); }
+      loadReport();
+      loadIdeas();
+      loadStats();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "生成失败");
+    } finally {
+      setGeneratingReport(false);
     }
   };
 
@@ -198,11 +242,44 @@ export function BeautyIdeasDashboard() {
         </Card>
       </div>
 
+      {/* Today's Report */}
+      {todayReport && todayReport.status === "completed" && (
+        <Card className="border-indigo-200 bg-gradient-to-r from-indigo-50/50 to-purple-50/50">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold text-indigo-800">
+              <CalendarCheck className="size-4" />
+              {todayReport.reportDate} 日报
+            </CardTitle>
+            <div className="flex items-center gap-3 text-xs text-slate-500">
+              <span>{todayReport.trendsFound} 趋势</span>
+              <span>{todayReport.ideasGenerated} 创意</span>
+              <span className="font-semibold text-emerald-600">{todayReport.highScoreIdeas} 高分</span>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {todayReport.ideasSummary && (
+              <div className="text-xs leading-relaxed text-slate-700 whitespace-pre-line">
+                {todayReport.ideasSummary}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Actions */}
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={handleScan} disabled={scanning} className="gap-1.5">
           {scanning ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
           {scanning ? "扫描中…" : "扫描趋势 & 生成创意"}
+        </Button>
+        <Button
+          onClick={handleGenerateReport}
+          disabled={generatingReport || scanning}
+          variant="outline"
+          className="gap-1.5"
+        >
+          {generatingReport ? <Loader2 className="size-4 animate-spin" /> : <CalendarCheck className="size-4" />}
+          {generatingReport ? "生成中…" : "生成今日报告"}
         </Button>
         <Link href="/dashboard/beauty-ideas/trends">
           <Button variant="outline" className="gap-1.5">
