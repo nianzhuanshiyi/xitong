@@ -880,8 +880,8 @@ export function MailWorkspace() {
   );
 
   const desktopLayout = (
-    <div className="flex h-[calc(100dvh-8rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="h-full w-[250px] shrink-0 overflow-hidden border-r border-slate-200">
+    <div className="flex h-[calc(100dvh-7rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="h-full w-[240px] shrink-0 overflow-hidden border-r border-slate-200">
         <MailSidebar />
       </div>
       <div className="h-full w-[350px] shrink-0 overflow-hidden border-r border-slate-200">
@@ -915,7 +915,7 @@ export function MailWorkspace() {
 
   return (
     <MailContext.Provider value={ctxValue}>
-      <div className="mx-auto max-w-[1600px] space-y-3">
+      <div className="space-y-3">
         {/* Top toolbar */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -1039,7 +1039,7 @@ export function MailWorkspace() {
         {/* Dialogs */}
         {/* Reply send preview */}
         <Dialog open={sendOpen} onOpenChange={setSendOpen}>
-          <DialogContent className="max-h-[92dvh] max-w-3xl overflow-y-auto">
+          <DialogContent className="max-h-[92dvh] max-w-[800px] overflow-y-auto p-6 sm:p-8">
             <DialogHeader>
               <DialogTitle>确认发送</DialogTitle>
               <DialogDescription>
@@ -1064,17 +1064,17 @@ export function MailWorkspace() {
               />
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-5 sm:grid-cols-2">
               <div className="min-h-0">
-                <p className="text-xs font-medium text-slate-600">中文大意</p>
-                <div className="mt-1 max-h-[min(50vh,320px)] overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-800">
+                <p className="mb-1.5 text-xs font-medium text-slate-600">中文大意</p>
+                <div className="h-[400px] overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-800">
                   {replyZh.trim() || "（未填写）"}
                 </div>
               </div>
               <div className="min-h-0">
-                <p className="text-xs font-medium text-slate-600">英文正文（可编辑）</p>
+                <p className="mb-1.5 text-xs font-medium text-slate-600">英文正文（可编辑）</p>
                 <textarea
-                  className="mt-1 max-h-[min(50vh,320px)] min-h-[200px] w-full rounded-md border border-input p-3 text-sm leading-relaxed"
+                  className="h-[400px] w-full rounded-md border border-input p-3 text-sm leading-relaxed"
                   value={replyEnPreview}
                   onChange={(e) => setReplyEnPreview(e.target.value)}
                   spellCheck={false}
@@ -1166,7 +1166,7 @@ export function MailWorkspace() {
 
         {/* Compose new email */}
         <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
-          <DialogContent className="max-h-[92dvh] max-w-3xl overflow-y-auto">
+          <DialogContent className="max-h-[92dvh] max-w-[800px] overflow-y-auto p-6 sm:p-8">
             <DialogHeader>
               <DialogTitle>写邮件</DialogTitle>
             </DialogHeader>
@@ -1245,17 +1245,17 @@ export function MailWorkspace() {
               </div>
             ) : (
               /* Preview step */
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-5 sm:grid-cols-2">
                 <div className="min-h-0">
-                  <p className="text-xs font-medium text-slate-600">中文原文</p>
-                  <div className="mt-1 max-h-[min(50vh,320px)] overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-800">
+                  <p className="mb-1.5 text-xs font-medium text-slate-600">中文原文</p>
+                  <div className="h-[400px] overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-800">
                     {composeBodyZh.trim() || "（未填写）"}
                   </div>
                 </div>
                 <div className="min-h-0">
-                  <p className="text-xs font-medium text-slate-600">英文正文（可编辑）</p>
+                  <p className="mb-1.5 text-xs font-medium text-slate-600">英文正文（可编辑）</p>
                   <textarea
-                    className="mt-1 max-h-[min(50vh,320px)] min-h-[200px] w-full rounded-md border border-input p-3 text-sm leading-relaxed"
+                    className="h-[400px] w-full rounded-md border border-input p-3 text-sm leading-relaxed"
                     value={composeBodyEn}
                     onChange={(e) => setComposeBodyEn(e.target.value)}
                     spellCheck={false}
