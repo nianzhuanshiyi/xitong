@@ -9,6 +9,7 @@ import {
   Sparkles,
   FlaskConical,
   Cpu,
+  Globe,
   FileText,
   ImageIcon,
   Package,
@@ -72,6 +73,12 @@ export const dashboardNav: DashboardNavItem[] = [
     label: "3C新品创意",
     title: "3C新品创意",
     Icon: Cpu,
+  },
+  {
+    href: "/dashboard/europe-ideas",
+    label: "欧洲蓝海选品",
+    title: "欧洲蓝海选品",
+    Icon: Globe,
   },
   {
     href: "/dashboard/listing",
