@@ -21,7 +21,7 @@ export async function claudeMessages(params: {
   if (!key) return null;
 
   const model =
-    process.env.CLAUDE_ANALYSIS_MODEL?.trim() || "claude-opus-4-6";
+    process.env.CLAUDE_ANALYSIS_MODEL?.trim() || "claude-sonnet-4-20250514";
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -51,8 +51,15 @@ export async function claudeMessages(params: {
 
   const data = JSON.parse(text) as {
     content?: Array<{ type: string; text?: string }>;
+    stop_reason?: string;
   };
   const block = data.content?.find((c) => c.type === "text");
+
+  // Log if truncated
+  if (data.stop_reason === "max_tokens") {
+    console.warn(`[claudeMessages] 输出被截断 (max_tokens), stop_reason=${data.stop_reason}`);
+  }
+
   return block?.text ?? null;
 }
 
@@ -77,7 +84,7 @@ export async function claudeMessagesBlocks(params: {
   if (!key) return null;
 
   const model =
-    process.env.CLAUDE_ANALYSIS_MODEL?.trim() || "claude-opus-4-6";
+    process.env.CLAUDE_ANALYSIS_MODEL?.trim() || "claude-sonnet-4-20250514";
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -126,11 +133,17 @@ export async function claudeJson<T>(params: {
   try {
     return JSON.parse(jsonStr) as T;
   } catch {
-    // Attempt to salvage truncated JSON array: close open strings/objects and parse partial
-    const salvaged = salvagedJsonArray(jsonStr);
-    if (salvaged) {
-      console.warn(`[claudeJson] JSON 被截断，已修复解析到 ${Array.isArray(salvaged) ? (salvaged as unknown[]).length : 0} 条`);
-      return salvaged as T;
+    // Attempt to salvage truncated JSON array
+    const salvagedArr = salvagedJsonArray(jsonStr);
+    if (salvagedArr) {
+      console.warn(`[claudeJson] JSON数组被截断，已修复解析到 ${Array.isArray(salvagedArr) ? (salvagedArr as unknown[]).length : 0} 条`);
+      return salvagedArr as T;
+    }
+    // Attempt to salvage truncated JSON object
+    const salvagedObj = salvagedJsonObject(jsonStr);
+    if (salvagedObj) {
+      console.warn("[claudeJson] JSON对象被截断，已修复解析部分字段");
+      return salvagedObj as T;
     }
     console.error("[claudeJson] JSON 解析失败，原始返回 (前800字):", raw.slice(0, 800));
     console.error("[claudeJson] 原始返回 (后200字):", raw.slice(-200));
@@ -179,6 +192,47 @@ function salvagedJsonArray(text: string): unknown | null {
   return null;
 }
 
+/** Try to salvage a truncated JSON object by finding last complete key-value pair */
+function salvagedJsonObject(text: string): unknown | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{")) return null;
+
+  // Find the last position where we had a complete key-value pair at depth 1
+  let lastGoodEnd = -1;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (escape) { escape = false; continue; }
+    if (ch === "\\") { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{" || ch === "[") depth++;
+    if (ch === "}" || ch === "]") {
+      depth--;
+      // If we close the top-level object cleanly, original parse should have worked
+      if (depth === 0 && ch === "}") return null;
+    }
+    // A comma at depth 1 means we finished a complete key-value pair
+    if (ch === "," && depth === 1) {
+      lastGoodEnd = i;
+    }
+  }
+
+  if (lastGoodEnd > 0) {
+    // Take everything up to the last comma and close the object
+    const partial = trimmed.slice(0, lastGoodEnd) + "}";
+    try {
+      return JSON.parse(partial);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 /**
  * Anthropic Messages API 流式输出；聚合完整文本并回调增量（用于 Listing 等长文本生成）
  */
@@ -192,7 +246,7 @@ export async function claudeMessagesStream(params: {
   if (!key) throw new Error("未配置 Claude API 密钥");
 
   const model =
-    process.env.CLAUDE_ANALYSIS_MODEL?.trim() || "claude-opus-4-6";
+    process.env.CLAUDE_ANALYSIS_MODEL?.trim() || "claude-sonnet-4-20250514";
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",

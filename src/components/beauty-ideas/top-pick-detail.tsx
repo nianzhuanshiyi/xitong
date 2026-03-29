@@ -513,76 +513,109 @@ export function TopPickDetail({ id }: { id: string }) {
 
       {/* ── Brief Info Cards ─────────────────────────────────── */}
       {isBrief && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Ingredients Card */}
-          {report.briefIngredients && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-slate-500">核心成分</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-1.5">
-                  {report.briefIngredients.split(",").map((ing, i) => (
-                    <span key={i} className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
-                      {ing.trim()}
-                    </span>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          {/* Competition Card */}
-          {compLabel && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-slate-500">竞争程度</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-2">
-                  <div className={cn(
-                    "h-3 flex-1 rounded-full",
-                    report.briefCompetition === "low" ? "bg-emerald-200" :
-                    report.briefCompetition === "medium" ? "bg-amber-200" : "bg-red-200"
-                  )}>
+        <div className="space-y-4">
+          {/* Row 1: Competition + Financial Overview */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Competition Card */}
+            {compLabel && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-slate-500">竞争程度</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-2">
                     <div className={cn(
-                      "h-full rounded-full",
-                      report.briefCompetition === "low" ? "w-1/3 bg-emerald-500" :
-                      report.briefCompetition === "medium" ? "w-2/3 bg-amber-500" : "w-full bg-red-500"
-                    )} />
+                      "h-3 flex-1 rounded-full",
+                      report.briefCompetition === "low" ? "bg-emerald-200" :
+                      report.briefCompetition === "medium" ? "bg-amber-200" : "bg-red-200"
+                    )}>
+                      <div className={cn(
+                        "h-full rounded-full",
+                        report.briefCompetition === "low" ? "w-1/3 bg-emerald-500" :
+                        report.briefCompetition === "medium" ? "w-2/3 bg-amber-500" : "w-full bg-red-500"
+                      )} />
+                    </div>
+                    <span className="text-sm font-semibold text-slate-700">{compLabel}</span>
                   </div>
-                  <span className="text-sm font-semibold text-slate-700">{compLabel}</span>
+                </CardContent>
+              </Card>
+            )}
+            {/* Price/Margin Card */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-slate-500">财务概览</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-1.5">
+                  {report.estimatedRetailPrice && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-500">预估售价</span>
+                      <span className="font-semibold text-slate-900">{report.estimatedRetailPrice}</span>
+                    </div>
+                  )}
+                  {report.estimatedCogs && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-500">预估成本</span>
+                      <span className="font-semibold text-slate-900">{report.estimatedCogs}</span>
+                    </div>
+                  )}
+                  {report.estimatedMargin && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-500">预估利润率</span>
+                      <span className="font-semibold text-emerald-600">{report.estimatedMargin}</span>
+                    </div>
+                  )}
+                  {idea?.searchVolume && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-500">月搜索量</span>
+                      <span className="font-semibold text-blue-600">{idea.searchVolume.toLocaleString()}</span>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
+            {/* Brief Ingredients Tags */}
+            {report.briefIngredients && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-slate-500">核心成分</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-1.5">
+                    {report.briefIngredients.split(",").map((ing, i) => (
+                      <span key={i} className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                        {ing.trim()}
+                      </span>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Row 2: Ingredient Efficacy Details (from keyIngredients markdown) */}
+          {report.keyIngredients && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-slate-500">成分功效详解</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MarkdownBlock content={report.keyIngredients} />
+              </CardContent>
+            </Card>
           )}
-          {/* Price/Margin Card */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-slate-500">财务概览</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-1.5">
-                {report.estimatedRetailPrice && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">预估售价</span>
-                    <span className="font-semibold text-slate-900">{report.estimatedRetailPrice}</span>
-                  </div>
-                )}
-                {report.estimatedMargin && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">预估利润率</span>
-                    <span className="font-semibold text-emerald-600">{report.estimatedMargin}</span>
-                  </div>
-                )}
-                {idea?.searchVolume && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">月搜索量</span>
-                    <span className="font-semibold text-blue-600">{idea.searchVolume.toLocaleString()}</span>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+
+          {/* Row 3: Target Market & Audience (from marketAnalysis) */}
+          {report.marketAnalysis && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-slate-500">目标市场与消费者</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MarkdownBlock content={report.marketAnalysis} />
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 

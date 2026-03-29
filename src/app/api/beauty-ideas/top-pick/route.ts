@@ -8,9 +8,14 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 /* ================================================================
-   Phase 1 (Brief) — auto-generated daily, ~500 tokens output
-   Scans Top 5 trends → picks 1 → returns a brief card
+   Phase 1 (Brief) — auto-generated daily, ~1000 tokens output
+   Scans Top 5 trends → picks 1 → returns a rich brief card
    ================================================================ */
+
+/** Get current date in Beijing timezone (UTC+8) */
+function getBeijingDate(): string {
+  return new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
+}
 
 type TrendItem = {
   source: string;
@@ -27,10 +32,14 @@ type BriefResult = {
   productName: string;
   productNameEn: string;
   recommendation: string;
+  ingredientDetails: Array<{ name: string; efficacy: string }>;
   keyIngredients: string[];
   priceRange: string;
+  estimatedCost: string;
   estimatedMargin: string;
   competition: string;
+  targetAudience: string;
+  targetMarket: string;
   score: number;
   category: string;
   searchKeywords: string[];
@@ -67,7 +76,7 @@ export async function POST(req: NextRequest) {
     userId = session.user.id;
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBeijingDate();
 
   // Check if force regeneration is requested
   const body = await req.text();
@@ -126,16 +135,15 @@ export async function POST(req: NextRequest) {
       });
 
   try {
-    // ── Combined: scan trends + pick 1 + brief (1 Claude call) ──
     console.info("[top-pick-brief] 开始生成简报...");
 
     const BRIEF_SYSTEM = `你是一位资深美妆行业分析师+产品总监，服务于亚马逊跨境美妆卖家。
 公司在美国、中国、韩国都有供应链，主做亚马逊和TikTok Shop线上销售。
 
-任务（省token，简洁输出）：
-1. 先扫描当前 Top 5 美妆趋势
+任务：
+1. 扫描当前 Top 5 美妆趋势
 2. 从中选出 1 个最适合我们做的产品方向
-3. 给出简要推荐
+3. 给出详细的推荐简报
 
 选择标准：趋势热度高、竞争可进入、毛利率≥60%、我们供应链能做、适合线上销售。
 避开已饱和品类（普通保湿面霜、基础洁面等）。${avoidHint}
@@ -148,12 +156,20 @@ export async function POST(req: NextRequest) {
   ],
   "selectedTrendIndex": 0-4,
   "productName": "中文产品名",
-  "productNameEn": "English Name",
-  "recommendation": "1-2句话推荐理由",
-  "keyIngredients": ["核心成分1","成分2","成分3"],
+  "productNameEn": "English Product Name",
+  "recommendation": "2-3句话详细推荐理由，说明为什么选这个方向、市场机会在哪、我们的优势是什么",
+  "ingredientDetails": [
+    {"name": "成分名", "efficacy": "功效说明（1-2句话）"},
+    {"name": "成分名2", "efficacy": "功效说明"},
+    {"name": "成分名3", "efficacy": "功效说明"}
+  ],
+  "keyIngredients": ["成分1","成分2","成分3"],
   "priceRange": "$18-25",
+  "estimatedCost": "$4-6",
   "estimatedMargin": "65%",
   "competition": "low/medium/high",
+  "targetAudience": "目标消费者画像，如'25-35岁注重护肤的女性，偏好天然成分'",
+  "targetMarket": "US",
   "score": 1-100的推荐信心分,
   "category": "skincare",
   "searchKeywords": ["amazon关键词1","关键词2"]
@@ -208,6 +224,11 @@ export async function POST(req: NextRequest) {
       } catch { /* non-blocking */ }
     }
 
+    // Build ingredient markdown for brief display
+    const ingredientMd = (result.ingredientDetails || [])
+      .map((ing) => `### ${ing.name}\n${ing.efficacy}`)
+      .join("\n\n");
+
     // Create ProductIdea for relation
     const selectedTrend = trendItems[result.selectedTrendIndex] ?? trendItems[0];
     const idea = await prisma.productIdea.create({
@@ -215,7 +236,7 @@ export async function POST(req: NextRequest) {
         name: result.productName,
         category: result.category || selectedTrend?.category || "skincare",
         description: result.recommendation,
-        targetMarket: "US",
+        targetMarket: result.targetMarket || "US",
         keyIngredients: JSON.stringify(result.keyIngredients || []),
         sellingPoints: JSON.stringify([]),
         estimatedPrice: result.priceRange,
@@ -229,7 +250,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Save brief report
+    // Save brief report — populate more fields for richer brief display
     await prisma.topPickReport.update({
       where: { id: report.id },
       data: {
@@ -238,7 +259,14 @@ export async function POST(req: NextRequest) {
         productNameEn: result.productNameEn || "",
         executiveSummary: result.recommendation,
         estimatedRetailPrice: result.priceRange || null,
+        estimatedCogs: result.estimatedCost || null,
         estimatedMargin: result.estimatedMargin || null,
+        // Store ingredient details as markdown even in brief phase
+        keyIngredients: ingredientMd || "",
+        // Store target audience in marketAnalysis for brief display
+        marketAnalysis: result.targetAudience
+          ? `### 目标市场\n${result.targetMarket || "US"} 市场\n\n### 目标消费者\n${result.targetAudience}`
+          : "",
         briefIngredients: (result.keyIngredients || []).join(", "),
         briefCompetition: result.competition || "medium",
         briefScore: result.score || 70,
@@ -298,21 +326,25 @@ export async function GET() {
     return NextResponse.json({ message: "未登录" }, { status: 401 });
   }
 
-  // Try today's report first
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBeijingDate();
+
+  // Try today's report first (Beijing time)
   let report = await prisma.topPickReport.findUnique({
     where: { reportDate: today },
     include: { idea: { select: ideaSelect } },
   });
 
-  // If no today report or dismissed, get latest non-dismissed
-  if (!report || report.dismissed) {
-    report = await prisma.topPickReport.findFirst({
-      where: { dismissed: false, status: "completed" },
-      orderBy: { createdAt: "desc" },
-      include: { idea: { select: ideaSelect } },
-    });
+  // Show today's report if it's completed and not dismissed
+  if (report && report.status === "completed" && !report.dismissed) {
+    return NextResponse.json({ report });
   }
+
+  // Otherwise, get the latest non-dismissed completed report
+  report = await prisma.topPickReport.findFirst({
+    where: { dismissed: false, status: "completed" },
+    orderBy: { createdAt: "desc" },
+    include: { idea: { select: ideaSelect } },
+  });
 
   return NextResponse.json({ report: report ?? null });
 }
@@ -333,7 +365,6 @@ export async function PATCH(req: NextRequest) {
     if (!rpt) {
       return NextResponse.json({ message: "不存在" }, { status: 404 });
     }
-    // Figure out what category to avoid
     const idea = rpt.ideaId
       ? await prisma.productIdea.findUnique({
           where: { id: rpt.ideaId },

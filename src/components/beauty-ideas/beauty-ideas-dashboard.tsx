@@ -27,6 +27,7 @@ type TopPick = {
   executiveSummary: string;
   estimatedMargin: string | null;
   estimatedRetailPrice: string | null;
+  estimatedCogs: string | null;
   estimatedProfit: string | null;
   status: string;
   phase: string;
@@ -321,6 +322,7 @@ export function BeautyIdeasDashboard() {
               {isBrief && topPick.estimatedRetailPrice && (
                 <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
                   <span>预估售价 {topPick.estimatedRetailPrice}</span>
+                  {topPick.estimatedCogs && <span>成本 {topPick.estimatedCogs}</span>}
                   {topPick.estimatedMargin && <span>利润率 {topPick.estimatedMargin}</span>}
                 </div>
               )}
