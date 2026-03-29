@@ -17,7 +17,7 @@ export function MailSidebar() {
   const ctx = useMailContext();
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-white">
       <div className="border-b border-slate-100 p-2">
         <Tabs
           value={ctx.leftTab}
@@ -92,7 +92,7 @@ export function MailSidebar() {
                 )}
               >
                 <div className="flex items-start justify-between gap-1">
-                  <span className="font-medium text-slate-900">{s.name}</span>
+                  <span className="min-w-0 break-words font-medium text-slate-900">{s.name}</span>
                   {s.unreadCount > 0 && (
                     <span className="shrink-0 rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
                       {s.unreadCount > 9 ? "9+" : s.unreadCount}

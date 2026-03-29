@@ -640,18 +640,22 @@ export function MailWorkspace() {
   );
 
   const desktopLayout = (
-    <div className="flex min-h-[calc(100dvh-8rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="w-[240px] shrink-0 border-r border-slate-200">
+    <div className="flex h-[calc(100dvh-8rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="w-[240px] shrink-0 overflow-hidden border-r border-slate-200">
         <MailSidebar />
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="flex h-full min-w-0 flex-1">
         <ResizablePanelGroup orientation="horizontal">
           <ResizablePanel defaultSize={35} minSize={25} maxSize={50}>
-            <MailList />
+            <div className="h-full overflow-hidden">
+              <MailList />
+            </div>
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel defaultSize={65} minSize={40}>
-            <MailDetail />
+            <div className="h-full overflow-hidden">
+              <MailDetail />
+            </div>
           </ResizablePanel>
         </ResizablePanelGroup>
       </div>
