@@ -411,7 +411,7 @@ export function BeautyIdeasDashboard() {
                 AI 自动扫描 Top 5 趋势，精选 1 个最佳方向，生成简报卡片
                 <br />
                 <span className="text-xs text-slate-400">
-                  感兴趣再点"深度分析"生成完整落地方案，节省 token
+                  感兴趣再点&quot;深度分析&quot;生成完整落地方案，节省 token
                 </span>
               </p>
               <Button
