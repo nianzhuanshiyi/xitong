@@ -37,7 +37,7 @@ import {
 import { MailSidebar } from "./mail-sidebar";
 import { MailList } from "./mail-list";
 import { MailDetail } from "./mail-detail";
-import { MailAIPanel } from "./mail-ai-panel";
+import { MailAnalysisPanel } from "./mail-analysis-panel";
 
 const SYNC_STEPS = ["连接中", "拉取邮件", "AI 分析中", "完成"] as const;
 
@@ -937,7 +937,7 @@ export function MailWorkspace() {
           </DialogContent>
         </Dialog>
 
-        <MailAIPanel />
+        <MailAnalysisPanel />
       </div>
     </MailContext.Provider>
   );

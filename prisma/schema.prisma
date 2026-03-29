@@ -34,6 +34,7 @@ model User {
   imageProjects          ImageProject[]
   assignedActionItems    ActionItem[]            @relation("ActionItemAssignee")
   emailAccounts          EmailAccount[]
+  productAnalyses        ProductAnalysis[]
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
 }
@@ -335,9 +336,10 @@ model Supplier {
   qualityIssues SupplierQualityIssue[]
   supplierNotes SupplierNote[]
   products      Product[]
-  emails        Email[]
-  supplierDomains SupplierDomain[]
-  actionItems   ActionItem[]
+  emails            Email[]
+  supplierDomains   SupplierDomain[]
+  actionItems       ActionItem[]
+  productAnalyses   ProductAnalysis[]
 }
 
 /// 邮件方向
@@ -416,8 +418,9 @@ model Email {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  attachments EmailAttachment[]
-  actionItems ActionItem[]
+  attachments     EmailAttachment[]
+  actionItems     ActionItem[]
+  productAnalyses ProductAnalysis[]
 
   @@index([accountId, receivedAt])
   @@index([supplierId, receivedAt])
@@ -694,4 +697,44 @@ model ProductDevLog {
   updatedAt DateTime @updatedAt
 
   @@index([productId, createdAt])
+}
+
+/// AI 产品分析
+model ProductAnalysis {
+  id              String   @id @default(cuid())
+  emailId         String?
+  email           Email?   @relation(fields: [emailId], references: [id], onDelete: SetNull)
+  supplierId      String?
+  supplier        Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  createdById     String
+  createdBy       User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  productName     String   @default("")
+  query           String
+  analysisResult  String?
+  marketData      String?
+  score           Int?
+  /// strong_yes / yes / maybe / no / strong_no
+  recommendation  String?
+  /// pending / analyzing / completed / failed
+  status          String   @default("pending")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  chats AnalysisChat[]
+
+  @@index([createdById, createdAt])
+  @@index([supplierId, createdAt])
+}
+
+/// AI 分析对话历史
+model AnalysisChat {
+  id         String   @id @default(cuid())
+  analysisId String
+  analysis   ProductAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  /// user / assistant
+  role       String
+  content    String
+  createdAt  DateTime @default(now())
+
+  @@index([analysisId, createdAt])
 }

@@ -390,15 +390,15 @@ export function MailDetail() {
       {/* Persistent reply box at bottom */}
       <MailComposer />
 
-      {/* AI assistant FAB */}
+      {/* AI analysis FAB */}
       <Button
         type="button"
         size="icon"
-        className="absolute bottom-28 right-4 size-10 rounded-full shadow-lg"
+        className="absolute bottom-28 right-4 size-10 rounded-full bg-violet-600 shadow-lg hover:bg-violet-700"
         onClick={() => ctx.setAiOpen(true)}
-        title="AI 助手"
+        title="AI 产品分析"
       >
-        <Bot className="size-5" />
+        <Bot className="size-5 text-white" />
       </Button>
     </div>
   );
