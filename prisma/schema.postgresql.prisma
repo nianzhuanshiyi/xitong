@@ -35,6 +35,8 @@ model User {
   assignedActionItems    ActionItem[]            @relation("ActionItemAssignee")
   emailAccounts          EmailAccount[]
   productAnalyses        ProductAnalysis[]
+  productIdeas           ProductIdea[]
+  ideaComments           IdeaComment[]
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
 }
@@ -741,4 +743,95 @@ model AnalysisChat {
   createdAt  DateTime @default(now())
 
   @@index([analysisId, createdAt])
+}
+
+// ─── 美妆新品创意模块 ───────────────────────────────────────
+
+/// 美妆趋势
+model BeautyTrend {
+  id          String   @id @default(cuid())
+  /// google_trends / social_media / news / industry_report
+  source      String
+  /// US / KR / CN
+  market      String
+  title       String
+  content     String
+  /// JSON 数组，如 ["玻尿酸","烟酰胺"]
+  ingredients String   @default("[]")
+  /// skincare / makeup / haircare / bodycare / fragrance
+  category    String
+  trendScore  Int      @default(50)
+  sourceUrl   String?
+  scannedAt   DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ideas ProductIdea[]
+
+  @@index([market, createdAt])
+  @@index([category, createdAt])
+}
+
+/// 新品创意
+model ProductIdea {
+  id              String   @id @default(cuid())
+  trendId         String?
+  trend           BeautyTrend? @relation(fields: [trendId], references: [id], onDelete: SetNull)
+  name            String
+  /// skincare / makeup / haircare / bodycare / fragrance
+  category        String
+  description     String
+  targetMarket    String   @default("US")
+  /// JSON 数组
+  keyIngredients  String   @default("[]")
+  /// JSON 数组
+  sellingPoints   String   @default("[]")
+  estimatedPrice  String?
+  estimatedCost   String?
+
+  /// 卖家精灵市场数据 JSON
+  marketData        String?
+  searchVolume      Int?
+  /// low / medium / high / extreme
+  competitionLevel  String?
+  avgPrice          Float?
+  avgRating         Float?
+  /// JSON 数组
+  topCompetitors    String   @default("[]")
+
+  /// 评分
+  trendScore        Int      @default(0)
+  marketScore       Int      @default(0)
+  competitionScore  Int      @default(0)
+  profitScore       Int      @default(0)
+  totalScore        Int      @default(0)
+  /// strong_go / go / watch / pass
+  recommendation    String   @default("watch")
+
+  aiAnalysis  String?
+  /// draft / validated / developing / abandoned
+  status      String   @default("draft")
+  createdBy   String
+  creator     User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  comments IdeaComment[]
+
+  @@index([totalScore])
+  @@index([status, createdAt])
+  @@index([createdBy, createdAt])
+}
+
+/// 创意评论
+model IdeaComment {
+  id        String   @id @default(cuid())
+  ideaId    String
+  idea      ProductIdea @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  content   String
+  createdBy String
+  creator   User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([ideaId, createdAt])
 }

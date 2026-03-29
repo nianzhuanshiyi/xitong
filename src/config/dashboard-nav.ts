@@ -7,6 +7,7 @@ import {
   ClipboardList,
   LineChart,
   Sparkles,
+  FlaskConical,
   FileText,
   ImageIcon,
   Package,
@@ -58,6 +59,12 @@ export const dashboardNav: DashboardNavItem[] = [
     label: "智能选品",
     title: "智能选品",
     Icon: Sparkles,
+  },
+  {
+    href: "/dashboard/beauty-ideas",
+    label: "美妆新品创意",
+    title: "美妆新品创意",
+    Icon: FlaskConical,
   },
   {
     href: "/dashboard/listing",
