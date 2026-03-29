@@ -11,6 +11,7 @@ export async function GET() {
   }
 
   const reports = await prisma.topPickReport.findMany({
+    where: { dismissed: false },
     orderBy: { createdAt: "desc" },
     take: 20,
     select: {
@@ -21,6 +22,8 @@ export async function GET() {
       executiveSummary: true,
       estimatedMargin: true,
       status: true,
+      phase: true,
+      briefScore: true,
       createdAt: true,
       idea: {
         select: {

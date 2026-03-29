@@ -7,6 +7,8 @@ import {
   Crown,
   FlaskConical,
   Loader2,
+  Search,
+  ThumbsDown,
   TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -26,6 +28,10 @@ type TopPick = {
   estimatedRetailPrice: string | null;
   estimatedProfit: string | null;
   status: string;
+  phase: string;
+  briefIngredients: string;
+  briefCompetition: string;
+  briefScore: number;
   createdAt: string;
   idea?: {
     totalScore: number;
@@ -42,6 +48,8 @@ type HistoryItem = {
   executiveSummary: string;
   estimatedMargin: string | null;
   status: string;
+  phase: string;
+  briefScore: number;
   createdAt: string;
   idea?: { totalScore: number; recommendation: string } | null;
 };
@@ -61,6 +69,12 @@ const REC_CONFIG: Record<string, { label: string; color: string }> = {
   go: { label: "推荐", color: "bg-blue-100 text-blue-800" },
   watch: { label: "观望", color: "bg-amber-100 text-amber-800" },
   pass: { label: "放弃", color: "bg-slate-100 text-slate-600" },
+};
+
+const COMPETITION_LABEL: Record<string, { label: string; color: string }> = {
+  low: { label: "低竞争", color: "bg-emerald-100 text-emerald-700" },
+  medium: { label: "中等竞争", color: "bg-amber-100 text-amber-700" },
+  high: { label: "高竞争", color: "bg-red-100 text-red-700" },
 };
 
 /* ── Score Ring ────────────────────────────────────────────────── */
@@ -93,6 +107,8 @@ export function BeautyIdeasDashboard() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [trends, setTrends] = useState<TrendItem[]>([]);
   const [generating, setGenerating] = useState(false);
+  const [deepLoading, setDeepLoading] = useState(false);
+  const [dismissing, setDismissing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [trendsExpanded, setTrendsExpanded] = useState(false);
 
@@ -102,6 +118,8 @@ export function BeautyIdeasDashboard() {
       const j = await r.json();
       if (j.report && j.report.status === "completed") {
         setTopPick(j.report);
+      } else {
+        setTopPick(null);
       }
     } catch { /* ignore */ }
   }, []);
@@ -119,7 +137,6 @@ export function BeautyIdeasDashboard() {
       const r = await fetch("/api/beauty-ideas/trends");
       const j = await r.json();
       const all = j.trends ?? [];
-      // Only show last 7 days
       const weekAgo = Date.now() - 7 * 86400_000;
       setTrends(
         all.filter((t: TrendItem) => new Date(t.scannedAt).getTime() > weekAgo)
@@ -138,7 +155,7 @@ export function BeautyIdeasDashboard() {
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      toast.info("AI 正在扫描趋势、精选产品、生成方案…", { duration: 10000 });
+      toast.info("AI 正在扫描趋势、精选产品…", { duration: 10000 });
       const r = await fetch("/api/beauty-ideas/top-pick", { method: "POST" });
       const j = await r.json();
       if (!r.ok) { toast.error(j.message ?? "生成失败"); return; }
@@ -155,6 +172,50 @@ export function BeautyIdeasDashboard() {
     }
   };
 
+  const handleDeepAnalysis = async () => {
+    if (!topPick) return;
+    setDeepLoading(true);
+    try {
+      toast.info("AI 正在生成深度分析…", { duration: 30000 });
+      const r = await fetch(`/api/beauty-ideas/top-pick/${topPick.id}/deep`, {
+        method: "POST",
+      });
+      const j = await r.json();
+      if (!r.ok) { toast.error(j.message ?? "深度分析失败"); return; }
+      if (j.skipped) {
+        toast.info("深度分析已完成");
+      } else {
+        toast.success("深度分析已生成");
+      }
+      // Navigate to detail page
+      window.location.href = `/dashboard/beauty-ideas/top-pick/${topPick.id}`;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "深度分析失败");
+    } finally {
+      setDeepLoading(false);
+    }
+  };
+
+  const handleDismiss = async () => {
+    if (!topPick) return;
+    setDismissing(true);
+    try {
+      const r = await fetch("/api/beauty-ideas/top-pick", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: topPick.id, action: "dismiss" }),
+      });
+      if (!r.ok) { toast.error("操作失败"); return; }
+      toast.success("已跳过，下次将避开类似品类");
+      setTopPick(null);
+      loadAll();
+    } catch {
+      toast.error("操作失败");
+    } finally {
+      setDismissing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center py-20">
@@ -166,6 +227,10 @@ export function BeautyIdeasDashboard() {
   const rec = topPick?.idea
     ? REC_CONFIG[topPick.idea.recommendation] ?? REC_CONFIG.watch
     : null;
+  const comp = topPick?.briefCompetition
+    ? COMPETITION_LABEL[topPick.briefCompetition] ?? null
+    : null;
+  const isBrief = topPick?.phase === "brief";
 
   return (
     <div className="space-y-6">
@@ -178,16 +243,31 @@ export function BeautyIdeasDashboard() {
               <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg">
                 <Crown className="size-7" />
               </div>
-              {topPick.idea && <ScoreRing score={topPick.idea.totalScore} size={52} />}
+              <ScoreRing score={topPick.briefScore || topPick.idea?.totalScore || 0} size={52} />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-xs font-bold uppercase tracking-wider text-amber-600">
                   今日精选 · {topPick.reportDate}
                 </p>
+                {isBrief && (
+                  <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
+                    简报
+                  </span>
+                )}
+                {!isBrief && (
+                  <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">
+                    深度分析
+                  </span>
+                )}
                 {rec && (
                   <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", rec.color)}>
                     {rec.label}
+                  </span>
+                )}
+                {comp && (
+                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", comp.color)}>
+                    {comp.label}
                   </span>
                 )}
                 {topPick.estimatedMargin && (
@@ -210,8 +290,18 @@ export function BeautyIdeasDashboard() {
               <p className="mt-2 text-sm leading-relaxed text-slate-600 line-clamp-3">
                 {topPick.executiveSummary}
               </p>
-              {/* Quick financial stats */}
-              {topPick.estimatedRetailPrice && (
+              {/* Brief-specific info */}
+              {isBrief && topPick.briefIngredients && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {topPick.briefIngredients.split(",").map((ing, i) => (
+                    <span key={i} className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200">
+                      {ing.trim()}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {/* Quick financial stats (deep phase) */}
+              {!isBrief && topPick.estimatedRetailPrice && (
                 <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
                   <span>售价 {topPick.estimatedRetailPrice}</span>
                   {topPick.estimatedProfit && <span>单品利润 {topPick.estimatedProfit}</span>}
@@ -219,11 +309,44 @@ export function BeautyIdeasDashboard() {
               )}
             </div>
             <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-              <Link href={`/dashboard/beauty-ideas/top-pick/${topPick.id}`}>
-                <Button className="gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow hover:from-amber-600 hover:to-orange-600">
-                  查看完整方案
-                </Button>
-              </Link>
+              {isBrief ? (
+                <>
+                  <Button
+                    onClick={handleDeepAnalysis}
+                    disabled={deepLoading}
+                    className="gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow hover:from-amber-600 hover:to-orange-600"
+                  >
+                    {deepLoading ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Search className="size-4" />
+                    )}
+                    {deepLoading ? "分析中…" : "深度分析"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDismiss}
+                    disabled={dismissing}
+                    className="gap-1 text-xs text-slate-500"
+                  >
+                    {dismissing ? (
+                      <Loader2 className="size-3 animate-spin" />
+                    ) : (
+                      <ThumbsDown className="size-3" />
+                    )}
+                    不感兴趣
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Link href={`/dashboard/beauty-ideas/top-pick/${topPick.id}`}>
+                    <Button className="gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow hover:from-amber-600 hover:to-orange-600">
+                      查看完整方案
+                    </Button>
+                  </Link>
+                </>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -245,10 +368,10 @@ export function BeautyIdeasDashboard() {
             一键生成今日新品方案
           </h3>
           <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
-            AI 自动完成三步：扫描 Top 5 趋势 → 精选 1 个最佳方向 → 生成完整落地方案
+            AI 自动扫描 Top 5 趋势，精选 1 个最佳方向，生成简报卡片
             <br />
             <span className="text-xs text-slate-400">
-              （产品规格 · 竞品分析 · 财务预估 · 供应商方案 · 上架策略）
+              感兴趣再点"深度分析"生成完整落地方案，节省 token
             </span>
           </p>
           <Button
@@ -291,9 +414,19 @@ export function BeautyIdeasDashboard() {
                     <Card className="h-full transition hover:shadow-md">
                       <CardContent className="p-4">
                         <div className="flex items-start gap-3">
-                          {h.idea && <ScoreRing score={h.idea.totalScore} size={40} />}
+                          <ScoreRing score={h.briefScore || h.idea?.totalScore || 0} size={40} />
                           <div className="min-w-0 flex-1">
-                            <p className="text-[10px] text-slate-400">{h.reportDate}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[10px] text-slate-400">{h.reportDate}</p>
+                              <span className={cn(
+                                "rounded px-1 py-0.5 text-[9px] font-medium",
+                                h.phase === "deep"
+                                  ? "bg-indigo-50 text-indigo-600"
+                                  : "bg-violet-50 text-violet-600"
+                              )}>
+                                {h.phase === "deep" ? "深度" : "简报"}
+                              </span>
+                            </div>
                             <h4 className="font-semibold text-slate-900 line-clamp-1">
                               {h.productName}
                             </h4>

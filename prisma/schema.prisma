@@ -874,8 +874,19 @@ model TopPickReport {
   launchStrategy       String   @default("")   /// Markdown
   riskAssessment       String   @default("")   /// Markdown
 
-  /// generating / completed / failed
+  /// brief / deep / generating / completed / failed
   status               String   @default("generating")
+  /// brief = phase1 only, deep = phase2 done
+  phase                String   @default("brief")
+  /// User dismissed this pick ("不感兴趣")
+  dismissed            Boolean  @default(false)
+  /// Comma-sep category hints to avoid next time
+  dismissedCategories  String   @default("")
+  /// Brief-phase fields (low token)
+  briefIngredients     String   @default("")   /// comma-sep key ingredients
+  briefCompetition     String   @default("")   /// low/medium/high
+  briefScore           Int      @default(0)    /// AI confidence 1-100
+
   createdBy            String
   creator              User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   createdAt            DateTime @default(now())

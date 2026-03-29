@@ -31,6 +31,7 @@ export async function GET(
       },
     },
   });
+  // All fields are returned via include, including phase/brief/deep fields
 
   if (!report) {
     return NextResponse.json({ message: "方案不存在" }, { status: 404 });

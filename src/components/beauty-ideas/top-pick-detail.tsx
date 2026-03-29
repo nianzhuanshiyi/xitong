@@ -10,6 +10,7 @@ import {
   FlaskConical,
   Loader2,
   Rocket,
+  Search,
   ShieldAlert,
   TrendingUp,
 } from "lucide-react";
@@ -43,6 +44,10 @@ type TopPick = {
   launchStrategy: string;
   riskAssessment: string;
   status: string;
+  phase: string;
+  briefIngredients: string;
+  briefCompetition: string;
+  briefScore: number;
   idea?: {
     totalScore: number;
     recommendation: string;
@@ -79,19 +84,13 @@ function MarkdownBlock({ content }: { content: string }) {
       {content.split("\n").map((line, i) => {
         if (line.startsWith("### "))
           return (
-            <h3
-              key={i}
-              className="mb-2 mt-4 text-base font-semibold text-slate-900"
-            >
+            <h3 key={i} className="mb-2 mt-4 text-base font-semibold text-slate-900">
               {line.slice(4)}
             </h3>
           );
         if (line.startsWith("## "))
           return (
-            <h2
-              key={i}
-              className="mb-2 mt-5 text-lg font-bold text-slate-900"
-            >
+            <h2 key={i} className="mb-2 mt-5 text-lg font-bold text-slate-900">
               {line.slice(3)}
             </h2>
           );
@@ -145,34 +144,14 @@ function ScoreRing({ score, size = 56 }: { score: number; size?: number }) {
   const color = score >= 70 ? "#22c55e" : score >= 50 ? "#eab308" : "#ef4444";
   return (
     <svg width={size} height={size} className="shrink-0">
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={4} />
       <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        stroke="#e2e8f0"
-        strokeWidth={4}
-      />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        stroke={color}
-        strokeWidth={4}
-        strokeLinecap="round"
+        cx={size / 2} cy={size / 2} r={r} fill="none"
+        stroke={color} strokeWidth={4} strokeLinecap="round"
         strokeDasharray={`${pct * c} ${c}`}
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
       />
-      <text
-        x="50%"
-        y="50%"
-        textAnchor="middle"
-        dy="0.35em"
-        fontSize={size * 0.28}
-        fontWeight="bold"
-        fill={color}
-      >
+      <text x="50%" y="50%" textAnchor="middle" dy="0.35em" fontSize={size * 0.28} fontWeight="bold" fill={color}>
         {score}
       </text>
     </svg>
@@ -182,6 +161,7 @@ function ScoreRing({ score, size = 56 }: { score: number; size?: number }) {
 export function TopPickDetail({ id }: { id: string }) {
   const [report, setReport] = useState<TopPick | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deepLoading, setDeepLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>("product");
 
   const load = useCallback(async () => {
@@ -199,9 +179,26 @@ export function TopPickDetail({ id }: { id: string }) {
     }
   }, [id]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
+
+  const handleDeepAnalysis = async () => {
+    if (!report) return;
+    setDeepLoading(true);
+    try {
+      toast.info("AI 正在生成深度分析…", { duration: 30000 });
+      const r = await fetch(`/api/beauty-ideas/top-pick/${id}/deep`, {
+        method: "POST",
+      });
+      const j = await r.json();
+      if (!r.ok) { toast.error(j.message ?? "深度分析失败"); return; }
+      toast.success("深度分析已生成");
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "深度分析失败");
+    } finally {
+      setDeepLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -211,29 +208,18 @@ export function TopPickDetail({ id }: { id: string }) {
     );
   }
   if (!report) {
-    return (
-      <div className="py-20 text-center text-slate-500">方案不存在</div>
-    );
+    return <div className="py-20 text-center text-slate-500">方案不存在</div>;
   }
 
   const idea = report.idea;
-  const rec = idea
-    ? REC_CONFIG[idea.recommendation] ?? REC_CONFIG.watch
-    : null;
+  const rec = idea ? REC_CONFIG[idea.recommendation] ?? REC_CONFIG.watch : null;
+  const isBrief = report.phase === "brief";
 
   let spec: Record<string, string> = {};
-  try {
-    spec = JSON.parse(report.productSpec || "{}");
-  } catch {
-    /* ignore */
-  }
+  try { spec = JSON.parse(report.productSpec || "{}"); } catch { /* ignore */ }
 
   let timeline: TimelineItem[] = [];
-  try {
-    timeline = JSON.parse(report.timelinePlan || "[]");
-  } catch {
-    /* ignore */
-  }
+  try { timeline = JSON.parse(report.timelinePlan || "[]"); } catch { /* ignore */ }
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -248,37 +234,47 @@ export function TopPickDetail({ id }: { id: string }) {
 
       {/* Hero header */}
       <div className="relative overflow-hidden rounded-2xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50 via-purple-50/60 to-pink-50/40 p-6 shadow-sm sm:p-8">
-        <div
-          className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-indigo-300/20 blur-3xl"
-          aria-hidden
-        />
+        <div className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-indigo-300/20 blur-3xl" aria-hidden />
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
-          {idea && <ScoreRing score={idea.totalScore} size={72} />}
+          <ScoreRing score={report.briefScore || idea?.totalScore || 0} size={72} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-heading text-xl font-bold text-slate-900 sm:text-2xl">
                 {report.productName}
               </h1>
+              {isBrief && (
+                <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-700">
+                  简报
+                </span>
+              )}
+              {!isBrief && (
+                <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
+                  深度分析
+                </span>
+              )}
               {rec && (
-                <span
-                  className={cn(
-                    "rounded-full px-2.5 py-0.5 text-xs font-semibold",
-                    rec.color
-                  )}
-                >
+                <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", rec.color)}>
                   {rec.label}
                 </span>
               )}
             </div>
             {report.productNameEn && (
-              <p className="mt-0.5 text-sm text-slate-500">
-                {report.productNameEn}
-              </p>
+              <p className="mt-0.5 text-sm text-slate-500">{report.productNameEn}</p>
             )}
             <p className="mt-2 text-sm leading-relaxed text-slate-700">
               {report.executiveSummary}
             </p>
-            {idea && (
+            {/* Brief-phase extra info */}
+            {isBrief && report.briefIngredients && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {report.briefIngredients.split(",").map((ing, i) => (
+                  <span key={i} className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+                    {ing.trim()}
+                  </span>
+                ))}
+              </div>
+            )}
+            {idea && !isBrief && (
               <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
                 <span>趋势 {idea.trendScore}/25</span>
                 <span>市场 {idea.marketScore}/25</span>
@@ -287,251 +283,265 @@ export function TopPickDetail({ id }: { id: string }) {
               </div>
             )}
           </div>
+          {isBrief && (
+            <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+              <Button
+                onClick={handleDeepAnalysis}
+                disabled={deepLoading}
+                className="gap-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow hover:from-indigo-600 hover:to-purple-600"
+              >
+                {deepLoading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Search className="size-4" />
+                )}
+                {deepLoading ? "分析中…" : "深度分析"}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-1">
-        {TABS.map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            onClick={() => setActiveTab(key)}
-            className={cn(
-              "flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition whitespace-nowrap",
-              activeTab === key
-                ? "bg-white text-indigo-700 shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
-            )}
-          >
-            <Icon className="size-4" />
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* Brief-only view: show summary card */}
+      {isBrief && (
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-center text-slate-500">
+              <Search className="mx-auto size-10 text-slate-300" />
+              <p className="mt-3 text-sm">
+                这是一份简报，点击上方"深度分析"按钮生成完整商业计划
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                包括：产品规格、核心成分、竞品分析、财务预估、供应商方案、上架策略
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Tab content */}
-      <div className="space-y-6">
-        {activeTab === "product" && (
-          <>
-            {/* Spec card */}
-            {Object.keys(spec).length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Box className="size-4" /> 产品规格
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {Object.entries(spec).map(([k, v]) => (
-                      <div key={k} className="rounded-lg bg-slate-50 p-3">
-                        <p className="text-xs font-medium text-slate-500">
-                          {specLabel(k)}
-                        </p>
-                        <p className="mt-0.5 text-sm font-medium text-slate-800">
-                          {Array.isArray(v) ? v.join("、") : String(v)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">核心成分详解</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <MarkdownBlock content={report.keyIngredients} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">配方建议</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <MarkdownBlock content={report.formulaSuggestion} />
-              </CardContent>
-            </Card>
-          </>
-        )}
+      {/* Deep analysis tabs - only show when phase is deep */}
+      {!isBrief && (
+        <>
+          {/* Tabs */}
+          <div className="flex gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-1">
+            {TABS.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition whitespace-nowrap",
+                  activeTab === key
+                    ? "bg-white text-indigo-700 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                )}
+              >
+                <Icon className="size-4" />
+                {label}
+              </button>
+            ))}
+          </div>
 
-        {activeTab === "market" && (
-          <>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">市场分析</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <MarkdownBlock content={report.marketAnalysis} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">竞品分析</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <MarkdownBlock content={report.competitorAnalysis} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">差异化策略</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <MarkdownBlock content={report.differentiationStrategy} />
-              </CardContent>
-            </Card>
-          </>
-        )}
-
-        {activeTab === "finance" && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">财务预估</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <tbody>
-                    {[
-                      ["建议零售价", report.estimatedRetailPrice],
-                      ["预估成本 (COGS)", report.estimatedCogs],
-                      ["预估 FBA 费用", report.estimatedFbaFee],
-                      ["预估广告费/单", report.estimatedAdCost],
-                      ["预估单品利润", report.estimatedProfit],
-                      ["预估利润率", report.estimatedMargin],
-                      [
-                        "盈亏平衡销量",
-                        report.breakEvenUnits
-                          ? `${report.breakEvenUnits} 件/月`
-                          : null,
-                      ],
-                    ]
-                      .filter(([, v]) => v)
-                      .map(([label, value]) => (
-                        <tr key={String(label)} className="border-b last:border-0">
-                          <td className="py-3 pr-4 font-medium text-slate-600">
-                            {String(label)}
-                          </td>
-                          <td className="py-3 text-right font-semibold text-slate-900">
-                            {String(value)}
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Visual margin bar */}
-              {report.estimatedMargin && (
-                <div className="mt-6 rounded-lg bg-slate-50 p-4">
-                  <p className="text-xs font-medium text-slate-500">利润率</p>
-                  <div className="mt-2 flex items-center gap-3">
-                    <div className="h-3 flex-1 rounded-full bg-slate-200">
-                      <div
-                        className={cn(
-                          "h-full rounded-full",
-                          parseFloat(report.estimatedMargin) >= 60
-                            ? "bg-emerald-500"
-                            : parseFloat(report.estimatedMargin) >= 40
-                              ? "bg-amber-500"
-                              : "bg-red-500"
-                        )}
-                        style={{
-                          width: `${Math.min(parseFloat(report.estimatedMargin) || 0, 100)}%`,
-                        }}
-                      />
-                    </div>
-                    <span className="text-lg font-bold text-slate-900">
-                      {report.estimatedMargin}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {activeTab === "execution" && (
-          <>
-            {/* Timeline */}
-            {timeline.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">项目时间线</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="relative space-y-0">
-                    {timeline.map((item, i) => (
-                      <div key={i} className="relative flex gap-4 pb-6 last:pb-0">
-                        {/* Vertical line */}
-                        {i < timeline.length - 1 && (
-                          <div className="absolute left-[15px] top-8 h-full w-0.5 bg-indigo-100" />
-                        )}
-                        {/* Dot */}
-                        <div className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-600 ring-2 ring-white">
-                          {i + 1}
-                        </div>
-                        <div className="min-w-0 flex-1 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-slate-900">
-                              {item.phase}
-                            </span>
-                            <ChevronRight className="size-3 text-slate-400" />
-                            <span className="text-xs font-medium text-indigo-600">
-                              {item.duration}
-                            </span>
+          {/* Tab content */}
+          <div className="space-y-6">
+            {activeTab === "product" && (
+              <>
+                {Object.keys(spec).length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Box className="size-4" /> 产品规格
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {Object.entries(spec).map(([k, v]) => (
+                          <div key={k} className="rounded-lg bg-slate-50 p-3">
+                            <p className="text-xs font-medium text-slate-500">{specLabel(k)}</p>
+                            <p className="mt-0.5 text-sm font-medium text-slate-800">
+                              {Array.isArray(v) ? v.join("、") : String(v)}
+                            </p>
                           </div>
-                          <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                            {item.detail}
-                          </p>
-                        </div>
+                        ))}
                       </div>
-                    ))}
+                    </CardContent>
+                  </Card>
+                )}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">核心成分详解</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <MarkdownBlock content={report.keyIngredients} />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">配方建议</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <MarkdownBlock content={report.formulaSuggestion} />
+                  </CardContent>
+                </Card>
+              </>
+            )}
+
+            {activeTab === "market" && (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">市场分析</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <MarkdownBlock content={report.marketAnalysis} />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">竞品分析</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <MarkdownBlock content={report.competitorAnalysis} />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">差异化策略</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <MarkdownBlock content={report.differentiationStrategy} />
+                  </CardContent>
+                </Card>
+              </>
+            )}
+
+            {activeTab === "finance" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">财务预估</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {[
+                          ["建议零售价", report.estimatedRetailPrice],
+                          ["预估成本 (COGS)", report.estimatedCogs],
+                          ["预估 FBA 费用", report.estimatedFbaFee],
+                          ["预估广告费/单", report.estimatedAdCost],
+                          ["预估单品利润", report.estimatedProfit],
+                          ["预估利润率", report.estimatedMargin],
+                          ["盈亏平衡销量", report.breakEvenUnits ? `${report.breakEvenUnits} 件/月` : null],
+                        ]
+                          .filter(([, v]) => v)
+                          .map(([label, value]) => (
+                            <tr key={String(label)} className="border-b last:border-0">
+                              <td className="py-3 pr-4 font-medium text-slate-600">{String(label)}</td>
+                              <td className="py-3 text-right font-semibold text-slate-900">{String(value)}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
                   </div>
+                  {report.estimatedMargin && (
+                    <div className="mt-6 rounded-lg bg-slate-50 p-4">
+                      <p className="text-xs font-medium text-slate-500">利润率</p>
+                      <div className="mt-2 flex items-center gap-3">
+                        <div className="h-3 flex-1 rounded-full bg-slate-200">
+                          <div
+                            className={cn(
+                              "h-full rounded-full",
+                              parseFloat(report.estimatedMargin) >= 60
+                                ? "bg-emerald-500"
+                                : parseFloat(report.estimatedMargin) >= 40
+                                  ? "bg-amber-500"
+                                  : "bg-red-500"
+                            )}
+                            style={{
+                              width: `${Math.min(parseFloat(report.estimatedMargin) || 0, 100)}%`,
+                            }}
+                          />
+                        </div>
+                        <span className="text-lg font-bold text-slate-900">
+                          {report.estimatedMargin}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">供应商对接方案</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <MarkdownBlock content={report.supplierPlan} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Listing 方案</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <MarkdownBlock content={report.listingPlan} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">上架策略</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <MarkdownBlock content={report.launchStrategy} />
-              </CardContent>
-            </Card>
-          </>
-        )}
+            {activeTab === "execution" && (
+              <>
+                {timeline.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">项目时间线</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="relative space-y-0">
+                        {timeline.map((item, i) => (
+                          <div key={i} className="relative flex gap-4 pb-6 last:pb-0">
+                            {i < timeline.length - 1 && (
+                              <div className="absolute left-[15px] top-8 h-full w-0.5 bg-indigo-100" />
+                            )}
+                            <div className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-600 ring-2 ring-white">
+                              {i + 1}
+                            </div>
+                            <div className="min-w-0 flex-1 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-slate-900">{item.phase}</span>
+                                <ChevronRight className="size-3 text-slate-400" />
+                                <span className="text-xs font-medium text-indigo-600">{item.duration}</span>
+                              </div>
+                              <p className="mt-1 text-xs leading-relaxed text-slate-600">{item.detail}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">供应商对接方案</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <MarkdownBlock content={report.supplierPlan} />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Listing 方案</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <MarkdownBlock content={report.listingPlan} />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">上架策略</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <MarkdownBlock content={report.launchStrategy} />
+                  </CardContent>
+                </Card>
+              </>
+            )}
 
-        {activeTab === "risk" && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">风险评估</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <MarkdownBlock content={report.riskAssessment} />
-            </CardContent>
-          </Card>
-        )}
-      </div>
+            {activeTab === "risk" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">风险评估</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <MarkdownBlock content={report.riskAssessment} />
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Bottom actions */}
       <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4">
