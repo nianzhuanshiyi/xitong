@@ -183,8 +183,13 @@ export async function POST(req: NextRequest) {
       maxTokens: 4096,
     });
 
-    if (!result || !result.productName) {
-      throw new Error("简报生成失败");
+    if (!result) {
+      console.error("[top-pick-brief] ❌ claudeJson 返回 null（API 调用可能失败或返回空）");
+      throw new Error("简报生成失败：Claude API 返回空结果");
+    }
+    if (!result.productName) {
+      console.error("[top-pick-brief] ❌ Claude 返回了 JSON 但缺少 productName, keys:", Object.keys(result));
+      throw new Error("简报生成失败：返回数据缺少产品名称");
     }
 
     // Save trends
@@ -306,13 +311,16 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ report: finalReport, ok: true });
   } catch (e) {
-    console.error("[top-pick-brief]", e);
+    const errMsg = e instanceof Error ? e.message : String(e);
+    const errStack = e instanceof Error ? e.stack : undefined;
+    console.error("[top-pick-brief] ❌ 生成失败:", errMsg);
+    if (errStack) console.error("[top-pick-brief] Stack:", errStack);
     await prisma.topPickReport.update({
       where: { id: report.id },
       data: { status: "failed" },
     });
     return NextResponse.json(
-      { message: e instanceof Error ? e.message : "生成失败" },
+      { message: errMsg || "生成失败" },
       { status: 500 }
     );
   }

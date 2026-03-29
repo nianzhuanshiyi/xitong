@@ -123,8 +123,8 @@ export async function POST(
     });
 
     if (!result1) {
-      console.error("[top-pick-deep] Call 1 返回空");
-      throw new Error("深度分析第一步失败");
+      console.error("[top-pick-deep] ❌ Call 1 返回空（claudeJson 返回 null）");
+      throw new Error("深度分析第一步失败：Claude API 返回空结果");
     }
     console.info("[top-pick-deep] Call 1 完成");
 
@@ -173,8 +173,8 @@ export async function POST(
     });
 
     if (!result2) {
-      console.error("[top-pick-deep] Call 2 返回空");
-      throw new Error("深度分析第二步失败");
+      console.error("[top-pick-deep] ❌ Call 2 返回空（claudeJson 返回 null）");
+      throw new Error("深度分析第二步失败：Claude API 返回空结果");
     }
     console.info("[top-pick-deep] Call 2 完成");
 
@@ -234,14 +234,17 @@ export async function POST(
     console.info(`[top-pick-deep] 完成: ${report.productName}`);
     return NextResponse.json({ report: updated, ok: true });
   } catch (e) {
-    console.error("[top-pick-deep]", e);
+    const errMsg = e instanceof Error ? e.message : String(e);
+    const errStack = e instanceof Error ? e.stack : undefined;
+    console.error("[top-pick-deep] ❌ 深度分析失败:", errMsg);
+    if (errStack) console.error("[top-pick-deep] Stack:", errStack);
     // Restore to completed brief state (not failed) so the brief still shows
     await prisma.topPickReport.update({
       where: { id },
       data: { status: "completed", phase: "brief" },
     });
     return NextResponse.json(
-      { message: e instanceof Error ? e.message : "深度分析失败" },
+      { message: errMsg || "深度分析失败" },
       { status: 500 }
     );
   }
