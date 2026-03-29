@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ChevronDown,
+  Clock,
   Crown,
   FlaskConical,
   Loader2,
@@ -47,9 +48,12 @@ type HistoryItem = {
   productNameEn: string;
   executiveSummary: string;
   estimatedMargin: string | null;
+  estimatedRetailPrice: string | null;
   status: string;
   phase: string;
   briefScore: number;
+  briefCompetition: string;
+  briefIngredients: string;
   createdAt: string;
   idea?: { totalScore: number; recommendation: string } | null;
 };
@@ -116,8 +120,13 @@ export function BeautyIdeasDashboard() {
     try {
       const r = await fetch("/api/beauty-ideas/top-pick");
       const j = await r.json();
-      if (j.report && j.report.status === "completed") {
-        setTopPick(j.report);
+      if (j.report) {
+        // Show report if completed (brief or deep), or generating
+        if (j.report.status === "completed" && !j.report.dismissed) {
+          setTopPick(j.report);
+        } else {
+          setTopPick(null);
+        }
       } else {
         setTopPick(null);
       }
@@ -155,20 +164,26 @@ export function BeautyIdeasDashboard() {
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      toast.info("AI 正在扫描趋势、精选产品…", { duration: 10000 });
+      toast.info("AI 正在扫描趋势、精选产品…", { duration: 60000 });
       const r = await fetch("/api/beauty-ideas/top-pick", { method: "POST" });
       const j = await r.json();
       if (!r.ok) { toast.error(j.message ?? "生成失败"); return; }
       if (j.skipped) {
-        toast.info("今日方案已存在");
+        toast.success("今日方案已存在");
+        // Directly set the returned report
+        if (j.report) setTopPick(j.report);
       } else {
         toast.success(`方案已生成：${j.report?.productName ?? ""}`);
+        // Directly set the returned report
+        if (j.report) setTopPick(j.report);
       }
-      loadAll();
+      // Also reload history
+      await loadHistory();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "生成失败");
     } finally {
       setGenerating(false);
+      toast.dismiss();
     }
   };
 
@@ -176,7 +191,7 @@ export function BeautyIdeasDashboard() {
     if (!topPick) return;
     setDeepLoading(true);
     try {
-      toast.info("AI 正在生成深度分析…", { duration: 30000 });
+      toast.info("AI 正在生成深度分析…", { duration: 60000 });
       const r = await fetch(`/api/beauty-ideas/top-pick/${topPick.id}/deep`, {
         method: "POST",
       });
@@ -208,7 +223,7 @@ export function BeautyIdeasDashboard() {
       if (!r.ok) { toast.error("操作失败"); return; }
       toast.success("已跳过，下次将避开类似品类");
       setTopPick(null);
-      loadAll();
+      await loadAll();
     } catch {
       toast.error("操作失败");
     } finally {
@@ -231,11 +246,13 @@ export function BeautyIdeasDashboard() {
     ? COMPETITION_LABEL[topPick.briefCompetition] ?? null
     : null;
   const isBrief = topPick?.phase === "brief";
+  // Check if report is old format (has completed status but no brief data)
+  const isOldFormat = topPick && topPick.status === "completed" && topPick.briefScore === 0;
 
   return (
     <div className="space-y-6">
       {/* ── Today's Pick (Hero) ──────────────────────────────── */}
-      {topPick ? (
+      {topPick && !isOldFormat ? (
         <div className="relative overflow-hidden rounded-2xl border-2 border-amber-200/80 bg-gradient-to-br from-amber-50 via-orange-50/50 to-yellow-50/30 p-5 shadow-sm sm:p-6">
           <div className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-amber-200/20 blur-3xl" aria-hidden />
           <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -300,6 +317,13 @@ export function BeautyIdeasDashboard() {
                   ))}
                 </div>
               )}
+              {/* Brief price/margin summary */}
+              {isBrief && topPick.estimatedRetailPrice && (
+                <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
+                  <span>预估售价 {topPick.estimatedRetailPrice}</span>
+                  {topPick.estimatedMargin && <span>利润率 {topPick.estimatedMargin}</span>}
+                </div>
+              )}
               {/* Quick financial stats (deep phase) */}
               {!isBrief && topPick.estimatedRetailPrice && (
                 <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
@@ -339,13 +363,11 @@ export function BeautyIdeasDashboard() {
                   </Button>
                 </>
               ) : (
-                <>
-                  <Link href={`/dashboard/beauty-ideas/top-pick/${topPick.id}`}>
-                    <Button className="gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow hover:from-amber-600 hover:to-orange-600">
-                      查看完整方案
-                    </Button>
-                  </Link>
-                </>
+                <Link href={`/dashboard/beauty-ideas/top-pick/${topPick.id}`}>
+                  <Button className="gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow hover:from-amber-600 hover:to-orange-600">
+                    查看完整方案
+                  </Button>
+                </Link>
               )}
               <Button
                 variant="outline"
@@ -361,100 +383,143 @@ export function BeautyIdeasDashboard() {
           </div>
         </div>
       ) : (
+        /* Empty state / Generate button */
         <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-amber-300/60 bg-gradient-to-br from-amber-50/50 to-orange-50/30 p-8 text-center">
           <div className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-amber-200/15 blur-3xl" aria-hidden />
-          <Crown className="mx-auto size-12 text-amber-400/60" />
-          <h3 className="mt-4 font-heading text-lg font-semibold text-slate-700">
-            一键生成今日新品方案
-          </h3>
-          <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
-            AI 自动扫描 Top 5 趋势，精选 1 个最佳方向，生成简报卡片
-            <br />
-            <span className="text-xs text-slate-400">
-              感兴趣再点"深度分析"生成完整落地方案，节省 token
-            </span>
-          </p>
-          <Button
-            onClick={handleGenerate}
-            disabled={generating}
-            size="lg"
-            className="mt-5 gap-2 bg-gradient-to-r from-amber-500 to-orange-500 px-8 text-white shadow-lg hover:from-amber-600 hover:to-orange-600"
-          >
-            {generating ? (
-              <Loader2 className="size-5 animate-spin" />
-            ) : (
-              <Crown className="size-5" />
-            )}
-            {generating ? "AI 分析中，请稍候…" : "生成今日新品方案"}
-          </Button>
+          {generating ? (
+            <>
+              <Loader2 className="mx-auto size-12 animate-spin text-amber-500" />
+              <h3 className="mt-4 font-heading text-lg font-semibold text-slate-700">
+                AI 正在分析中…
+              </h3>
+              <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+                正在扫描 Top 5 美妆趋势，精选最佳产品方向
+              </p>
+              <div className="mx-auto mt-4 h-1.5 w-48 overflow-hidden rounded-full bg-amber-100">
+                <div className="h-full animate-pulse rounded-full bg-gradient-to-r from-amber-400 to-orange-500" style={{ width: "60%" }} />
+              </div>
+            </>
+          ) : (
+            <>
+              <Crown className="mx-auto size-12 text-amber-400/60" />
+              <h3 className="mt-4 font-heading text-lg font-semibold text-slate-700">
+                {isOldFormat ? "重新生成今日方案" : "一键生成今日新品方案"}
+              </h3>
+              <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+                AI 自动扫描 Top 5 趋势，精选 1 个最佳方向，生成简报卡片
+                <br />
+                <span className="text-xs text-slate-400">
+                  感兴趣再点"深度分析"生成完整落地方案，节省 token
+                </span>
+              </p>
+              <Button
+                onClick={handleGenerate}
+                disabled={generating}
+                size="lg"
+                className="mt-5 gap-2 bg-gradient-to-r from-amber-500 to-orange-500 px-8 text-white shadow-lg hover:from-amber-600 hover:to-orange-600"
+              >
+                <Crown className="size-5" />
+                {isOldFormat ? "重新生成（新格式）" : "生成今日新品方案"}
+              </Button>
+            </>
+          )}
         </div>
       )}
 
-      {/* ── History ──────────────────────────────────────────── */}
-      {history.length > 1 && (
-        <div>
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
-            <FlaskConical className="size-4 text-slate-400" />
-            历史方案
-          </h3>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {history
-              .filter((h) => h.id !== topPick?.id && h.status === "completed")
-              .slice(0, 6)
-              .map((h) => {
-                const hRec = h.idea
-                  ? REC_CONFIG[h.idea.recommendation] ?? REC_CONFIG.watch
-                  : null;
-                return (
-                  <Link
-                    key={h.id}
-                    href={`/dashboard/beauty-ideas/top-pick/${h.id}`}
-                    className="block"
-                  >
-                    <Card className="h-full transition hover:shadow-md">
-                      <CardContent className="p-4">
-                        <div className="flex items-start gap-3">
-                          <ScoreRing score={h.briefScore || h.idea?.totalScore || 0} size={40} />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-[10px] text-slate-400">{h.reportDate}</p>
-                              <span className={cn(
-                                "rounded px-1 py-0.5 text-[9px] font-medium",
-                                h.phase === "deep"
-                                  ? "bg-indigo-50 text-indigo-600"
-                                  : "bg-violet-50 text-violet-600"
-                              )}>
-                                {h.phase === "deep" ? "深度" : "简报"}
-                              </span>
-                            </div>
-                            <h4 className="font-semibold text-slate-900 line-clamp-1">
-                              {h.productName}
-                            </h4>
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {hRec && (
-                                <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", hRec.color)}>
-                                  {hRec.label}
-                                </span>
-                              )}
-                              {h.estimatedMargin && (
-                                <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
-                                  {h.estimatedMargin}
-                                </span>
-                              )}
-                            </div>
-                            <p className="mt-1.5 text-xs text-slate-500 line-clamp-2">
-                              {h.executiveSummary}
-                            </p>
-                          </div>
+      {/* ── History Archive ──────────────────────────────────── */}
+      <div>
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
+          <Clock className="size-4 text-slate-400" />
+          历史方案存档
+          {history.length > 0 && (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+              {history.length}
+            </span>
+          )}
+        </h3>
+        {history.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-slate-400">
+              <FlaskConical className="mx-auto mb-2 size-8 text-slate-300" />
+              暂无历史方案，生成第一个方案后将显示在这里
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50/80">
+                <tr>
+                  <th className="px-4 py-2.5 text-left font-medium text-slate-500">日期</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-slate-500">方案标题</th>
+                  <th className="hidden px-4 py-2.5 text-center font-medium text-slate-500 sm:table-cell">评分</th>
+                  <th className="hidden px-4 py-2.5 text-center font-medium text-slate-500 sm:table-cell">推荐</th>
+                  <th className="hidden px-4 py-2.5 text-center font-medium text-slate-500 md:table-cell">阶段</th>
+                  <th className="hidden px-4 py-2.5 text-right font-medium text-slate-500 md:table-cell">利润率</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {history.map((h) => {
+                  const hRec = h.idea
+                    ? REC_CONFIG[h.idea.recommendation] ?? REC_CONFIG.watch
+                    : null;
+                  const score = h.briefScore || h.idea?.totalScore || 0;
+                  return (
+                    <tr
+                      key={h.id}
+                      className="cursor-pointer transition hover:bg-slate-50/80"
+                      onClick={() => { window.location.href = `/dashboard/beauty-ideas/top-pick/${h.id}`; }}
+                    >
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">
+                        {h.reportDate}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-slate-900 line-clamp-1">
+                            {h.productName}
+                          </p>
                         </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                );
-              })}
+                        <p className="mt-0.5 text-xs text-slate-400 line-clamp-1 sm:hidden">
+                          {h.executiveSummary}
+                        </p>
+                      </td>
+                      <td className="hidden px-4 py-3 text-center sm:table-cell">
+                        <span className={cn(
+                          "inline-flex size-8 items-center justify-center rounded-full text-xs font-bold",
+                          score >= 70 ? "bg-emerald-50 text-emerald-700" :
+                          score >= 50 ? "bg-amber-50 text-amber-700" :
+                          "bg-slate-50 text-slate-600"
+                        )}>
+                          {score}
+                        </span>
+                      </td>
+                      <td className="hidden px-4 py-3 text-center sm:table-cell">
+                        {hRec && (
+                          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", hRec.color)}>
+                            {hRec.label}
+                          </span>
+                        )}
+                      </td>
+                      <td className="hidden px-4 py-3 text-center md:table-cell">
+                        <span className={cn(
+                          "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                          h.phase === "deep"
+                            ? "bg-indigo-50 text-indigo-600"
+                            : "bg-violet-50 text-violet-600"
+                        )}>
+                          {h.phase === "deep" ? "深度" : "简报"}
+                        </span>
+                      </td>
+                      <td className="hidden whitespace-nowrap px-4 py-3 text-right text-xs font-medium text-emerald-600 md:table-cell">
+                        {h.estimatedMargin || "-"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* ── Recent Trends (collapsible) ──────────────────────── */}
       {trends.length > 0 && (
@@ -472,7 +537,7 @@ export function BeautyIdeasDashboard() {
                 className="text-xs text-indigo-600 hover:underline"
                 onClick={(e) => e.stopPropagation()}
               >
-                查看全部 →
+                查看全部
               </Link>
             </span>
           </button>

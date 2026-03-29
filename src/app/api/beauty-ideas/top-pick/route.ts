@@ -36,6 +36,17 @@ type BriefResult = {
   searchKeywords: string[];
 };
 
+const ideaSelect = {
+  id: true,
+  totalScore: true,
+  recommendation: true,
+  trendScore: true,
+  marketScore: true,
+  competitionScore: true,
+  profitScore: true,
+  searchVolume: true,
+};
+
 export async function POST(req: NextRequest) {
   // Auth: session (browser) or secret header (cron)
   const secret = req.headers.get("x-auto-sync-secret");
@@ -58,11 +69,30 @@ export async function POST(req: NextRequest) {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  // Already have a non-dismissed brief/deep for today?
+  // Check if force regeneration is requested
+  const body = await req.text();
+  let forceRegenerate = false;
+  try {
+    if (body) {
+      const parsed = JSON.parse(body);
+      forceRegenerate = parsed.force === true;
+    }
+  } catch { /* empty body is fine */ }
+
+  // Already have a completed brief/deep for today?
   const existing = await prisma.topPickReport.findUnique({
     where: { reportDate: today },
+    include: { idea: { select: ideaSelect } },
   });
-  if (existing && existing.status !== "failed" && !existing.dismissed) {
+
+  if (
+    existing &&
+    existing.status === "completed" &&
+    !existing.dismissed &&
+    !forceRegenerate &&
+    // Has valid brief data (not old format)
+    existing.briefScore > 0
+  ) {
     return NextResponse.json({ report: existing, skipped: true });
   }
 
@@ -241,15 +271,7 @@ export async function POST(req: NextRequest) {
 
     const finalReport = await prisma.topPickReport.findUnique({
       where: { id: report.id },
-      include: {
-        idea: {
-          select: {
-            id: true, totalScore: true, recommendation: true,
-            trendScore: true, marketScore: true, competitionScore: true,
-            profitScore: true, searchVolume: true,
-          },
-        },
-      },
+      include: { idea: { select: ideaSelect } },
     });
 
     console.info(`[top-pick-brief] 完成: ${result.productName} (score: ${result.score})`);
@@ -276,19 +298,21 @@ export async function GET() {
     return NextResponse.json({ message: "未登录" }, { status: 401 });
   }
 
-  const report = await prisma.topPickReport.findFirst({
-    where: { dismissed: false },
-    orderBy: { createdAt: "desc" },
-    include: {
-      idea: {
-        select: {
-          id: true, totalScore: true, recommendation: true,
-          trendScore: true, marketScore: true, competitionScore: true,
-          profitScore: true, searchVolume: true,
-        },
-      },
-    },
+  // Try today's report first
+  const today = new Date().toISOString().slice(0, 10);
+  let report = await prisma.topPickReport.findUnique({
+    where: { reportDate: today },
+    include: { idea: { select: ideaSelect } },
   });
+
+  // If no today report or dismissed, get latest non-dismissed
+  if (!report || report.dismissed) {
+    report = await prisma.topPickReport.findFirst({
+      where: { dismissed: false, status: "completed" },
+      orderBy: { createdAt: "desc" },
+      include: { idea: { select: ideaSelect } },
+    });
+  }
 
   return NextResponse.json({ report: report ?? null });
 }
