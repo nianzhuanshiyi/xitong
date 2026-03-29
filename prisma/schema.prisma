@@ -340,6 +340,8 @@ model Supplier {
   supplierDomains   SupplierDomain[]
   actionItems       ActionItem[]
   productAnalyses   ProductAnalysis[]
+
+  @@index([status])
 }
 
 /// 邮件方向
@@ -426,6 +428,7 @@ model Email {
   @@index([supplierId, receivedAt])
   @@index([supplierId, isRead])
   @@index([receivedAt])
+  @@index([isDeleted, receivedAt])
 }
 
 model EmailAttachment {
@@ -456,6 +459,7 @@ model ActionItem {
 
   @@index([supplierId, isCompleted])
   @@index([isCompleted, priority])
+  @@index([isCompleted])
 }
 
 model SupplierDomain {

@@ -127,7 +127,7 @@ export function ProductDevDashboard() {
       const listData = await listRes.json();
       const statsData = await statsRes.json();
       if (!listRes.ok) throw new Error(listData.message ?? "加载失败");
-      setItems(listData);
+      setItems(listData.items ?? listData);
       setStats(statsData);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "加载失败");

@@ -45,6 +45,8 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url);
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "20", 10) || 20));
   const status = searchParams.get("status");
   const priority = searchParams.get("priority");
   const market = searchParams.get("market");
@@ -63,15 +65,40 @@ export async function GET(req: Request) {
   }
 
   try {
-    const rows = await prisma.productDev.findMany({
-      where,
-      orderBy: [{ updatedAt: "desc" }],
-      include: {
-        _count: { select: { tasks: true, logs: true } },
-      },
-    });
+    const [items, total] = await Promise.all([
+      prisma.productDev.findMany({
+        where,
+        orderBy: [{ updatedAt: "desc" }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          name: true,
+          asin: true,
+          category: true,
+          targetMarket: true,
+          status: true,
+          priority: true,
+          targetPrice: true,
+          estimatedCost: true,
+          estimatedProfit: true,
+          moq: true,
+          supplierName: true,
+          sampleStatus: true,
+          imageUrl: true,
+          ideaDate: true,
+          targetLaunchDate: true,
+          actualLaunchDate: true,
+          createdBy: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: { select: { tasks: true, logs: true } },
+        },
+      }),
+      prisma.productDev.count({ where }),
+    ]);
 
-    return NextResponse.json(rows);
+    return NextResponse.json({ items, total, page, pageSize });
   } catch (e) {
     console.error("[product-dev] GET error:", e);
     return NextResponse.json(

@@ -77,8 +77,22 @@ export async function GET(req: Request) {
   const where = buildMailListWhere(searchParams);
   const rows = await prisma.email.findMany({
     where,
-    include: {
-      actionItems: { select: { isCompleted: true } },
+    select: {
+      id: true,
+      supplierId: true,
+      direction: true,
+      subject: true,
+      summaryCn: true,
+      receivedAt: true,
+      isRead: true,
+      isStarred: true,
+      hasAttachments: true,
+      aiBucket: true,
+      messageId: true,
+      inReplyTo: true,
+      referencesIds: true,
+      priority: true,
+      actionItems: { select: { id: true, isCompleted: true } },
     },
     orderBy: { receivedAt: "desc" },
     take: 300,

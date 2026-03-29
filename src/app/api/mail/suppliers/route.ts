@@ -18,7 +18,11 @@ export async function GET() {
   }
 
   const suppliers = await prisma.supplier.findMany({
-    include: {
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      updatedAt: true,
       emails: {
         where: inboxEmailWhere(),
         orderBy: { receivedAt: "desc" },

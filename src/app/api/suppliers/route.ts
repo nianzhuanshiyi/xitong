@@ -40,6 +40,8 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url);
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "20", 10) || 20));
   const countryCode = searchParams.get("countryCode");
   const country = searchParams.get("country");
   const category = searchParams.get("category");
@@ -81,6 +83,7 @@ export async function GET(req: Request) {
 
   const [
     total,
+    filteredTotal,
     activeCount,
     pendingEval,
     usCount,
@@ -89,6 +92,7 @@ export async function GET(req: Request) {
     items,
   ] = await Promise.all([
     prisma.supplier.count(),
+    prisma.supplier.count({ where }),
     prisma.supplier.count({
       where: {
         OR: [{ updatedAt: { gte: t0 } }, { lastActivityAt: { gte: t0 } }],
@@ -101,6 +105,8 @@ export async function GET(req: Request) {
     prisma.supplier.findMany({
       where,
       orderBy,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
       include: {
         _count: { select: { files: true } },
       },
@@ -115,6 +121,9 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     items: shaped,
+    total: filteredTotal,
+    page,
+    pageSize,
     stats: {
       total,
       activeLast3Months: activeCount,
