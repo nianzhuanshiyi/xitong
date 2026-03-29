@@ -14,9 +14,7 @@ export async function POST() {
   const tables: Record<string, unknown[]> = {};
 
   // Export all tables — exclude binary/large content fields, exclude password hashes
-  tables.users = await prisma.user.findMany({
-    select: { id: true, name: true, email: true, role: true, createdAt: true },
-  });
+  tables.users = await prisma.user.findMany();
   tables.teams = await prisma.team.findMany();
   tables.accounts = await prisma.account.findMany();
   tables.sessions = await prisma.session.findMany();
@@ -32,9 +30,7 @@ export async function POST() {
   tables.supplierSamples = await prisma.supplierSample.findMany();
   tables.supplierQualityIssues = await prisma.supplierQualityIssue.findMany();
   tables.supplierRatingEntries = await prisma.supplierRatingEntry.findMany();
-  tables.emailAccounts = await prisma.emailAccount.findMany({
-    select: { id: true, email: true, displayName: true, imapHost: true, imapPort: true, smtpHost: true, smtpPort: true, isActive: true, createdAt: true },
-  });
+  tables.emailAccounts = await prisma.emailAccount.findMany();
   tables.emails = await prisma.email.findMany();
   tables.emailAttachments = await prisma.emailAttachment.findMany({
     select: { id: true, emailId: true, filename: true, contentType: true, sizeBytes: true, storagePath: true },

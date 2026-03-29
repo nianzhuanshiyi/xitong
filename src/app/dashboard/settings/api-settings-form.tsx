@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Database, Download, Eye, EyeOff, Loader2, RefreshCw } from "lucide-react";
+import { Database, Download, Eye, EyeOff, Loader2, RefreshCw, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -407,8 +407,9 @@ export function ApiSettingsForm() {
             导出所有表的数据为 JSON 文件下载到本地，可用于灾难恢复或迁移。
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-wrap gap-3">
           <BackupButton />
+          <ImportButton />
         </CardContent>
       </Card>
     </div>
@@ -452,5 +453,74 @@ function BackupButton() {
       {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
       导出数据库备份
     </Button>
+  );
+}
+
+function ImportButton() {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    setBusy(true);
+    setResult(null);
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      if (!json.tables) {
+        toast.error("无效的备份文件：缺少 tables 字段");
+        return;
+      }
+      const tableCount = Object.keys(json.tables).length;
+      const rowCount = Object.values(json.tables as Record<string, unknown[]>).reduce(
+        (s, arr) => s + (Array.isArray(arr) ? arr.length : 0),
+        0,
+      );
+      if (!confirm(`即将导入 ${tableCount} 个表，共 ${rowCount} 条记录。已存在的记录会自动跳过。确认导入？`)) {
+        return;
+      }
+      const res = await fetch("/api/admin/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: text,
+      });
+      const j = await res.json().catch(() => ({})) as { message?: string; stats?: Record<string, { inserted: number; skipped: number }> };
+      if (!res.ok) {
+        toast.error(j.message ?? "导入失败");
+        return;
+      }
+      toast.success(j.message ?? "导入完成");
+      if (j.stats) {
+        const lines = Object.entries(j.stats)
+          .filter(([, v]) => v.inserted > 0 || v.skipped > 0)
+          .map(([k, v]) => `${k}: +${v.inserted} / 跳过${v.skipped}`)
+          .join("\n");
+        setResult(lines || "无数据变更");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "导入失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <label className="inline-flex">
+        <Button type="button" variant="outline" disabled={busy} className="gap-1.5 pointer-events-none">
+          {busy ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+          导入数据库备份
+        </Button>
+        <input type="file" accept=".json" className="sr-only" onChange={handleFile} disabled={busy} />
+      </label>
+      {result && (
+        <pre className="max-h-40 overflow-auto rounded border bg-slate-50 p-2 text-[11px] text-slate-600">
+          {result}
+        </pre>
+      )}
+    </div>
   );
 }
