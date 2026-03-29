@@ -1,33 +1,11 @@
-const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-
-let autoSyncRunning = false;
-
-async function autoSyncAllAccounts() {
-  if (autoSyncRunning) return;
-  autoSyncRunning = true;
-  try {
-    const { runImapSync } = await import("@/lib/mail/imap-sync");
-    const result = await runImapSync();
-    if (result.imported > 0 || result.analyzed > 0) {
-      console.info(
-        `[auto-sync] 完成: 导入 ${result.imported} 封, AI分析 ${result.analyzed} 封`
-      );
-    }
-    if (result.error) {
-      console.warn(`[auto-sync] 部分失败: ${result.error}`);
-    }
-  } catch (e) {
-    console.error("[auto-sync] 同步异常:", e);
-  } finally {
-    autoSyncRunning = false;
-  }
-}
-
 export async function register() {
+  // Only run on Node.js runtime, not edge
+  if (process.env.NEXT_RUNTIME === "edge") return;
+
   // Seed check
   if (process.env.SKIP_BOOTSTRAP_SEED !== "1") {
-    const { ensureSeedOnEmptyDb } = await import("@/lib/seed-check");
     try {
+      const { ensureSeedOnEmptyDb } = await import("@/lib/seed-check");
       const ran = await ensureSeedOnEmptyDb();
       if (ran) console.info("[seed-check] 已初始化默认账户与预置数据");
     } catch (e) {
@@ -35,13 +13,41 @@ export async function register() {
     }
   }
 
-  // Auto-sync: disabled with DISABLE_AUTO_SYNC=1
+  // Auto-sync via internal API call (avoids bundling Node.js-only IMAP modules)
   if (process.env.DISABLE_AUTO_SYNC === "1") return;
 
-  // Delay first sync 30s after startup to let the server settle
+  const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+  const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+  let running = false;
+
+  async function tick() {
+    if (running) return;
+    running = true;
+    try {
+      const r = await fetch(`${baseUrl}/api/mail/auto-sync`, {
+        method: "POST",
+        headers: {
+          "x-auto-sync-secret": process.env.AUTO_SYNC_SECRET || "__internal__",
+        },
+      });
+      if (r.ok) {
+        const j = await r.json();
+        if (j.imported > 0 || j.analyzed > 0) {
+          console.info(
+            `[auto-sync] 完成: 导入 ${j.imported} 封, AI分析 ${j.analyzed} 封`
+          );
+        }
+      }
+    } catch (e) {
+      console.error("[auto-sync] 请求失败:", e instanceof Error ? e.message : e);
+    } finally {
+      running = false;
+    }
+  }
+
   setTimeout(() => {
     console.info(`[auto-sync] 启动定时同步, 间隔 ${SYNC_INTERVAL_MS / 1000}s`);
-    void autoSyncAllAccounts();
-    setInterval(() => void autoSyncAllAccounts(), SYNC_INTERVAL_MS);
+    void tick();
+    setInterval(() => void tick(), SYNC_INTERVAL_MS);
   }, 30_000);
 }
