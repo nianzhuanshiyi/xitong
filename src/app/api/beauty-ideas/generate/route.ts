@@ -149,7 +149,7 @@ export async function POST() {
     const ideas = await claudeJson<IdeaItem[]>({
       system: SYSTEM_PROMPT,
       user: `以下是最新扫描到的美妆趋势，请为每条趋势生成1-2个新品创意：\n\n${JSON.stringify(trendsForAI, null, 2)}\n\n只返回JSON数组，不要包含任何其他文字说明。`,
-      maxTokens: 8192,
+      maxTokens: 16384,
     });
 
     console.info("[beauty-generate] Claude 返回:", ideas ? `${Array.isArray(ideas) ? ideas.length : typeof ideas} 条` : "null");

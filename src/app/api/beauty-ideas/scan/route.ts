@@ -56,7 +56,7 @@ export async function POST() {
     const trends = await claudeJson<TrendItem[]>({
       system: SYSTEM_PROMPT,
       user: `请扫描当前最新的美妆市场趋势（${new Date().toISOString().slice(0, 10)}），覆盖美国、韩国、中国三个市场。只返回JSON数组，不要包含任何其他文字说明。`,
-      maxTokens: 8192,
+      maxTokens: 16384,
     });
 
     console.info("[beauty-scan] Claude 返回:", trends ? `${Array.isArray(trends) ? trends.length : typeof trends} 条` : "null");
