@@ -232,6 +232,9 @@ export interface MailContextValue {
   selectedAccountId: string;
   setSelectedAccountId: (v: string) => void;
 
+  // List refresh
+  refreshList: () => void;
+
   // Sync state
   syncBusy: boolean;
   syncMail: () => Promise<void>;

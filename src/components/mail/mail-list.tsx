@@ -85,7 +85,7 @@ export function MailList() {
       };
       toast.success(`${labels[action]} (${ids.length} 封)`);
       clearSelection();
-      // Refresh list
+      ctx.refreshList();
       window.dispatchEvent(new Event("xitong-mail-stats-refresh"));
     } finally {
       setBatchBusy(false);

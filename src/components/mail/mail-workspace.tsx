@@ -855,6 +855,7 @@ export function MailWorkspace() {
       aiOpen, setAiOpen, aiTab, setAiTab, aiTranslateIn, setAiTranslateIn,
       aiTranslateOut, setAiTranslateOut, aiDecisionOut, runAiTranslate, runAiDecision,
       asinQ, setAsinQ, freeQ, setFreeQ,
+      refreshList: loadEmails,
       syncBusy, syncMail, syncStep, syncSubtext, syncDoneLabel, syncErrText, lastSyncTime,
       batchSumBusy, batchRegenerateSummaries,
       narrow, mobileStep, setMobileStep,
