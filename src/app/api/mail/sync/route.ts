@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { requireDashboardSession } from "@/lib/supplier-auth";
-import { mailEnvConfigured } from "@/lib/mail/config";
 import {
   runImapSync,
   type SyncProgressPayload,
@@ -14,22 +13,30 @@ function wantsNdjsonStream(req: Request): boolean {
   return accept.includes("application/x-ndjson");
 }
 
+/**
+ * POST /api/mail/sync
+ * 可选 body: { accountId?: string } 指定同步某个邮箱，不传则同步当前用户全部活跃邮箱。
+ */
 export async function POST(req: Request) {
   const session = await requireDashboardSession();
   if (!session) {
     return NextResponse.json({ message: "未登录" }, { status: 401 });
   }
-  const { imap } = mailEnvConfigured();
-  if (!imap) {
-    return NextResponse.json(
-      {
-        ok: false,
-        message:
-          "未配置 IMAP 环境变量，请在 .env 中填写 IMAP_HOST、EMAIL_USER、EMAIL_AUTH_CODE",
-      },
-      { status: 503 }
-    );
+
+  let accountId: string | undefined;
+  try {
+    const body = await req.json().catch(() => ({}));
+    if (body && typeof body.accountId === "string") {
+      accountId = body.accountId;
+    }
+  } catch {
+    // 无 body 也可以
   }
+
+  const syncOptions = {
+    accountId,
+    userId: session.user.id,
+  };
 
   if (wantsNdjsonStream(req)) {
     const encoder = new TextEncoder();
@@ -39,7 +46,7 @@ export async function POST(req: Request) {
           controller.enqueue(encoder.encode(`${JSON.stringify(p)}\n`));
         };
         try {
-          await runImapSync({ onProgress: send });
+          await runImapSync({ ...syncOptions, onProgress: send });
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
           const stack = e instanceof Error ? e.stack : undefined;
@@ -57,7 +64,7 @@ export async function POST(req: Request) {
     });
   }
 
-  const r = await runImapSync();
+  const r = await runImapSync(syncOptions);
   if (r.error) {
     return NextResponse.json(
       {
@@ -67,7 +74,7 @@ export async function POST(req: Request) {
         message: r.error,
         stack: r.errorStack,
       },
-      { status: 502 }
+      { status: 502 },
     );
   }
   return NextResponse.json({

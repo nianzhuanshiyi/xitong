@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Reply,
   Send,
+  Settings,
   Sparkles,
   Star,
   Trash2,
@@ -1385,6 +1386,12 @@ export function MailWorkspace() {
             )}
             批量生成摘要
           </Button>
+          <Link href="/dashboard/mail/accounts">
+            <Button type="button" variant="ghost" size="sm">
+              <Settings className="mr-1 size-3.5" />
+              邮箱设置
+            </Button>
+          </Link>
         </div>
       </div>
 

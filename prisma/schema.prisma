@@ -33,6 +33,7 @@ model User {
   listingDrafts          ListingDraft[]
   imageProjects          ImageProject[]
   assignedActionItems    ActionItem[]            @relation("ActionItemAssignee")
+  emailAccounts          EmailAccount[]
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
 }
@@ -352,9 +353,38 @@ enum MailPriority {
   LOW
 }
 
+/// 邮箱账号配置（每个用户可配置多个邮箱）
+model EmailAccount {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email        String
+  displayName  String?
+  imapHost     String
+  imapPort     Int      @default(993)
+  /// 加密存储的 IMAP 密码/授权码
+  imapPassword String
+  smtpHost     String?
+  smtpPort     Int?     @default(465)
+  /// 加密存储的 SMTP 密码/授权码（为空时复用 imapPassword）
+  smtpPassword String?
+  isActive     Boolean  @default(true)
+  lastSyncAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  emails    Email[]
+  syncState ImapSyncState?
+
+  @@unique([userId, email])
+  @@index([userId, isActive])
+}
+
 /// 供应商邮件
 model Email {
   id              String         @id @default(cuid())
+  accountId       String?
+  account         EmailAccount?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
   supplierId      String?
   supplier        Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   messageId       String         @unique
@@ -389,6 +419,7 @@ model Email {
   attachments EmailAttachment[]
   actionItems ActionItem[]
 
+  @@index([accountId, receivedAt])
   @@index([supplierId, receivedAt])
   @@index([supplierId, isRead])
   @@index([receivedAt])
@@ -433,13 +464,16 @@ model SupplierDomain {
 }
 
 model ImapSyncState {
-  id           String    @id @default(cuid())
-  emailAccount String    @unique
-  lastUid      Int       @default(0)
+  id           String       @id @default(cuid())
+  /// 兼容旧数据：字符串邮箱账号（新数据请用 accountId）
+  emailAccount String?      @unique
+  accountId    String?      @unique
+  account      EmailAccount? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  lastUid      Int          @default(0)
   lastSyncAt   DateTime?
-  status       String    @default("active")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  status       String       @default("active")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 }
 
 model SupplierContact {

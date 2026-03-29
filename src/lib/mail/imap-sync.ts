@@ -6,14 +6,9 @@ import {
   extractDomainFromAddress,
   isPublicEmailDomain,
 } from "@/lib/mail/public-domains";
+import { decryptPassword } from "@/lib/mail/crypto";
 import type { MailSyncStreamEvent } from "@/lib/mail/sync-stream-types";
 import type { MailSummaryJson } from "@/lib/mail/claude-mail";
-
-/**
- * 临时联调：设为 true 时用下方字面量连接 IMAP，排除 .env 对 `$` 的解析问题。
- * 确认能连上后务必改回 false，并删除硬编码密码。
- */
-const IMAP_USE_HARDCODED_AUTH_FOR_DEBUG = true;
 
 function priorityFrom(s: string): MailPriority {
   if (s === "urgent") return MailPriority.URGENT;
@@ -90,14 +85,14 @@ async function resolveSupplierId(fromAddr: string): Promise<string | null> {
   return hit?.supplierId ?? null;
 }
 
-/**
- * IMAP 同步：默认只拉取最近 N 天（测试用），入库后对每封新邮件跑 AI 摘要。
- */
-export async function runImapSync(options?: {
-  onProgress?: (p: SyncProgressPayload) => void;
-  /** 只同步此日期之后的邮件，默认读 MAIL_SYNC_SINCE_DAYS 或 7 */
-  sinceDays?: number;
-}): Promise<{
+/** 同步单个邮箱账号 */
+async function syncOneAccount(
+  accountId: string,
+  options: {
+    onProgress?: (p: SyncProgressPayload) => void;
+    sinceDays: number;
+  },
+): Promise<{
   imported: number;
   analyzed: number;
   aiSkipped?: number;
@@ -106,60 +101,53 @@ export async function runImapSync(options?: {
   errorStack?: string;
   note?: string;
 }> {
-  const emit = options?.onProgress ?? (() => {});
-  const sinceDays =
-    options?.sinceDays ??
-    Number(process.env.MAIL_SYNC_SINCE_DAYS?.trim() || "7");
+  const emit = options.onProgress ?? (() => {});
+  const sinceDays = options.sinceDays;
 
-  const host =
-    process.env.IMAP_HOST?.trim() || "imap.qiye.163.com";
-  const port = Number(process.env.IMAP_PORT?.trim() || "993");
-  /** 网易企业邮 IMAP 标准端口 993，使用 SSL/TLS 直连 */
-  const secure = true;
-
-  const user = IMAP_USE_HARDCODED_AUTH_FOR_DEBUG
-    ? "ceo@zavyrabeauty.com"
-    : (process.env.EMAIL_USER?.trim() ?? "");
-  const pass = IMAP_USE_HARDCODED_AUTH_FOR_DEBUG
-    ? "D7mDWPWtF@bTx9wT"
-    : (process.env.EMAIL_AUTH_CODE?.trim() ?? "");
-
-  if (!host || !user || !pass) {
-    const msg = "未配置 IMAP_HOST / EMAIL_USER / EMAIL_AUTH_CODE";
+  const account = await prisma.emailAccount.findUnique({
+    where: { id: accountId },
+  });
+  if (!account) {
+    const msg = "邮箱账号不存在";
+    emit({ phase: "error", message: msg });
+    return { imported: 0, analyzed: 0, error: msg };
+  }
+  if (!account.isActive) {
+    const msg = `邮箱 ${account.email} 已停用`;
     emit({ phase: "error", message: msg });
     return { imported: 0, analyzed: 0, error: msg };
   }
 
+  let imapPass: string;
+  try {
+    imapPass = decryptPassword(account.imapPassword);
+  } catch {
+    const msg = `邮箱 ${account.email} 密码解密失败，请重新设置密码`;
+    emit({ phase: "error", message: msg });
+    return { imported: 0, analyzed: 0, error: msg };
+  }
+
+  const host = account.imapHost;
+  const port = account.imapPort;
+  const user = account.email;
+  const secure = true;
+
+  // 确保 syncState 存在
   await prisma.imapSyncState.upsert({
-    where: { emailAccount: user },
-    create: { emailAccount: user, lastUid: 0, status: "active" },
+    where: { accountId },
+    create: { accountId, lastUid: 0, status: "active" },
     update: {},
   });
 
-  console.log("[IMAP] 准备连接:", {
-    host,
-    port,
-    secure,
-    sslTls: secure ? "是（ImapFlow secure + TLS 直连）" : "否",
-    user,
-    authCodeLength: pass.length,
-    authSource: IMAP_USE_HARDCODED_AUTH_FOR_DEBUG
-      ? "hardcoded-debug（联调完请改回环境变量）"
-      : "env",
-  });
+  console.log("[IMAP] 准备连接:", { host, port, secure, user, accountId });
 
   const client = new ImapFlow({
     host,
     port,
     secure,
-    auth: {
-      user,
-      pass,
-    },
+    auth: { user, pass: imapPass },
     logger: false,
-    tls: {
-      rejectUnauthorized: false,
-    },
+    tls: { rejectUnauthorized: false },
   });
 
   let imported = 0;
@@ -167,53 +155,38 @@ export async function runImapSync(options?: {
   const newEmailIds: string[] = [];
   let imapError: string | null = null;
   let imapErrorStack: string | undefined;
-  /** 搜索窗口内一封 UID 都没有（已 emit done） */
   let inboxHadNoUids = false;
 
   try {
-    emit({ phase: "connect", message: "连接中…" });
+    emit({ phase: "connect", message: `连接 ${user}…` });
     await client.connect();
     console.log("[IMAP] 连接成功:", { host, port, secure, user });
 
-    const lock: Awaited<ReturnType<ImapFlow["getMailboxLock"]>> | undefined =
-      await client.getMailboxLock("INBOX");
+    const lock = await client.getMailboxLock("INBOX");
     try {
       const since = new Date(Date.now() - sinceDays * 86400000);
-      emit({
-        phase: "fetch",
-        message: `拉取邮件（最近 ${sinceDays} 天）…`,
-      });
+      emit({ phase: "fetch", message: `拉取 ${user} 邮件（最近 ${sinceDays} 天）…` });
 
       const raw = await client.search({ since });
       const uids = Array.isArray(raw) ? [...raw].sort((a, b) => a - b) : [];
 
       if (uids.length === 0) {
         await prisma.imapSyncState.update({
-          where: { emailAccount: user },
+          where: { accountId },
           data: { lastSyncAt: new Date() },
         });
-        const note = `最近 ${sinceDays} 天内无邮件`;
-        emit({
-          phase: "done",
-          imported: 0,
-          analyzed: 0,
-          note,
-          message: "完成（共 0 封）",
+        await prisma.emailAccount.update({
+          where: { id: accountId },
+          data: { lastSyncAt: new Date() },
         });
+        const note = `${user}: 最近 ${sinceDays} 天内无邮件`;
+        emit({ phase: "done", imported: 0, analyzed: 0, note, message: "完成（共 0 封）" });
         inboxHadNoUids = true;
       } else {
         let fetchIdx = 0;
-        for await (const msg of client.fetch(uids, {
-          uid: true,
-          source: true,
-        })) {
+        for await (const msg of client.fetch(uids, { uid: true, source: true })) {
           fetchIdx += 1;
-          emit({
-            phase: "fetch",
-            message: "拉取邮件…",
-            current: fetchIdx,
-            total: uids.length,
-          });
+          emit({ phase: "fetch", message: `拉取 ${user} 邮件…`, current: fetchIdx, total: uids.length });
 
           if (!msg.source || !msg.uid) continue;
 
@@ -228,25 +201,18 @@ export async function runImapSync(options?: {
           });
           if (exists) continue;
 
-          const fromAddr =
-            parsed.from?.value?.[0]?.address ||
-            parsed.from?.text ||
-            "unknown@unknown";
+          const fromAddr = parsed.from?.value?.[0]?.address || parsed.from?.text || "unknown@unknown";
           const toAddr = parsed.to?.value?.[0]?.address || user;
           const supplierId = await resolveSupplierId(fromAddr);
           const bodyText = parsed.text || "";
-          const bodyHtml =
-            typeof parsed.html === "string" ? parsed.html : null;
+          const bodyHtml = typeof parsed.html === "string" ? parsed.html : null;
 
           const refs = parsed.references;
           const referencesIds =
-            refs == null
-              ? null
-              : typeof refs === "string"
-                ? refs
-                : Array.isArray(refs)
-                  ? refs.join(" ")
-                  : String(refs);
+            refs == null ? null
+            : typeof refs === "string" ? refs
+            : Array.isArray(refs) ? refs.join(" ")
+            : String(refs);
 
           const inReply =
             typeof parsed.inReplyTo === "string"
@@ -255,6 +221,7 @@ export async function runImapSync(options?: {
 
           const row = await prisma.email.create({
             data: {
+              accountId,
               messageId,
               inReplyTo: inReply,
               referencesIds,
@@ -282,27 +249,22 @@ export async function runImapSync(options?: {
         }
 
         const maxUid = uids.length ? Math.max(...uids) : 0;
+        const syncData: { lastSyncAt: Date; lastUid?: number } = { lastSyncAt: new Date() };
         if (maxUid > 0) {
-          const st = await prisma.imapSyncState.findUnique({
-            where: { emailAccount: user },
-          });
-          const nextLast = Math.max(st?.lastUid ?? 0, maxUid);
-          await prisma.imapSyncState.update({
-            where: { emailAccount: user },
-            data: { lastUid: nextLast, lastSyncAt: new Date() },
-          });
-        } else {
-          await prisma.imapSyncState.update({
-            where: { emailAccount: user },
-            data: { lastSyncAt: new Date() },
-          });
+          const st = await prisma.imapSyncState.findUnique({ where: { accountId } });
+          syncData.lastUid = Math.max(st?.lastUid ?? 0, maxUid);
         }
+        await prisma.imapSyncState.update({ where: { accountId }, data: syncData });
+        await prisma.emailAccount.update({
+          where: { id: accountId },
+          data: { lastSyncAt: new Date() },
+        });
       }
     } finally {
       lock?.release();
     }
   } catch (e) {
-    logImapDiagnostics("IMAP 同步异常（外层 catch）", e);
+    logImapDiagnostics(`IMAP 同步异常（${user}）`, e);
     const message = e instanceof Error ? e.message : String(e);
     const stack = e instanceof Error ? e.stack : undefined;
     emit({ phase: "error", message, stack });
@@ -317,83 +279,124 @@ export async function runImapSync(options?: {
   }
 
   if (imapError) {
-    return {
-      imported,
-      analyzed,
-      error: imapError,
-      errorStack: imapErrorStack,
-    };
+    return { imported, analyzed, error: imapError, errorStack: imapErrorStack };
   }
 
   if (inboxHadNoUids) {
-    return {
-      imported: 0,
-      analyzed: 0,
-      note: `最近 ${sinceDays} 天内无邮件`,
-    };
+    return { imported: 0, analyzed: 0, note: `${user}: 最近 ${sinceDays} 天内无邮件` };
   }
 
   if (newEmailIds.length === 0) {
-    const note = `最近 ${sinceDays} 天内无新邮件（或均已入库）`;
-    emit({
-      phase: "done",
-      imported: 0,
-      analyzed: 0,
-      note,
-      message: "完成（共 0 封）",
-    });
+    const note = `${user}: 最近 ${sinceDays} 天内无新邮件（或均已入库）`;
+    emit({ phase: "done", imported: 0, analyzed: 0, note, message: "完成（共 0 封）" });
     return { imported: 0, analyzed: 0, note };
   }
 
+  // AI 分析
   const totalAi = newEmailIds.length;
   let aiSuccess = 0;
   let aiSkipped = 0;
   let aiFailed = 0;
 
-  emit({
-    phase: "ai",
-    message: "AI 分析中…",
-    current: 0,
-    total: totalAi,
-  });
+  emit({ phase: "ai", message: "AI 分析中…", current: 0, total: totalAi });
 
   for (let i = 0; i < newEmailIds.length; i++) {
-    const id = newEmailIds[i]!;
-    const r = await applyAiSummaryToEmail(id);
+    const eid = newEmailIds[i]!;
+    const r = await applyAiSummaryToEmail(eid);
     if (r === "success" || r === "already") aiSuccess += 1;
     else if (r === "skipped_empty" || r === "skipped_short") aiSkipped += 1;
     else if (r === "failed") aiFailed += 1;
 
-    emit({
-      phase: "ai",
-      message: "AI 分析中…",
-      current: i + 1,
-      total: totalAi,
-    });
+    emit({ phase: "ai", message: "AI 分析中…", current: i + 1, total: totalAi });
   }
 
   analyzed = aiSuccess;
-  const note =
-    imported === 0
-      ? `最近 ${sinceDays} 天内无新邮件（或均已入库）`
-      : `新入库 ${imported} 封；AI：成功 ${aiSuccess} 封，跳过 ${aiSkipped} 封，失败 ${aiFailed} 封`;
+  const note = `${user}: 新入库 ${imported} 封；AI：成功 ${aiSuccess}，跳过 ${aiSkipped}，失败 ${aiFailed}`;
+  emit({ phase: "done", imported, analyzed: aiSuccess, aiSkipped, aiFailed, note, message: `完成（共 ${imported} 封）` });
 
-  emit({
-    phase: "done",
-    imported,
-    analyzed: aiSuccess,
-    aiSkipped,
-    aiFailed,
-    note,
-    message: `完成（共 ${imported} 封）`,
-  });
+  return { imported, analyzed: aiSuccess, aiSkipped, aiFailed, note };
+}
+
+/**
+ * 同步邮件：支持指定账号 ID 或同步当前用户全部活跃账号。
+ */
+export async function runImapSync(options?: {
+  onProgress?: (p: SyncProgressPayload) => void;
+  sinceDays?: number;
+  /** 指定同步某个 EmailAccount ID */
+  accountId?: string;
+  /** 同步某个用户的全部活跃邮箱 */
+  userId?: string;
+}): Promise<{
+  imported: number;
+  analyzed: number;
+  aiSkipped?: number;
+  aiFailed?: number;
+  error?: string;
+  errorStack?: string;
+  note?: string;
+}> {
+  const sinceDays =
+    options?.sinceDays ?? Number(process.env.MAIL_SYNC_SINCE_DAYS?.trim() || "7");
+
+  // 确定要同步的账号列表
+  let accountIds: string[] = [];
+
+  if (options?.accountId) {
+    accountIds = [options.accountId];
+  } else if (options?.userId) {
+    const accounts = await prisma.emailAccount.findMany({
+      where: { userId: options.userId, isActive: true },
+      select: { id: true },
+    });
+    accountIds = accounts.map((a) => a.id);
+  } else {
+    // 没有指定 → 同步所有活跃邮箱
+    const accounts = await prisma.emailAccount.findMany({
+      where: { isActive: true },
+      select: { id: true },
+    });
+    accountIds = accounts.map((a) => a.id);
+  }
+
+  if (accountIds.length === 0) {
+    const msg = "没有可同步的邮箱账号，请先在邮件设置中添加邮箱";
+    options?.onProgress?.({ phase: "error", message: msg });
+    return { imported: 0, analyzed: 0, error: msg };
+  }
+
+  let totalImported = 0;
+  let totalAnalyzed = 0;
+  let totalAiSkipped = 0;
+  let totalAiFailed = 0;
+  const notes: string[] = [];
+  let lastError: string | undefined;
+  let lastErrorStack: string | undefined;
+
+  for (const aid of accountIds) {
+    const r = await syncOneAccount(aid, {
+      onProgress: options?.onProgress,
+      sinceDays,
+    });
+    totalImported += r.imported;
+    totalAnalyzed += r.analyzed ?? 0;
+    totalAiSkipped += r.aiSkipped ?? 0;
+    totalAiFailed += r.aiFailed ?? 0;
+    if (r.note) notes.push(r.note);
+    if (r.error) {
+      lastError = r.error;
+      lastErrorStack = r.errorStack;
+    }
+  }
 
   return {
-    imported,
-    analyzed: aiSuccess,
-    aiSkipped,
-    aiFailed,
-    note,
+    imported: totalImported,
+    analyzed: totalAnalyzed,
+    aiSkipped: totalAiSkipped,
+    aiFailed: totalAiFailed,
+    note: notes.join("; ") || undefined,
+    error: lastError,
+    errorStack: lastErrorStack,
   };
 }
 
