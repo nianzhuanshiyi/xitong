@@ -581,3 +581,83 @@ model IntegrationSecret {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
+
+// ─── 产品开发模块 ───────────────────────────────────────────
+
+/// 产品开发项目
+model ProductDev {
+  id               String   @id @default(cuid())
+  name             String
+  asin             String?
+  category         String?
+  targetMarket     String   @default("US")
+  /// idea / research / sampling / testing / listing / launched / abandoned
+  status           String   @default("idea")
+  /// low / medium / high / urgent
+  priority         String   @default("medium")
+  description      String?
+  targetPrice      Float?
+  estimatedCost    Float?
+  estimatedProfit  Float?
+  moq              Int?
+  /// JSON 数组：竞品 ASIN 列表
+  competitorAsins  String?
+  marketSize       String?
+  competitionLevel String?
+  supplierName     String?
+  supplierContact  String?
+  /// not_ordered / ordered / received / approved / rejected
+  sampleStatus     String?
+  sampleCost       Float?
+  /// 差异化卖点
+  diffPoints       String?
+  /// 用户痛点
+  painPoints       String?
+  ideaDate         DateTime @default(now())
+  targetLaunchDate DateTime?
+  actualLaunchDate DateTime?
+  notes            String?
+  imageUrl         String?
+  createdBy        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tasks ProductDevTask[]
+  logs  ProductDevLog[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([createdBy])
+}
+
+/// 产品开发任务
+model ProductDevTask {
+  id          String   @id @default(cuid())
+  productId   String
+  product     ProductDev @relation(fields: [productId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  /// todo / in_progress / done
+  status      String   @default("todo")
+  assignee    String?
+  dueDate     DateTime?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([productId, sortOrder])
+}
+
+/// 产品开发操作日志
+model ProductDevLog {
+  id        String   @id @default(cuid())
+  productId String
+  product   ProductDev @relation(fields: [productId], references: [id], onDelete: Cascade)
+  action    String
+  content   String
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, createdAt])
+}
