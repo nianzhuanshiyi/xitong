@@ -52,10 +52,14 @@ export async function POST() {
   }
 
   try {
+    console.info("[beauty-scan] 开始调用 Claude API...");
     const trends = await claudeJson<TrendItem[]>({
       system: SYSTEM_PROMPT,
-      user: `请扫描当前最新的美妆市场趋势（${new Date().toISOString().slice(0, 10)}），覆盖美国、韩国、中国三个市场。返回JSON数组。`,
+      user: `请扫描当前最新的美妆市场趋势（${new Date().toISOString().slice(0, 10)}），覆盖美国、韩国、中国三个市场。只返回JSON数组，不要包含任何其他文字说明。`,
+      maxTokens: 8192,
     });
+
+    console.info("[beauty-scan] Claude 返回:", trends ? `${Array.isArray(trends) ? trends.length : typeof trends} 条` : "null");
 
     if (!trends || !Array.isArray(trends)) {
       return NextResponse.json({ message: "AI 返回数据格式错误" }, { status: 500 });

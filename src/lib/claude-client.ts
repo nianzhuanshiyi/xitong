@@ -1,8 +1,14 @@
 import { getClaudeApiKey } from "@/lib/integration-keys";
 
 export function extractJsonBlock(text: string): string {
+  // Try fenced code block first
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fence?.[1]) return fence[1].trim();
+  // Try to find a JSON array or object in the text
+  const arrMatch = text.match(/(\[[\s\S]*\])/);
+  if (arrMatch?.[1]) return arrMatch[1].trim();
+  const objMatch = text.match(/(\{[\s\S]*\})/);
+  if (objMatch?.[1]) return objMatch[1].trim();
   return text.trim();
 }
 
@@ -109,12 +115,18 @@ export async function claudeMessagesBlocks(params: {
 export async function claudeJson<T>(params: {
   system: string;
   user: string;
+  maxTokens?: number;
 }): Promise<T | null> {
-  const raw = await claudeMessages({ ...params, maxTokens: 4096 });
-  if (!raw) return null;
+  const raw = await claudeMessages({ ...params, maxTokens: params.maxTokens ?? 8192 });
+  if (!raw) {
+    console.warn("[claudeJson] Claude 返回空内容");
+    return null;
+  }
   try {
     return JSON.parse(extractJsonBlock(raw)) as T;
-  } catch {
+  } catch (e) {
+    console.error("[claudeJson] JSON 解析失败:", e instanceof Error ? e.message : e);
+    console.error("[claudeJson] 原始返回 (前500字):", raw.slice(0, 500));
     return null;
   }
 }
