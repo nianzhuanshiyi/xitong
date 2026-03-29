@@ -3,11 +3,26 @@ import { prisma } from "@/lib/prisma";
 /** 环境变量优先于数据库（便于生产用托管密钥） */
 export async function getClaudeApiKey(): Promise<string | null> {
   const env = process.env.CLAUDE_API_KEY?.trim();
-  if (env) return env;
-  const row = await prisma.integrationSecret.findUnique({
-    where: { id: "default" },
-  });
-  return row?.claudeApiKey?.trim() || null;
+  if (env) {
+    console.info("[getClaudeApiKey] 使用环境变量 CLAUDE_API_KEY");
+    return env;
+  }
+  console.info("[getClaudeApiKey] 环境变量 CLAUDE_API_KEY 未设置，尝试数据库回退...");
+  try {
+    const row = await prisma.integrationSecret.findUnique({
+      where: { id: "default" },
+    });
+    const dbKey = row?.claudeApiKey?.trim() || null;
+    if (dbKey) {
+      console.info("[getClaudeApiKey] 使用数据库中的 claudeApiKey");
+    } else {
+      console.warn("[getClaudeApiKey] ⚠ 数据库中也未找到 claudeApiKey");
+    }
+    return dbKey;
+  } catch (e) {
+    console.error("[getClaudeApiKey] ❌ 查询数据库失败:", e instanceof Error ? e.message : e);
+    return null;
+  }
 }
 
 export async function getSellerspriteSecret(): Promise<string | null> {

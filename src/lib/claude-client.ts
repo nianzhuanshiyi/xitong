@@ -17,11 +17,26 @@ export async function claudeMessages(params: {
   user: string;
   maxTokens?: number;
 }): Promise<string | null> {
-  const key = await getClaudeApiKey();
-  if (!key) return null;
+  let key: string | null = null;
+  try {
+    key = await getClaudeApiKey();
+  } catch (e) {
+    console.error("[claudeMessages] 获取 API Key 异常:", e instanceof Error ? e.message : e);
+    throw new Error(`获取 Claude API Key 失败: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  if (!key) {
+    const envSet = !!process.env.CLAUDE_API_KEY;
+    console.error(
+      `[claudeMessages] ❌ Claude API Key 为空! env CLAUDE_API_KEY ${envSet ? "已设置但为空串" : "未设置"}, 数据库回退也未找到`
+    );
+    throw new Error("未配置 Claude API Key（环境变量 CLAUDE_API_KEY 未设置或为空）");
+  }
 
   const model =
     process.env.CLAUDE_ANALYSIS_MODEL?.trim() || "claude-sonnet-4-20250514";
+
+  console.info(`[claudeMessages] 调用 Claude API, model=${model}, maxTokens=${params.maxTokens ?? 4096}, key前10位=${key.slice(0, 10)}...`);
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -40,12 +55,14 @@ export async function claudeMessages(params: {
 
   const text = await res.text();
   if (!res.ok) {
+    console.error(`[claudeMessages] ❌ API 返回 ${res.status}: ${text.slice(0, 500)}`);
     try {
-      const j = JSON.parse(text) as { error?: { message?: string } };
-      throw new Error(j.error?.message ?? text.slice(0, 200));
+      const j = JSON.parse(text) as { error?: { message?: string; type?: string } };
+      const errMsg = j.error?.message ?? text.slice(0, 200);
+      throw new Error(`Claude API ${res.status}: ${errMsg}`);
     } catch (e) {
-      if (e instanceof Error && e.message !== text.slice(0, 200)) throw e;
-      throw new Error(text.slice(0, 200));
+      if (e instanceof Error && e.message.startsWith("Claude API")) throw e;
+      throw new Error(`Claude API ${res.status}: ${text.slice(0, 200)}`);
     }
   }
 
@@ -57,10 +74,15 @@ export async function claudeMessages(params: {
 
   // Log if truncated
   if (data.stop_reason === "max_tokens") {
-    console.warn(`[claudeMessages] 输出被截断 (max_tokens), stop_reason=${data.stop_reason}`);
+    console.warn(`[claudeMessages] ⚠ 输出被截断 (max_tokens)`);
   }
 
-  return block?.text ?? null;
+  const result = block?.text ?? null;
+  if (!result) {
+    console.warn("[claudeMessages] ⚠ API 返回成功但无文本内容, stop_reason=", data.stop_reason);
+  }
+
+  return result;
 }
 
 type ClaudeContentBlock =
@@ -124,9 +146,10 @@ export async function claudeJson<T>(params: {
   user: string;
   maxTokens?: number;
 }): Promise<T | null> {
+  // claudeMessages now throws on missing key / API errors — let it propagate
   const raw = await claudeMessages({ ...params, maxTokens: params.maxTokens ?? 16384 });
   if (!raw) {
-    console.warn("[claudeJson] Claude 返回空内容");
+    console.warn("[claudeJson] ⚠ Claude 返回空文本（API 成功但无内容）");
     return null;
   }
   const jsonStr = extractJsonBlock(raw);
