@@ -1,10 +1,13 @@
-import { SectionPlaceholder } from "@/components/dashboard/section-placeholder";
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+import { authOptions } from "@/lib/auth";
+import { InviteCodesManagement } from "./invite-codes-management";
 
-export default function InviteCodesPage() {
-  return (
-    <SectionPlaceholder
-      title="邀请码管理"
-      description="创建与管理注册邀请码（数据模型已预留 InviteCode，页面待开发）。"
-    />
-  );
+export const dynamic = "force-dynamic";
+
+export default async function InviteCodesPage() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) redirect("/login");
+  if (session.user.role !== "ADMIN") redirect("/dashboard");
+  return <InviteCodesManagement />;
 }

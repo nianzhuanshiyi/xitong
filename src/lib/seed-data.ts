@@ -122,6 +122,25 @@ export async function runSeedData(prisma: PrismaClient): Promise<void> {
     },
   });
 
+  const ceoHash = await bcrypt.hash("WYTWr521", 10);
+  await prisma.user.upsert({
+    where: { email: "ceo@zavyrabeauty.com" },
+    update: {
+      password: ceoHash,
+      role: "ADMIN",
+      aiAuthorized: true,
+      teamId: team.id,
+    },
+    create: {
+      email: "ceo@zavyrabeauty.com",
+      name: "管理员",
+      password: ceoHash,
+      role: "ADMIN",
+      aiAuthorized: true,
+      teamId: team.id,
+    },
+  });
+
   const staffHash = await bcrypt.hash("staff123", 10);
   await prisma.user.upsert({
     where: { email: "staff@example.com" },

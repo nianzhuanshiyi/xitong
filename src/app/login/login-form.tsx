@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -98,10 +99,11 @@ export function LoginForm() {
               {loading ? "登录中…" : "登录"}
             </Button>
           </form>
-          <p className="mt-5 text-center text-xs leading-relaxed text-slate-500">
-            开发环境默认：
-            <span className="font-mono text-slate-700"> admin@example.com </span>/
-            <span className="font-mono text-slate-700"> admin123</span>
+          <p className="mt-5 text-center text-sm text-slate-500">
+            没有账号？{" "}
+            <Link href="/register" className="font-medium text-indigo-600 hover:text-indigo-500">
+              使用邀请码注册
+            </Link>
           </p>
         </CardContent>
       </Card>
