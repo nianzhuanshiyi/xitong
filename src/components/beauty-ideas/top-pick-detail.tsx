@@ -626,7 +626,7 @@ export function TopPickDetail({ id }: { id: string }) {
             <Search className="size-8 shrink-0 text-indigo-400" />
             <div className="flex-1 text-center sm:text-left">
               <p className="text-sm font-medium text-slate-700">
-                这是一份简报，点击"深度分析"生成完整商业计划
+                这是一份简报，点击&quot;深度分析&quot;生成完整商业计划
               </p>
               <p className="mt-0.5 text-xs text-slate-500">
                 包括：产品规格、核心成分详解、竞品分析、财务预估、供应商方案、上架策略
