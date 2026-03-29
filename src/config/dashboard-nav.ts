@@ -8,6 +8,7 @@ import {
   LineChart,
   Sparkles,
   FlaskConical,
+  Cpu,
   FileText,
   ImageIcon,
   Package,
@@ -65,6 +66,12 @@ export const dashboardNav: DashboardNavItem[] = [
     label: "美妆新品创意",
     title: "美妆新品创意",
     Icon: FlaskConical,
+  },
+  {
+    href: "/dashboard/3c-ideas",
+    label: "3C新品创意",
+    title: "3C新品创意",
+    Icon: Cpu,
   },
   {
     href: "/dashboard/listing",
