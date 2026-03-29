@@ -62,15 +62,23 @@ export async function GET(req: Request) {
     ];
   }
 
-  const rows = await prisma.productDev.findMany({
-    where,
-    orderBy: [{ updatedAt: "desc" }],
-    include: {
-      _count: { select: { tasks: true, logs: true } },
-    },
-  });
+  try {
+    const rows = await prisma.productDev.findMany({
+      where,
+      orderBy: [{ updatedAt: "desc" }],
+      include: {
+        _count: { select: { tasks: true, logs: true } },
+      },
+    });
 
-  return NextResponse.json(rows);
+    return NextResponse.json(rows);
+  } catch (e) {
+    console.error("[product-dev] GET error:", e);
+    return NextResponse.json(
+      { message: "查询失败", detail: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
+  }
 }
 
 /** POST /api/product-dev — 新建产品开发项目 */
@@ -95,23 +103,31 @@ export async function POST(req: Request) {
     );
   }
 
-  const data = parsed.data;
-  const row = await prisma.productDev.create({
-    data: {
-      ...data,
-      createdBy: session.user.id,
-    },
-  });
+  try {
+    const data = parsed.data;
+    const row = await prisma.productDev.create({
+      data: {
+        ...data,
+        createdBy: session.user.id,
+      },
+    });
 
-  // 写日志
-  await prisma.productDevLog.create({
-    data: {
-      productId: row.id,
-      action: "create",
-      content: `创建产品开发项目「${row.name}」`,
-      createdBy: session.user.id,
-    },
-  });
+    // 写日志
+    await prisma.productDevLog.create({
+      data: {
+        productId: row.id,
+        action: "create",
+        content: `创建产品开发项目「${row.name}」`,
+        createdBy: session.user.id,
+      },
+    });
 
-  return NextResponse.json(row, { status: 201 });
+    return NextResponse.json(row, { status: 201 });
+  } catch (e) {
+    console.error("[product-dev] POST error:", e);
+    return NextResponse.json(
+      { message: "创建失败", detail: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
+  }
 }

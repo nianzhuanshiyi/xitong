@@ -11,26 +11,33 @@ export async function GET() {
     return NextResponse.json({ message: "未登录" }, { status: 401 });
   }
 
-  const statuses = [
-    "idea",
-    "research",
-    "sampling",
-    "testing",
-    "listing",
-    "launched",
-    "abandoned",
-  ] as const;
+  try {
+    const statuses = [
+      "idea",
+      "research",
+      "sampling",
+      "testing",
+      "listing",
+      "launched",
+      "abandoned",
+    ] as const;
 
-  const counts = await Promise.all(
-    statuses.map((s) => prisma.productDev.count({ where: { status: s } })),
-  );
+    const [total, ...counts] = await Promise.all([
+      prisma.productDev.count(),
+      ...statuses.map((s) => prisma.productDev.count({ where: { status: s } })),
+    ]);
 
-  const total = await prisma.productDev.count();
+    const byStatus: Record<string, number> = {};
+    statuses.forEach((s, i) => {
+      byStatus[s] = counts[i];
+    });
 
-  const byStatus: Record<string, number> = {};
-  statuses.forEach((s, i) => {
-    byStatus[s] = counts[i];
-  });
-
-  return NextResponse.json({ total, byStatus });
+    return NextResponse.json({ total, byStatus });
+  } catch (e) {
+    console.error("[product-dev/stats] GET error:", e);
+    return NextResponse.json(
+      { message: "统计查询失败", detail: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
+  }
 }
