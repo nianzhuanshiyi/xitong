@@ -97,7 +97,7 @@ export function AnalysisMarkdown({ content }: { content: string }) {
               return (
                 <code
                   className={cn(
-                    "block max-w-full overflow-x-auto font-mono text-xs text-slate-100",
+                    "block max-w-full overflow-x-auto font-mono text-xs text-gray-800",
                     className
                   )}
                   {...props}
@@ -108,7 +108,7 @@ export function AnalysisMarkdown({ content }: { content: string }) {
             }
             return (
               <code
-                className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-800"
+                className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-sm text-gray-800"
                 {...props}
               >
                 {children}
@@ -117,7 +117,7 @@ export function AnalysisMarkdown({ content }: { content: string }) {
           },
           pre: ({ children, ...props }) => (
             <pre
-              className="my-3 max-w-full overflow-x-auto rounded-lg bg-slate-900/90 p-3 text-xs text-slate-100 [&>code]:bg-transparent [&>code]:p-0"
+              className="my-3 max-w-full overflow-x-auto rounded-lg border bg-gray-50 p-4 text-xs text-gray-800 [&>code]:bg-transparent [&>code]:p-0"
               {...props}
             >
               {children}
