@@ -1280,3 +1280,15 @@ model AiMessage {
   model          String?
   createdAt      DateTime       @default(now())
 }
+
+model AiTokenUsage {
+  id            String   @id @default(cuid())
+  userId        String
+  module        String
+  model         String
+  inputTokens   Int
+  outputTokens  Int
+  totalTokens   Int
+  estimatedCost Float
+  createdAt     DateTime @default(now())
+}

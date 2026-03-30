@@ -58,12 +58,6 @@ const MODULE_LABELS: Record<string, string> = {
   "ai-images": "AI 图片",
 };
 
-const MODEL_SHORT: Record<string, string> = {
-  "claude-haiku-4-5-20251001": "Haiku",
-  "claude-sonnet-4-20250514": "Sonnet",
-  "claude-opus-4-0-20250514": "Opus",
-};
-
 function fmtTokens(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;

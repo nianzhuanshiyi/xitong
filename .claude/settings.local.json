@@ -39,7 +39,10 @@
       "Bash(git -C \"C:/Users/Administrator/Desktop/xitong\" show origin/main:src/app/api/admin/users/route.ts)",
       "Bash(git -C \"C:/Users/Administrator/Desktop/xitong\" show origin/main:prisma/schema.prisma)",
       "Bash(git -C \"C:/Users/Administrator/Desktop/xitong\" show origin/main:src/lib/token-tracker.ts)",
-      "Bash(git -C \"C:/Users/Administrator/Desktop/xitong/.claude/worktrees/eager-fermat\" log --oneline -5)"
+      "Bash(git -C \"C:/Users/Administrator/Desktop/xitong/.claude/worktrees/eager-fermat\" log --oneline -5)",
+      "Bash(git -C \"C:/Users/Administrator/Desktop/xitong\" show origin/main:src/app/dashboard/token-ranking/token-ranking-client.tsx)",
+      "Bash(git -C \"C:/Users/Administrator/Desktop/xitong/.claude/worktrees/eager-fermat\" log --oneline -1)",
+      "Bash(git -C \"C:/Users/Administrator/Desktop/xitong/.claude/worktrees/eager-fermat\" diff --name-only origin/main)"
     ]
   }
 }
