@@ -169,9 +169,9 @@ export function TabDashboard() {
   }));
 
   // Pie chart data
-  const pieData = data.storePlans.map((store) => ({
+  const pieData = (data.storePlans ?? []).map((store: { storeName: string; actualMonthlyRevenue?: number }) => ({
     name: store.storeName,
-    value: store.revenueRmb,
+    value: (store.actualMonthlyRevenue ?? 0) * (data.audToRmb ?? 4.6),
   }));
 
   return (
@@ -197,7 +197,7 @@ export function TabDashboard() {
               {formatCurrency(data.currentMonthlyRevenueRmb)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              AUD ${data.currentMonthlyRevenueAud.toLocaleString("en-AU", { maximumFractionDigits: 0 })}
+              AUD ${(data.currentMonthlyRevenue ?? 0).toLocaleString("en-AU", { maximumFractionDigits: 0 })}
             </p>
           </CardContent>
         </Card>
@@ -207,9 +207,9 @@ export function TabDashboard() {
             <CardTitle className="text-sm font-medium text-muted-foreground">完成进度</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.progressPercent.toFixed(1)}%</div>
+            <div className="text-2xl font-bold">{(data.progress ?? 0).toFixed(1)}%</div>
             <Progress
-              value={data.progressPercent}
+              value={(data.progress ?? 0)}
               className="mt-2 [&>div]:bg-amber-500"
             />
           </CardContent>
