@@ -443,15 +443,20 @@ export async function runProductAnalysis(
 
   p("claude_report", "生成完整报告", 93);
 
+  const profitRequirement =
+    "\n\n**利润分析章节要求：**必须严格使用数据摘要中 profit.assumptions 里用户提供的成本假设（purchaseCost=采购成本、firstMile=头程、fbaEstimate=FBA估算、referralPct=佣金比例、adPct=广告占比、returnPct=退货损耗占比）和 profit.sellingPrice（当前售价）来计算利润。使用表格展示：售价、采购成本、头程、FBA费、佣金、广告费、退货损耗、净利润、利润率。不要自行编造成本数据。同时展示降价10%和提价10%的利润敏感性分析。";
+
   const reportSystemHigh =
-    "用中文撰写亚马逊选品分析报告，使用 Markdown。结构必须包含：## 竞品信息汇总（表格）、## 痛点分析、## 差异化创新建议、## 利润分析、## 工厂指示单（含产品描述、尺寸重量材质、必须改进点、包装、质量标准、目标成本、参考 ASIN、预计首批量）。语气专业简洁。";
+    "用中文撰写亚马逊选品分析报告，使用 Markdown。结构必须包含：## 竞品信息汇总（表格）、## 痛点分析、## 差异化创新建议、## 利润分析、## 工厂指示单（含产品描述、尺寸重量材质、必须改进点、包装、质量标准、目标成本、参考 ASIN、预计首批量）。语气专业简洁。" + profitRequirement;
   const reportSystemLow =
-    "用中文撰写亚马逊选品分析报告，使用 Markdown。结构必须包含：## 竞品信息汇总（表格）、## 痛点分析、## 差异化创新建议、## 利润分析。不要写「工厂指示单」完整章节（读者将在页面底部按需单独生成）；语气专业简洁。";
+    "用中文撰写亚马逊选品分析报告，使用 Markdown。结构必须包含：## 竞品信息汇总（表格）、## 痛点分析、## 差异化创新建议、## 利润分析。不要写「工厂指示单」完整章节（读者将在页面底部按需单独生成）；语气专业简洁。" + profitRequirement;
+
+  const profitSummary = `\n\n【用户利润假设 - 必须使用这些数据】\n售价: $${sellingPrice.toFixed(2)}\n采购成本: $${purchaseCost}\n头程: $${firstMile}\nFBA估算: $${fbaEstimate}\n佣金(${(referralPct * 100).toFixed(0)}%): $${referralFee.toFixed(2)}\n广告(${(adPct * 100).toFixed(0)}%): $${adCost.toFixed(2)}\n退货损耗(${(returnPct * 100).toFixed(0)}%): $${returnCost.toFixed(2)}\n净利润: $${netProfit.toFixed(2)}\n利润率: ${marginPct.toFixed(1)}%`;
 
   const reportMarkdown =
     (await claudeMessages({
       system: score.total >= 60 ? reportSystemHigh : reportSystemLow,
-      user: `数据摘要：\n${truncateJson({ ...contextForAi, score }, 14000)}`,
+      user: `数据摘要：\n${truncateJson({ ...contextForAi, score }, 14000)}${profitSummary}`,
     })) ?? "# 报告生成失败\n请检查 Claude API Key 与模型额度。";
 
   let factorySpecMarkdown = "";
