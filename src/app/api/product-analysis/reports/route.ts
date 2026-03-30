@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const { session, error } = await requireModuleAccess("selection-analysis");
+  const { error } = await requireModuleAccess("selection-analysis");
   if (error) return error;
 
   const rows = await prisma.productAnalysisReport.findMany({

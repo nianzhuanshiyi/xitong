@@ -5,9 +5,8 @@ import { requireModuleAccess } from "@/lib/permissions";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const { session, error } = await requireModuleAccess("europe-ideas");
+  const { error } = await requireModuleAccess("europe-ideas");
   if (error) return error;
-  const userId = session.user.id;
 
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");

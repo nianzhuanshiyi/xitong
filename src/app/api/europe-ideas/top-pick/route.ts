@@ -299,9 +299,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  const { session, error } = await requireModuleAccess("europe-ideas");
+  const { error } = await requireModuleAccess("europe-ideas");
   if (error) return error;
-  const userId = session.user.id;
 
   // Return the latest non-dismissed completed report
   const report = await prisma.europeTopPickReport.findFirst({

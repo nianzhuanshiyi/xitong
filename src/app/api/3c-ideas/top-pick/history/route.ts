@@ -5,9 +5,8 @@ import { requireModuleAccess } from "@/lib/permissions";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const { session, error } = await requireModuleAccess("3c-ideas");
+  const { error } = await requireModuleAccess("3c-ideas");
   if (error) return error;
-  const userId = session.user.id;
 
   const reports = await prisma.threeCTopPickReport.findMany({
     where: { dismissed: false, status: "completed" },

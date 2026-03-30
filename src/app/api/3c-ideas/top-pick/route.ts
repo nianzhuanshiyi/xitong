@@ -304,9 +304,8 @@ export async function POST(req: NextRequest) {
 // ── GET: Latest top pick report ─────────────────────────────────
 
 export async function GET() {
-  const { session, error } = await requireModuleAccess("3c-ideas");
+  const { error } = await requireModuleAccess("3c-ideas");
   if (error) return error;
-  const userId = session.user.id;
 
   // Return the latest non-dismissed completed report
   const report = await prisma.threeCTopPickReport.findFirst({
