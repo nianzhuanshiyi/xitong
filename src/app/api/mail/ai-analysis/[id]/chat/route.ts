@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireModuleAccess } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getClaudeApiKey } from "@/lib/integration-keys";
+import { getUserAiModel } from "@/lib/ai-model";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -97,7 +98,7 @@ export async function POST(
     return NextResponse.json({ message: "未配置 Claude API 密钥" }, { status: 503 });
   }
 
-  const model = process.env.CLAUDE_ANALYSIS_MODEL?.trim() || "claude-opus-4-6";
+  const model = await getUserAiModel(session!.user.id);
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",

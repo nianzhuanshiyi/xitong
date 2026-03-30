@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx prisma:*)",
+      "Bash(node_modules/.bin/prisma migrate:*)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Users/Administrator/AppData/Roaming/**)",
+      "Bash(cmd /c \"node --version\")",
+      "Bash(cmd /c \"npx --version\")",
+      "Bash(cmd /c \"where node\")",
+      "Bash(cmd /c \"where node && where npx\")",
+      "Bash(cmd /c \"dir \"\"C:\\\\Program Files\\\\nodejs\"\" 2>&1\")",
+      "Bash(cmd /c \"dir C:\\\\Users\\\\Administrator\\\\AppData\\\\Roaming\\\\nvm 2>&1\")",
+      "Bash(cmd /c \"dir C:\\\\ 2>&1\")",
+      "Bash(cmd /c \"dir C:\\\\Users\\\\Administrator\\\\.nvm\\\\v* /b 2>nul || dir C:\\\\nodejs\\\\node.exe 2>nul || where.exe node 2>nul || echo NOT_FOUND\")",
+      "Bash(where node:*)",
+      "Read(//c//**)",
+      "Bash(node_modules/.bin/prisma generate:*)",
+      "Bash(ls node_modules/.bin/prisma*)",
+      "Bash(where npx:*)",
+      "Read(//c/Users/Administrator/Desktop/xitong/**)",
+      "Bash(ls node_modules/.bin/next*)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\")",
+      "Bash(npx --version)",
+      "Read(//c/Users/Administrator/Desktop/xitong/.claude/worktrees/eager-fermat/$APPDATA/**)",
+      "Bash(where.exe node:*)",
+      "Bash(where.exe npm:*)",
+      "Bash(cmd.exe /c \"where node\")",
+      "Bash(cmd.exe /c \"where npm\")",
+      "Bash(powershell.exe -NoProfile -Command \"Set-Location ''C:\\\\Users\\\\Administrator\\\\Desktop\\\\xitong\\\\.claude\\\\worktrees\\\\eager-fermat''; npx next build 2>&1\")",
+      "Bash(tr ';' '\\\\n')",
+      "Bash(powershell.exe -NoProfile -Command \"Get-ChildItem -Path C:\\\\Users\\\\Administrator\\\\AppData\\\\Roaming\\\\nvm -ErrorAction SilentlyContinue; Get-ChildItem -Path C:\\\\nvm -ErrorAction SilentlyContinue; Get-ChildItem -Path C:\\\\nodejs -ErrorAction SilentlyContinue; Get-Item ''C:\\\\Program Files\\\\nodejs'' -ErrorAction SilentlyContinue\")",
+      "Bash(powershell.exe -NoProfile -Command \"Get-ChildItem C:\\\\ -Directory -ErrorAction SilentlyContinue | Select-Object Name\")",
+      "Bash(powershell.exe -NoProfile -Command \"Get-ChildItem ''C:\\\\Program Files'' -Directory -ErrorAction SilentlyContinue | Where-Object Name -match ''node|nvm|npm''\")"
+    ]
+  }
+}

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ThreeCTrend } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { claudeJson } from "@/lib/claude-client";
 import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
@@ -151,7 +152,7 @@ export async function POST(req: NextRequest) {
       searchKeywords: string[];
     };
 
-    const trendsForAI = createdTrends.map((t) => ({
+    const trendsForAI = createdTrends.map((t: ThreeCTrend) => ({
       id: t.id,
       title: t.title,
       content: t.content,

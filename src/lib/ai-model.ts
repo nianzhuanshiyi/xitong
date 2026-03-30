@@ -29,6 +29,25 @@ export async function getGlobalAiModel(): Promise<string> {
   return process.env.CLAUDE_ANALYSIS_MODEL?.trim() || DEFAULT_MODEL_ID;
 }
 
+const DEFAULT_USER_MODEL = "claude-haiku-4-5-20251001";
+
+/**
+ * Get the AI model assigned to a specific user.
+ * Falls back to the default model if user not found or no model set.
+ */
+export async function getUserAiModel(userId: string): Promise<string> {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { assignedModel: true },
+    });
+    if (user?.assignedModel) return user.assignedModel;
+  } catch {
+    // DB not available, fall through
+  }
+  return DEFAULT_USER_MODEL;
+}
+
 /**
  * Get model short name from SystemSetting (for frontend display).
  * Returns "haiku", "sonnet", or "opus".

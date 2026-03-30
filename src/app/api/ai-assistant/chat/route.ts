@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
 import { getClaudeApiKey } from "@/lib/integration-keys";
-import { getGlobalAiModel } from "@/lib/ai-model";
+import { getUserAiModel } from "@/lib/ai-model";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -47,8 +47,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "会话不存在" }, { status: 404 });
   }
 
-  // Use the globally configured AI model (admin sets this in settings)
-  const claudeModel = await getGlobalAiModel();
+  // Use the per-user assigned AI model
+  const claudeModel = await getUserAiModel(session!.user.id);
 
   // Save user message
   await prisma.aiMessage.create({

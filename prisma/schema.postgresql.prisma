@@ -22,6 +22,7 @@ model User {
   password               String?
   role                   UserRole                @default(EMPLOYEE)
   aiAuthorized           Boolean                 @default(false)
+  assignedModel          String                  @default("claude-haiku-4-5-20251001")
   allowedModules         String?                 @db.Text
   teamId                 String?
   team                   Team?                   @relation(fields: [teamId], references: [id], onDelete: SetNull)
