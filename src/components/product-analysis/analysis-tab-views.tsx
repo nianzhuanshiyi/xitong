@@ -600,16 +600,18 @@ const DIM_LABEL: Record<string, string> = {
   productDifficulty: "产品难度",
   reviewBarrier: "评论壁垒",
   trend: "趋势方向",
+  adCost: "推广成本",
 };
 
 const DIM_MAX: Record<string, number> = {
-  marketCapacity: 15,
-  competition: 20,
-  trafficQuality: 15,
-  profit: 20,
-  productDifficulty: 10,
-  reviewBarrier: 10,
-  trend: 10,
+  marketCapacity: 12,
+  competition: 18,
+  trafficQuality: 12,
+  profit: 18,
+  productDifficulty: 8,
+  reviewBarrier: 8,
+  trend: 8,
+  adCost: 16,
 };
 
 const SCORE_COLOR: Record<string, string> = {

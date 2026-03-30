@@ -60,13 +60,14 @@ export type AnalysisResult = {
     band: ScoreBand;
     label: string;
     dimensions: {
-      marketCapacity: number;   // max 15
-      competition: number;      // max 20
-      trafficQuality: number;   // max 15
-      profit: number;           // max 20
-      productDifficulty: number; // max 10
-      reviewBarrier: number;    // max 10
-      trend: number;            // max 10
+      marketCapacity: number;   // max 12
+      competition: number;      // max 18
+      trafficQuality: number;   // max 12
+      profit: number;           // max 18
+      productDifficulty: number; // max 8
+      reviewBarrier: number;    // max 8
+      trend: number;            // max 8
+      adCost: number;           // max 16
     };
     rationale: string;
   };

@@ -9,7 +9,7 @@ export type IdeaScoreResult = {
   marketScore: number;       // 市场机会 (0-25)
   competitionScore: number;  // 竞争难度 (0-25)
   trendScore: number;        // 垄断程度 (0-25) — reuses DB field name
-  profitScore: number;       // 供需健康 (0-25) — reuses DB field name
+  profitScore: number;       // 推广成本 (0-25) — reuses DB field name
   totalScore: number;
   recommendation: string;    // strong_go / go / watch / pass
   competitionLevel: string;  // low / medium / high / extreme
@@ -37,11 +37,28 @@ function deepNum(obj: unknown, key: string, depth = 0): number | null {
   return null;
 }
 
+function deepNumAll(obj: unknown, key: string, depth = 0): number[] {
+  const results: number[] = [];
+  if (depth > 8 || obj == null || typeof obj !== "object") return results;
+  if (Array.isArray(obj)) {
+    for (const x of obj) results.push(...deepNumAll(x, key, depth + 1));
+    return results;
+  }
+  const o = obj as Record<string, unknown>;
+  for (const [k, v] of Object.entries(o)) {
+    if (k.toLowerCase() === key.toLowerCase() && typeof v === "number") results.push(v);
+  }
+  for (const v of Object.values(o)) {
+    results.push(...deepNumAll(v, key, depth + 1));
+  }
+  return results;
+}
+
 const DEFAULT_SCORE: IdeaScoreResult = {
   marketScore: 13,
   competitionScore: 13,
   trendScore: 13,        // monopoly (reuses field name)
-  profitScore: 13,        // supply-demand (reuses field name)
+  profitScore: 13,        // ad cost / CPC (reuses field name)
   totalScore: 50,
   recommendation: "watch",
   competitionLevel: "medium",
@@ -80,8 +97,13 @@ export async function scoreIdeaWithKeywordMiner(
     const products = deepNum(data, "products")
       ?? deepNum(data, "productCount");
     const spr = deepNum(data, "spr");
-    const supplyDemandRatio = deepNum(data, "supplyDemandRatio");
     const monopolyClickRate = deepNum(data, "monopolyClickRate");
+
+    // Extract CPC bid from keyword_miner items
+    const bidValues = deepNumAll(data, "bid");
+    const avgCpcBid = bidValues.length > 0
+      ? bidValues.reduce((a, b) => a + b, 0) / bidValues.length
+      : null;
 
     // D1: Market Opportunity (25)
     let marketScore = 10;
@@ -115,17 +137,17 @@ export async function scoreIdeaWithKeywordMiner(
       else monopolyScore = 5;
     }
 
-    // D4: Supply-Demand Health (25) — stored in profitScore field
-    let supplyDemandScore = 13;
-    if (supplyDemandRatio !== null) {
-      if (supplyDemandRatio < 2) supplyDemandScore = 25;
-      else if (supplyDemandRatio < 5) supplyDemandScore = 20;
-      else if (supplyDemandRatio < 8) supplyDemandScore = 15;
-      else if (supplyDemandRatio < 12) supplyDemandScore = 10;
-      else supplyDemandScore = 5;
+    // D4: Ad Cost / CPC (25) — stored in profitScore field
+    let adCostScore = 13;
+    if (avgCpcBid !== null) {
+      if (avgCpcBid <= 0.50) adCostScore = 25;
+      else if (avgCpcBid <= 0.80) adCostScore = 20;
+      else if (avgCpcBid <= 1.20) adCostScore = 15;
+      else if (avgCpcBid <= 2.00) adCostScore = 10;
+      else adCostScore = 5;
     }
 
-    const totalScore = marketScore + competitionScore + monopolyScore + supplyDemandScore;
+    const totalScore = marketScore + competitionScore + monopolyScore + adCostScore;
 
     let recommendation = "watch";
     if (totalScore >= 75) recommendation = "strong_go";
@@ -142,7 +164,7 @@ export async function scoreIdeaWithKeywordMiner(
       marketScore,
       competitionScore,
       trendScore: monopolyScore,
-      profitScore: supplyDemandScore,
+      profitScore: adCostScore,
       totalScore,
       recommendation,
       competitionLevel,
@@ -183,7 +205,7 @@ export function buildIdeaAnalysis(
     `- 市场机会：${scores.marketScore}/25`,
     `- 竞争难度：${scores.competitionScore}/25`,
     `- 垄断程度：${scores.trendScore}/25`,
-    `- 供需健康：${scores.profitScore}/25`,
+    `- 推广成本：${scores.profitScore}/25`,
     `- **总分：${scores.totalScore}/100**`,
     "",
     `### 推荐意见`,

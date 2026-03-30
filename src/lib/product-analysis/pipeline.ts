@@ -86,6 +86,21 @@ function deepNumAny(obj: unknown, keys: string[]): number | null {
   return null;
 }
 
+/** Extract items array from traffic_keyword response */
+function extractTrafficKeywordItems(data: unknown): unknown[] {
+  if (!data || typeof data !== "object") return [];
+  if (Array.isArray(data)) return data;
+  const obj = data as Record<string, unknown>;
+  if (Array.isArray(obj.items)) return obj.items as unknown[];
+  if (Array.isArray(obj.data)) return obj.data as unknown[];
+  // Try nested: data.items or data.data
+  if (obj.data && typeof obj.data === "object" && !Array.isArray(obj.data)) {
+    const inner = obj.data as Record<string, unknown>;
+    if (Array.isArray(inner.items)) return inner.items as unknown[];
+  }
+  return [];
+}
+
 function calculateDataDrivenScore(ctx: {
   trafficKeyword: unknown;
   marketResearch: unknown;
@@ -94,35 +109,36 @@ function calculateDataDrivenScore(ctx: {
   keepa: unknown;
   googleTrend: unknown;
   marginPct: number;
+  sellingPrice: number;
   brandKeywords: string[];
   allKeywords: string[];
 }): { dimensions: AnalysisResult["score"]["dimensions"]; details: Record<string, string> } {
   const details: Record<string, string> = {};
 
-  // D1: Market Capacity (max 15) — monthly search volume
+  // D1: Market Capacity (max 12) — monthly search volume
   const searchVol = deepNumAny(ctx.trafficKeyword, ["searches", "monthlySearchVolume", "searchVolume", "searchesGrowthRate"]);
-  let d1 = 8;
+  let d1 = 6;
   if (searchVol !== null) {
-    if (searchVol >= 100000) d1 = 15;
-    else if (searchVol >= 50000) d1 = 13;
-    else if (searchVol >= 20000) d1 = 11;
-    else if (searchVol >= 10000) d1 = 9;
-    else if (searchVol >= 5000) d1 = 7;
-    else d1 = 5;
+    if (searchVol >= 100000) d1 = 12;
+    else if (searchVol >= 50000) d1 = 10;
+    else if (searchVol >= 20000) d1 = 8;
+    else if (searchVol >= 10000) d1 = 7;
+    else if (searchVol >= 5000) d1 = 5;
+    else d1 = 3;
     details.marketCapacity = `月搜索量 ${searchVol.toLocaleString()}`;
   } else {
     details.marketCapacity = "搜索量数据缺失，使用默认值";
   }
 
-  // D2: Competition (max 20) — products count, SPR, supply/demand ratio, monopoly click
+  // D2: Competition (max 18) — products count, SPR, supply/demand ratio, monopoly click
   const products = deepNumAny(ctx.marketResearch, ["products", "productCount"]);
   const spr = deepNumAny(ctx.marketResearch, ["spr", "supplyDemandRatio"]);
   const monopolyClick = deepNumAny(ctx.marketResearch, ["monopolyClickRate", "clickConcentration"]);
-  let d2 = 10;
+  let d2 = 9;
   const d2Parts: string[] = [];
 
   if (products !== null) {
-    if (products < 200) { d2 += 4; d2Parts.push(`商品数${products}(少)`); }
+    if (products < 200) { d2 += 3; d2Parts.push(`商品数${products}(少)`); }
     else if (products < 500) { d2 += 2; d2Parts.push(`商品数${products}(中)`); }
     else if (products < 1000) { d2 += 0; d2Parts.push(`商品数${products}`); }
     else { d2 -= 3; d2Parts.push(`商品数${products}(多)`); }
@@ -138,32 +154,32 @@ function calculateDataDrivenScore(ctx: {
   }
   details.competition = d2Parts.length > 0 ? d2Parts.join("；") : "竞争数据缺失，使用默认值";
 
-  // D3: Traffic Quality (max 15) — brand keyword ratio in top keywords
-  let d3 = 8;
+  // D3: Traffic Quality (max 12) — brand keyword ratio in top keywords
+  let d3 = 6;
   if (ctx.allKeywords.length > 0 && ctx.brandKeywords.length >= 0) {
     const brandCount = ctx.allKeywords.filter((kw) =>
       ctx.brandKeywords.some((bk) => kw.toLowerCase().includes(bk.toLowerCase()))
     ).length;
     const brandRatio = brandCount / ctx.allKeywords.length;
-    if (brandRatio < 0.1) { d3 = 14; details.trafficQuality = `品牌词占比${(brandRatio * 100).toFixed(0)}%（极低，流量通用性强）`; }
-    else if (brandRatio < 0.3) { d3 = 11; details.trafficQuality = `品牌词占比${(brandRatio * 100).toFixed(0)}%（较低）`; }
-    else if (brandRatio < 0.5) { d3 = 7; details.trafficQuality = `品牌词占比${(brandRatio * 100).toFixed(0)}%（中等）`; }
-    else { d3 = 4; details.trafficQuality = `品牌词占比${(brandRatio * 100).toFixed(0)}%（高，品牌锁定严重）`; }
+    if (brandRatio < 0.1) { d3 = 12; details.trafficQuality = `品牌词占比${(brandRatio * 100).toFixed(0)}%（极低，流量通用性强）`; }
+    else if (brandRatio < 0.3) { d3 = 9; details.trafficQuality = `品牌词占比${(brandRatio * 100).toFixed(0)}%（较低）`; }
+    else if (brandRatio < 0.5) { d3 = 5; details.trafficQuality = `品牌词占比${(brandRatio * 100).toFixed(0)}%（中等）`; }
+    else { d3 = 2; details.trafficQuality = `品牌词占比${(brandRatio * 100).toFixed(0)}%（高，品牌锁定严重）`; }
   } else {
     details.trafficQuality = "关键词数据不足，使用默认值";
   }
 
-  // D4: Profit (max 20) — based on user margin
-  let d4 = 10;
-  if (ctx.marginPct >= 35) d4 = 20;
-  else if (ctx.marginPct >= 28) d4 = 17;
-  else if (ctx.marginPct >= 20) d4 = 14;
-  else if (ctx.marginPct >= 12) d4 = 10;
-  else if (ctx.marginPct >= 5) d4 = 6;
-  else d4 = 3;
+  // D4: Profit (max 18) — based on user margin
+  let d4 = 9;
+  if (ctx.marginPct >= 35) d4 = 18;
+  else if (ctx.marginPct >= 28) d4 = 15;
+  else if (ctx.marginPct >= 20) d4 = 12;
+  else if (ctx.marginPct >= 12) d4 = 9;
+  else if (ctx.marginPct >= 5) d4 = 5;
+  else d4 = 2;
   details.profit = `利润率 ${ctx.marginPct.toFixed(1)}%`;
 
-  // D5: Product Difficulty (max 10) — avg ratings count, variation count
+  // D5: Product Difficulty (max 8) — avg ratings count, variation count
   const asins = Object.values(ctx.asinDetails);
   let avgRatings = 0;
   let ratingCount = 0;
@@ -171,36 +187,36 @@ function calculateDataDrivenScore(ctx: {
     const rc = deepNumAny(det, ["ratingsCount", "ratings", "reviewCount", "totalRatings"]);
     if (rc !== null) { avgRatings += rc; ratingCount++; }
   }
-  let d5 = 5;
+  let d5 = 4;
   if (ratingCount > 0) {
     avgRatings /= ratingCount;
-    if (avgRatings < 200) { d5 = 9; details.productDifficulty = `竞品平均评论${Math.round(avgRatings)}条（少，易追赶）`; }
-    else if (avgRatings < 1000) { d5 = 7; details.productDifficulty = `竞品平均评论${Math.round(avgRatings)}条（中等）`; }
-    else if (avgRatings < 5000) { d5 = 4; details.productDifficulty = `竞品平均评论${Math.round(avgRatings)}条（较多）`; }
-    else { d5 = 2; details.productDifficulty = `竞品平均评论${Math.round(avgRatings)}条（极多，难追赶）`; }
+    if (avgRatings < 200) { d5 = 8; details.productDifficulty = `竞品平均评论${Math.round(avgRatings)}条（少，易追赶）`; }
+    else if (avgRatings < 1000) { d5 = 6; details.productDifficulty = `竞品平均评论${Math.round(avgRatings)}条（中等）`; }
+    else if (avgRatings < 5000) { d5 = 3; details.productDifficulty = `竞品平均评论${Math.round(avgRatings)}条（较多）`; }
+    else { d5 = 1; details.productDifficulty = `竞品平均评论${Math.round(avgRatings)}条（极多，难追赶）`; }
   } else {
     details.productDifficulty = "评论数据缺失，使用默认值";
   }
 
-  // D6: Review Barrier (max 10) — competitor avg rating & review count
+  // D6: Review Barrier (max 8) — competitor avg rating & review count
   const ratings: number[] = [];
   for (const det of asins) {
     const r = deepNumAny(det, ["rating", "averageRating", "starRating"]);
     if (r !== null) ratings.push(r);
   }
-  let d6 = 5;
+  let d6 = 4;
   if (ratings.length > 0) {
     const avgRating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
-    if (avgRating < 3.8) { d6 = 9; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（低，容易超越）`; }
-    else if (avgRating < 4.2) { d6 = 7; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（中等）`; }
-    else if (avgRating < 4.5) { d6 = 4; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（较高）`; }
-    else { d6 = 2; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（极高，难超越）`; }
+    if (avgRating < 3.8) { d6 = 8; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（低，容易超越）`; }
+    else if (avgRating < 4.2) { d6 = 6; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（中等）`; }
+    else if (avgRating < 4.5) { d6 = 3; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（较高）`; }
+    else { d6 = 1; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（极高，难超越）`; }
   } else {
     details.reviewBarrier = "评分数据缺失，使用默认值";
   }
 
-  // D7: Trend (max 10) — google trend & keepa direction
-  let d7 = 5;
+  // D7: Trend (max 8) — google trend & keepa direction
+  let d7 = 4;
   const trendParts: string[] = [];
   const gTrendVal = deepNumAny(ctx.googleTrend, ["trendScore", "trend", "interestOverTime"]);
   if (gTrendVal !== null) {
@@ -216,14 +232,62 @@ function calculateDataDrivenScore(ctx: {
   }
   details.trend = trendParts.length > 0 ? trendParts.join("；") : "趋势数据缺失，使用默认值";
 
+  // D8: Ad Cost (max 16) — avg CPC bid from top 5 keywords + CPC/price ratio
+  let d8 = 8;
+  const adParts: string[] = [];
+  const tkItems = extractTrafficKeywordItems(ctx.trafficKeyword);
+  if (tkItems.length > 0) {
+    const top5 = tkItems.slice(0, 5);
+    const bids = top5.map((it) => deepNumAny(it, ["bid", "cpc", "avgBid"])).filter((v): v is number => v !== null);
+    const bidMaxValues = top5.map((it) => deepNumAny(it, ["bidMax", "maxBid", "cpcMax"])).filter((v): v is number => v !== null);
+
+    if (bids.length > 0) {
+      const avgBid = bids.reduce((a, b) => a + b, 0) / bids.length;
+      const maxBid = bidMaxValues.length > 0 ? Math.max(...bidMaxValues) : avgBid;
+
+      // Sub-score A: avg CPC bid (8 points)
+      let cpcScore = 4;
+      if (avgBid <= 0.50) cpcScore = 8;
+      else if (avgBid <= 0.80) cpcScore = 6;
+      else if (avgBid <= 1.20) cpcScore = 4;
+      else if (avgBid <= 2.00) cpcScore = 2;
+      else cpcScore = 0;
+      adParts.push(`平均CPC $${avgBid.toFixed(2)}`);
+
+      // Sub-score B: CPC / selling price ratio (8 points)
+      let ratioScore = 4;
+      if (ctx.sellingPrice > 0) {
+        const cpcRatio = avgBid / ctx.sellingPrice;
+        if (cpcRatio <= 0.03) ratioScore = 8;
+        else if (cpcRatio <= 0.05) ratioScore = 6;
+        else if (cpcRatio <= 0.08) ratioScore = 4;
+        else if (cpcRatio <= 0.12) ratioScore = 2;
+        else ratioScore = 0;
+        adParts.push(`CPC占售价比${(cpcRatio * 100).toFixed(1)}%`);
+      }
+
+      d8 = cpcScore + ratioScore;
+      adParts.push(`最高CPC $${maxBid.toFixed(2)}`);
+
+      // Store CPC info in details for profitSummary usage
+      details._avgCpc = avgBid.toFixed(2);
+      details._maxCpc = maxBid.toFixed(2);
+      if (ctx.sellingPrice > 0) {
+        details._cpcRatio = ((avgBid / ctx.sellingPrice) * 100).toFixed(1);
+      }
+    }
+  }
+  details.adCost = adParts.length > 0 ? adParts.join("；") : "CPC竞价数据缺失，使用默认值";
+
   const dimensions = {
-    marketCapacity: clampDim(d1, 15),
-    competition: clampDim(d2, 20),
-    trafficQuality: clampDim(d3, 15),
-    profit: clampDim(d4, 20),
-    productDifficulty: clampDim(d5, 10),
-    reviewBarrier: clampDim(d6, 10),
-    trend: clampDim(d7, 10),
+    marketCapacity: clampDim(d1, 12),
+    competition: clampDim(d2, 18),
+    trafficQuality: clampDim(d3, 12),
+    profit: clampDim(d4, 18),
+    productDifficulty: clampDim(d5, 8),
+    reviewBarrier: clampDim(d6, 8),
+    trend: clampDim(d7, 8),
+    adCost: clampDim(d8, 16),
   };
 
   return { dimensions, details };
@@ -551,6 +615,7 @@ export async function runProductAnalysis(
     keepa: keepa.ok ? keepa.data : null,
     googleTrend: gTrend.ok ? gTrend.data : null,
     marginPct,
+    sellingPrice,
     brandKeywords,
     allKeywords: topKeywords,
   });
@@ -600,7 +665,11 @@ export async function runProductAnalysis(
   const reportSystemLow =
     "用中文撰写亚马逊选品分析报告，使用 Markdown。结构必须包含：## 竞品信息汇总（表格）、## 痛点分析、## 差异化创新建议、## 利润分析。不要写「工厂指示单」完整章节（读者将在页面底部按需单独生成）；语气专业简洁。" + profitRequirement + cnRequirement;
 
-  const profitSummary = `\n\n【用户利润假设 - 必须使用这些数据】\n售价: $${sellingPrice.toFixed(2)}\n采购成本: $${purchaseCost}\n头程: $${firstMile}\nFBA估算: $${fbaEstimate}\n佣金(${(referralPct * 100).toFixed(0)}%): $${referralFee.toFixed(2)}\n广告(${(adPct * 100).toFixed(0)}%): $${adCost.toFixed(2)}\n退货损耗(${(returnPct * 100).toFixed(0)}%): $${returnCost.toFixed(2)}\n净利润: $${netProfit.toFixed(2)}\n利润率: ${marginPct.toFixed(1)}%`;
+  const cpcLine = dimDetails._avgCpc
+    ? `\n主词平均CPC: $${dimDetails._avgCpc}\n最高CPC: $${dimDetails._maxCpc ?? dimDetails._avgCpc}\nCPC占售价比: ${dimDetails._cpcRatio ?? "N/A"}%`
+    : "";
+
+  const profitSummary = `\n\n【用户利润假设 - 必须使用这些数据】\n售价: $${sellingPrice.toFixed(2)}\n采购成本: $${purchaseCost}\n头程: $${firstMile}\nFBA估算: $${fbaEstimate}\n佣金(${(referralPct * 100).toFixed(0)}%): $${referralFee.toFixed(2)}\n广告(${(adPct * 100).toFixed(0)}%): $${adCost.toFixed(2)}\n退货损耗(${(returnPct * 100).toFixed(0)}%): $${returnCost.toFixed(2)}\n净利润: $${netProfit.toFixed(2)}\n利润率: ${marginPct.toFixed(1)}%${cpcLine}`;
 
   const reportMarkdown =
     (await claudeMessages({
