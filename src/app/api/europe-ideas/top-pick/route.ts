@@ -305,7 +305,7 @@ export async function GET() {
 
   // Return the latest non-dismissed completed report
   const report = await prisma.europeTopPickReport.findFirst({
-    where: { dismissed: false, status: "completed", createdBy: userId },
+    where: { dismissed: false, status: "completed" },
     orderBy: { createdAt: "desc" },
     include: { idea: { select: ideaSelect } },
   });

@@ -9,7 +9,6 @@ export async function GET() {
   if (error) return error;
 
   const rows = await prisma.productAnalysisReport.findMany({
-    where: { userId: session!.user.id },
     orderBy: { createdAt: "desc" },
     take: 50,
     select: {

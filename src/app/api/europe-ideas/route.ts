@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   const recommendation = searchParams.get("recommendation");
   const category = searchParams.get("category");
 
-  const where: Record<string, unknown> = { createdBy: userId };
+  const where: Record<string, unknown> = {};
   if (status) where.status = status;
   if (recommendation) where.recommendation = recommendation;
   if (category) where.category = category;

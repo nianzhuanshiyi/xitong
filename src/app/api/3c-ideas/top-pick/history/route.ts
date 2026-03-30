@@ -10,7 +10,7 @@ export async function GET() {
   const userId = session.user.id;
 
   const reports = await prisma.threeCTopPickReport.findMany({
-    where: { dismissed: false, status: "completed", createdBy: userId },
+    where: { dismissed: false, status: "completed" },
     orderBy: { createdAt: "desc" },
     take: 50,
     select: {

@@ -313,9 +313,9 @@ export async function GET() {
   const { session, error } = await requireModuleAccess("beauty-ideas");
   if (error) return error;
 
-  // Return the latest non-dismissed completed report for this user
+  // Return the latest non-dismissed completed report
   const report = await prisma.topPickReport.findFirst({
-    where: { dismissed: false, status: "completed", createdBy: session!.user.id },
+    where: { dismissed: false, status: "completed" },
     orderBy: { createdAt: "desc" },
     include: { idea: { select: ideaSelect } },
   });

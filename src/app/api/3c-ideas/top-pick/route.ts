@@ -308,9 +308,9 @@ export async function GET() {
   if (error) return error;
   const userId = session.user.id;
 
-  // Return the latest non-dismissed completed report for this user
+  // Return the latest non-dismissed completed report
   const report = await prisma.threeCTopPickReport.findFirst({
-    where: { dismissed: false, status: "completed", createdBy: userId },
+    where: { dismissed: false, status: "completed" },
     orderBy: { createdAt: "desc" },
     include: { idea: { select: ideaSelect } },
   });

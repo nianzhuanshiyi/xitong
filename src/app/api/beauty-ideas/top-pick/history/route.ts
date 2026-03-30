@@ -9,7 +9,7 @@ export async function GET() {
   if (error) return error;
 
   const reports = await prisma.topPickReport.findMany({
-    where: { dismissed: false, status: "completed", createdBy: session!.user.id },
+    where: { dismissed: false, status: "completed" },
     orderBy: { createdAt: "desc" },
     take: 50,
     select: {
