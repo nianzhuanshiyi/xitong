@@ -70,10 +70,10 @@ type TrendItem = {
 };
 
 const REC_CONFIG: Record<string, { label: string; color: string }> = {
-  strong_go: { label: "强烈推荐", color: "bg-emerald-100 text-emerald-800" },
-  go: { label: "推荐", color: "bg-blue-100 text-blue-800" },
-  watch: { label: "观望", color: "bg-amber-100 text-amber-800" },
-  pass: { label: "放弃", color: "bg-slate-100 text-slate-600" },
+  strong_go: { label: "蓝海机会", color: "bg-emerald-100 text-emerald-800" },
+  go: { label: "有潜力", color: "bg-blue-100 text-blue-800" },
+  watch: { label: "需差异化", color: "bg-amber-100 text-amber-800" },
+  pass: { label: "红海", color: "bg-red-100 text-red-700" },
 };
 
 const COMPETITION_LABEL: Record<string, { label: string; color: string }> = {
@@ -88,7 +88,7 @@ function ScoreRing({ score, size = 56 }: { score: number; size?: number }) {
   const r = (size - 6) / 2;
   const c = 2 * Math.PI * r;
   const pct = Math.min(score, 100) / 100;
-  const color = score >= 70 ? "#22c55e" : score >= 50 ? "#eab308" : "#ef4444";
+  const color = score >= 75 ? "#22c55e" : score >= 55 ? "#3b82f6" : score >= 35 ? "#f59e0b" : "#ef4444";
   return (
     <svg width={size} height={size} className="shrink-0">
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={4} />
@@ -472,9 +472,10 @@ export function EuropeIdeasDashboard() {
                       <td className="hidden px-4 py-3 text-center sm:table-cell">
                         <span className={cn(
                           "inline-flex size-8 items-center justify-center rounded-full text-xs font-bold",
-                          score >= 70 ? "bg-emerald-50 text-emerald-700" :
-                          score >= 50 ? "bg-amber-50 text-amber-700" :
-                          "bg-slate-50 text-slate-600"
+                          score >= 75 ? "bg-emerald-50 text-emerald-700" :
+                          score >= 55 ? "bg-blue-50 text-blue-700" :
+                          score >= 35 ? "bg-amber-50 text-amber-700" :
+                          "bg-red-50 text-red-600"
                         )}>
                           {score}
                         </span>
