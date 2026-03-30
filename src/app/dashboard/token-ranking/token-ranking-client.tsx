@@ -166,12 +166,12 @@ export function TokenRankingClient() {
               <XAxis
                 dataKey="date"
                 tick={{ fontSize: 10 }}
-                tickFormatter={(v: string) => v.slice(5)}
+                tickFormatter={(v: any) => String(v).slice(5)}
               />
-              <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => fmtTokens(v)} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: any) => fmtTokens(Number(v) || 0)} />
               <Tooltip
-                formatter={(value: number | undefined) => [fmtTokens(value ?? 0), "Tokens"]}
-                labelFormatter={(label: string) => `日期：${label}`}
+                formatter={(value: any) => [fmtTokens(Number(value) || 0), "Tokens"]}
+                labelFormatter={(label: any) => `日期: ${label}`}
               />
               <Line type="monotone" dataKey="tokens" stroke="#6366f1" strokeWidth={2} dot={false} />
             </LineChart>
@@ -196,8 +196,8 @@ export function TokenRankingClient() {
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => fmtTokens(v)} />
-                <Tooltip formatter={(value: number | undefined) => [fmtTokens(value ?? 0), "Tokens"]} />
+                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: any) => fmtTokens(Number(v) || 0)} />
+                <Tooltip formatter={(value: any) => [fmtTokens(Number(value) || 0), "Tokens"]} />
                 <Bar dataKey="tokens" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
