@@ -21,8 +21,8 @@ model User {
   image                  String?
   password               String?
   role                   UserRole                @default(EMPLOYEE)
-  aiAuthorized           Boolean                 @default(false)
-  assignedModel          String                  @default("claude-haiku-4-5-20251001")
+  aiAuthorized           Boolean                 @default(true)
+  assignedModel          String                  @default("claude-sonnet-4-20250514")
   monthlyTokenLimit      Int                     @default(500000)
   allowedModules         String?                 @db.Text
   teamId                 String?

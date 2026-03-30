@@ -73,8 +73,9 @@ export async function POST(req: Request) {
         email,
         password: hashedPassword,
         role: isSpecialAdmin ? "ADMIN" : "EMPLOYEE",
-        aiAuthorized: isSpecialAdmin,
-        allowedModules: isSpecialAdmin ? allModules : null,
+        aiAuthorized: true,
+        allowedModules: allModules,
+        assignedModel: "claude-sonnet-4-20250514",
       },
     });
 
@@ -86,11 +87,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       {
-        message: isSpecialAdmin
-          ? "注册成功"
-          : "注册成功，请等待管理员开通权限",
+        message: "注册成功",
         userId: user.id,
-        needApproval: !isSpecialAdmin,
+        needApproval: false,
       },
       { status: 201 },
     );

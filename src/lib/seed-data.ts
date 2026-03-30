@@ -141,19 +141,30 @@ export async function runSeedData(prisma: PrismaClient): Promise<void> {
     },
   });
 
+  const allModules = JSON.stringify([
+    "beauty-ideas","3c-ideas","europe-ideas","email",
+    "ai-assistant","product-dev","selection-analysis",
+    "listing","ai-images","suppliers","todos",
+  ]);
+
   const staffHash = await bcrypt.hash("staff123", 10);
   await prisma.user.upsert({
     where: { email: "staff@example.com" },
     update: {
       password: staffHash,
       teamId: team.id,
+      aiAuthorized: true,
+      assignedModel: "claude-sonnet-4-20250514",
+      allowedModules: allModules,
     },
     create: {
       email: "staff@example.com",
       name: "运营员工",
       password: staffHash,
       role: "EMPLOYEE",
-      aiAuthorized: false,
+      aiAuthorized: true,
+      assignedModel: "claude-sonnet-4-20250514",
+      allowedModules: allModules,
       teamId: team.id,
     },
   });
