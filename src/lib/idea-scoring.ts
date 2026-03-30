@@ -160,7 +160,6 @@ export function buildIdeaAnalysis(
   name: string,
   description: string,
   scores: IdeaScoreResult,
-  _currencySymbol = "$",
 ): string {
   if (!scores.searchVolume && scores.totalScore === 50) {
     return `## ${name}\n\n暂无详细分析报告，市场数据待获取。`;

@@ -118,7 +118,7 @@ export async function POST() {
           profitScore: scores.profitScore,
           totalScore: scores.totalScore,
           recommendation: scores.recommendation,
-          aiAnalysis: buildIdeaAnalysis(idea.name, idea.description, scores, "€"),
+          aiAnalysis: buildIdeaAnalysis(idea.name, idea.description, scores),
           status: "draft",
           createdBy: session.user.id,
         },
