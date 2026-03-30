@@ -18,6 +18,7 @@ import {
   Settings,
   Ticket,
   Bot,
+  BarChart3,
 } from "lucide-react";
 
 export type DashboardNavItem = {
@@ -128,6 +129,13 @@ export const dashboardNav: DashboardNavItem[] = [
     label: "邀请码管理",
     title: "邀请码管理",
     Icon: Ticket,
+    adminOnly: true,
+  },
+  {
+    href: "/dashboard/token-ranking",
+    label: "Token 用量",
+    title: "Token 用量排行",
+    Icon: BarChart3,
     adminOnly: true,
   },
 ];
