@@ -39,26 +39,9 @@ function unwrapMcpResult(result: unknown): unknown {
   return result;
 }
 
-/** 与 ASIN 所在站点一致；卖家精灵 MCP 使用小写站点码 */
+/** 标准化站点码为大写（卖家精灵 MCP 使用大写站点码 "US"、"JP" 等） */
 function marketplaceForMcp(code: string): string {
-  const c = code.trim().toUpperCase();
-  const map: Record<string, string> = {
-    US: "us",
-    CA: "ca",
-    UK: "uk",
-    DE: "de",
-    FR: "fr",
-    IT: "it",
-    ES: "es",
-    NL: "nl",
-    SE: "se",
-    PL: "pl",
-    JP: "jp",
-    IN: "in",
-    AU: "au",
-    AE: "ae",
-  };
-  return map[c] ?? c.toLowerCase();
+  return code.trim().toUpperCase();
 }
 
 function normalizeToolArguments(

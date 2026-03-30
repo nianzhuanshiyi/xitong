@@ -12,6 +12,29 @@ import {
   truncateJson,
 } from "./utils";
 
+/** Extract nodeIdPath string (e.g. "3760911:11062741:...") from asin_detail data */
+function extractNodeIdPath(obj: unknown, depth = 0): string | null {
+  if (depth > 12 || obj == null || typeof obj !== "object") return null;
+  if (Array.isArray(obj)) {
+    for (const x of obj) {
+      const n = extractNodeIdPath(x, depth + 1);
+      if (n) return n;
+    }
+    return null;
+  }
+  const o = obj as Record<string, unknown>;
+  for (const [k, v] of Object.entries(o)) {
+    if (/^nodeIdPath$/i.test(k) && typeof v === "string" && v.trim()) {
+      return v.trim();
+    }
+  }
+  for (const v of Object.values(o)) {
+    const n = extractNodeIdPath(v, depth + 1);
+    if (n) return n;
+  }
+  return null;
+}
+
 function bandFromTotal(total: number): ScoreBand {
   if (total >= 80) return "strong";
   if (total >= 60) return "moderate";
@@ -171,16 +194,13 @@ export async function runProductAnalysis(
   const primary = parsed.asins[0];
   const [kw, src, lst] = await Promise.all([
     mcp.callToolSafe("traffic_keyword", {
-      asin: primary,
-      marketplace: parsed.marketplace,
+      request: { asin: primary, marketplace: parsed.marketplace },
     }),
     mcp.callToolSafe("traffic_source", {
-      asin: primary,
-      marketplace: parsed.marketplace,
+      request: { q: primary, marketplace: parsed.marketplace },
     }),
     mcp.callToolSafe("traffic_listing", {
-      asin: primary,
-      marketplace: parsed.marketplace,
+      request: { asinList: [primary], marketplace: parsed.marketplace, relations: ["similar"] },
     }),
   ]);
 
@@ -209,18 +229,21 @@ export async function runProductAnalysis(
     extractNodeId(kw.ok ? kw.data : null) ??
     null;
 
-  const marketArgs = {
+  const nodeIdPath =
+    extractNodeIdPath(byAsin[primary]) ??
+    (nodeId ? String(nodeId) : null);
+
+  const marketRequest = {
     marketplace: parsed.marketplace,
-    ...(nodeId ? { nodeId } : {}),
-    asin: primary,
+    ...(nodeIdPath ? { nodeIdPath } : {}),
   };
 
   const [mr, mbc, msc, mldd, mpd] = await Promise.all([
-    mcp.callToolSafe("market_research", marketArgs),
-    mcp.callToolSafe("market_brand_concentration", marketArgs),
-    mcp.callToolSafe("market_seller_concentration", marketArgs),
-    mcp.callToolSafe("market_listing_date_distribution", marketArgs),
-    mcp.callToolSafe("market_price_distribution", marketArgs),
+    mcp.callToolSafe("market_research", { request: marketRequest }),
+    mcp.callToolSafe("market_brand_concentration", { request: marketRequest }),
+    mcp.callToolSafe("market_seller_concentration", { request: marketRequest }),
+    mcp.callToolSafe("market_listing_date_distribution", { request: marketRequest }),
+    mcp.callToolSafe("market_price_distribution", { request: marketRequest }),
   ]);
 
   const marketErrors: string[] = [];
