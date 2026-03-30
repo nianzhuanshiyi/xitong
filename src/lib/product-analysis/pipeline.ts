@@ -36,9 +36,9 @@ function extractNodeIdPath(obj: unknown, depth = 0): string | null {
 }
 
 function bandFromTotal(total: number): ScoreBand {
-  if (total >= 80) return "strong";
-  if (total >= 60) return "moderate";
-  if (total >= 40) return "careful";
+  if (total >= 75) return "strong";
+  if (total >= 55) return "moderate";
+  if (total >= 35) return "careful";
   return "avoid";
 }
 
@@ -52,52 +52,181 @@ function bandLabel(b: ScoreBand): string {
   return m[b];
 }
 
-function heuristicScore(ctx: {
+/* ── 数据驱动评分引擎（7维度） ── */
+
+function clampDim(v: number, max: number) {
+  return Math.max(0, Math.min(max, Math.round(v)));
+}
+
+function deepNum(obj: unknown, key: string, depth = 0): number | null {
+  if (depth > 10 || obj == null || typeof obj !== "object") return null;
+  if (Array.isArray(obj)) {
+    for (const x of obj) {
+      const r = deepNum(x, key, depth + 1);
+      if (r !== null) return r;
+    }
+    return null;
+  }
+  const o = obj as Record<string, unknown>;
+  for (const [k, v] of Object.entries(o)) {
+    if (k.toLowerCase() === key.toLowerCase() && typeof v === "number") return v;
+  }
+  for (const v of Object.values(o)) {
+    const r = deepNum(v, key, depth + 1);
+    if (r !== null) return r;
+  }
+  return null;
+}
+
+function deepNumAny(obj: unknown, keys: string[]): number | null {
+  for (const k of keys) {
+    const v = deepNum(obj, k);
+    if (v !== null) return v;
+  }
+  return null;
+}
+
+function calculateDataDrivenScore(ctx: {
+  trafficKeyword: unknown;
+  marketResearch: unknown;
+  asinDetails: Record<string, unknown>;
+  reviewByAsin: Record<string, unknown>;
+  keepa: unknown;
+  googleTrend: unknown;
   marginPct: number;
-  toolErrors: number;
-  lowPriceCount: number;
-}): AnalysisResult["score"] {
-  let marketSpace = 12;
-  let competition = 12;
-  let profit = 12;
-  const differentiation = 12;
-  let barrier = 12;
+  brandKeywords: string[];
+  allKeywords: string[];
+}): { dimensions: AnalysisResult["score"]["dimensions"]; details: Record<string, string> } {
+  const details: Record<string, string> = {};
 
-  if (ctx.marginPct >= 28) profit = 18;
-  else if (ctx.marginPct >= 18) profit = 15;
-  else if (ctx.marginPct >= 10) profit = 12;
-  else profit = 6;
-
-  if (ctx.toolErrors > 8) {
-    marketSpace -= 3;
-    competition -= 2;
-  }
-  if (ctx.lowPriceCount > 0) {
-    profit -= 4;
-    barrier -= 2;
+  // D1: Market Capacity (max 15) — monthly search volume
+  const searchVol = deepNumAny(ctx.trafficKeyword, ["searches", "monthlySearchVolume", "searchVolume", "searchesGrowthRate"]);
+  let d1 = 8;
+  if (searchVol !== null) {
+    if (searchVol >= 100000) d1 = 15;
+    else if (searchVol >= 50000) d1 = 13;
+    else if (searchVol >= 20000) d1 = 11;
+    else if (searchVol >= 10000) d1 = 9;
+    else if (searchVol >= 5000) d1 = 7;
+    else d1 = 5;
+    details.marketCapacity = `月搜索量 ${searchVol.toLocaleString()}`;
+  } else {
+    details.marketCapacity = "搜索量数据缺失，使用默认值";
   }
 
-  const clamp = (n: number) => Math.max(0, Math.min(20, Math.round(n)));
+  // D2: Competition (max 20) — products count, SPR, supply/demand ratio, monopoly click
+  const products = deepNumAny(ctx.marketResearch, ["products", "productCount"]);
+  const spr = deepNumAny(ctx.marketResearch, ["spr", "supplyDemandRatio"]);
+  const monopolyClick = deepNumAny(ctx.marketResearch, ["monopolyClickRate", "clickConcentration"]);
+  let d2 = 10;
+  const d2Parts: string[] = [];
+
+  if (products !== null) {
+    if (products < 200) { d2 += 4; d2Parts.push(`商品数${products}(少)`); }
+    else if (products < 500) { d2 += 2; d2Parts.push(`商品数${products}(中)`); }
+    else if (products < 1000) { d2 += 0; d2Parts.push(`商品数${products}`); }
+    else { d2 -= 3; d2Parts.push(`商品数${products}(多)`); }
+  }
+  if (spr !== null) {
+    if (spr < 3) { d2 += 3; d2Parts.push(`SPR ${spr.toFixed(1)}(低)`); }
+    else if (spr < 8) { d2 += 1; d2Parts.push(`SPR ${spr.toFixed(1)}(中)`); }
+    else { d2 -= 2; d2Parts.push(`SPR ${spr.toFixed(1)}(高)`); }
+  }
+  if (monopolyClick !== null) {
+    if (monopolyClick < 30) { d2 += 2; d2Parts.push(`垄断点击率${monopolyClick}%(低)`); }
+    else if (monopolyClick > 60) { d2 -= 3; d2Parts.push(`垄断点击率${monopolyClick}%(高)`); }
+  }
+  details.competition = d2Parts.length > 0 ? d2Parts.join("；") : "竞争数据缺失，使用默认值";
+
+  // D3: Traffic Quality (max 15) — brand keyword ratio in top keywords
+  let d3 = 8;
+  if (ctx.allKeywords.length > 0 && ctx.brandKeywords.length >= 0) {
+    const brandCount = ctx.allKeywords.filter((kw) =>
+      ctx.brandKeywords.some((bk) => kw.toLowerCase().includes(bk.toLowerCase()))
+    ).length;
+    const brandRatio = brandCount / ctx.allKeywords.length;
+    if (brandRatio < 0.1) { d3 = 14; details.trafficQuality = `品牌词占比${(brandRatio * 100).toFixed(0)}%（极低，流量通用性强）`; }
+    else if (brandRatio < 0.3) { d3 = 11; details.trafficQuality = `品牌词占比${(brandRatio * 100).toFixed(0)}%（较低）`; }
+    else if (brandRatio < 0.5) { d3 = 7; details.trafficQuality = `品牌词占比${(brandRatio * 100).toFixed(0)}%（中等）`; }
+    else { d3 = 4; details.trafficQuality = `品牌词占比${(brandRatio * 100).toFixed(0)}%（高，品牌锁定严重）`; }
+  } else {
+    details.trafficQuality = "关键词数据不足，使用默认值";
+  }
+
+  // D4: Profit (max 20) — based on user margin
+  let d4 = 10;
+  if (ctx.marginPct >= 35) d4 = 20;
+  else if (ctx.marginPct >= 28) d4 = 17;
+  else if (ctx.marginPct >= 20) d4 = 14;
+  else if (ctx.marginPct >= 12) d4 = 10;
+  else if (ctx.marginPct >= 5) d4 = 6;
+  else d4 = 3;
+  details.profit = `利润率 ${ctx.marginPct.toFixed(1)}%`;
+
+  // D5: Product Difficulty (max 10) — avg ratings count, variation count
+  const asins = Object.values(ctx.asinDetails);
+  let avgRatings = 0;
+  let ratingCount = 0;
+  for (const det of asins) {
+    const rc = deepNumAny(det, ["ratingsCount", "ratings", "reviewCount", "totalRatings"]);
+    if (rc !== null) { avgRatings += rc; ratingCount++; }
+  }
+  let d5 = 5;
+  if (ratingCount > 0) {
+    avgRatings /= ratingCount;
+    if (avgRatings < 200) { d5 = 9; details.productDifficulty = `竞品平均评论${Math.round(avgRatings)}条（少，易追赶）`; }
+    else if (avgRatings < 1000) { d5 = 7; details.productDifficulty = `竞品平均评论${Math.round(avgRatings)}条（中等）`; }
+    else if (avgRatings < 5000) { d5 = 4; details.productDifficulty = `竞品平均评论${Math.round(avgRatings)}条（较多）`; }
+    else { d5 = 2; details.productDifficulty = `竞品平均评论${Math.round(avgRatings)}条（极多，难追赶）`; }
+  } else {
+    details.productDifficulty = "评论数据缺失，使用默认值";
+  }
+
+  // D6: Review Barrier (max 10) — competitor avg rating & review count
+  const ratings: number[] = [];
+  for (const det of asins) {
+    const r = deepNumAny(det, ["rating", "averageRating", "starRating"]);
+    if (r !== null) ratings.push(r);
+  }
+  let d6 = 5;
+  if (ratings.length > 0) {
+    const avgRating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+    if (avgRating < 3.8) { d6 = 9; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（低，容易超越）`; }
+    else if (avgRating < 4.2) { d6 = 7; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（中等）`; }
+    else if (avgRating < 4.5) { d6 = 4; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（较高）`; }
+    else { d6 = 2; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（极高，难超越）`; }
+  } else {
+    details.reviewBarrier = "评分数据缺失，使用默认值";
+  }
+
+  // D7: Trend (max 10) — google trend & keepa direction
+  let d7 = 5;
+  const trendParts: string[] = [];
+  const gTrendVal = deepNumAny(ctx.googleTrend, ["trendScore", "trend", "interestOverTime"]);
+  if (gTrendVal !== null) {
+    if (gTrendVal >= 70) { d7 += 2; trendParts.push(`Google趋势${gTrendVal}(上升)`); }
+    else if (gTrendVal >= 40) { d7 += 0; trendParts.push(`Google趋势${gTrendVal}(平稳)`); }
+    else { d7 -= 2; trendParts.push(`Google趋势${gTrendVal}(下降)`); }
+  }
+  const keepaSlope = deepNumAny(ctx.keepa, ["salesRankSlope", "bsrSlope", "trend"]);
+  if (keepaSlope !== null) {
+    // Negative slope = improving BSR = good
+    if (keepaSlope < -5) { d7 += 2; trendParts.push("Keepa BSR上升趋势"); }
+    else if (keepaSlope > 5) { d7 -= 1; trendParts.push("Keepa BSR下降趋势"); }
+  }
+  details.trend = trendParts.length > 0 ? trendParts.join("；") : "趋势数据缺失，使用默认值";
+
   const dimensions = {
-    marketSpace: clamp(marketSpace),
-    competition: clamp(competition),
-    profit: clamp(profit),
-    differentiation: clamp(differentiation),
-    barrier: clamp(barrier),
+    marketCapacity: clampDim(d1, 15),
+    competition: clampDim(d2, 20),
+    trafficQuality: clampDim(d3, 15),
+    profit: clampDim(d4, 20),
+    productDifficulty: clampDim(d5, 10),
+    reviewBarrier: clampDim(d6, 10),
+    trend: clampDim(d7, 10),
   };
-  const total = Math.min(
-    100,
-    Object.values(dimensions).reduce((a, b) => a + b, 0)
-  );
-  const band = bandFromTotal(total);
-  return {
-    total,
-    band,
-    label: bandLabel(band),
-    dimensions,
-    rationale:
-      "部分接口未返回数据时使用的启发式评分，建议配置卖家精灵 MCP 与 Claude 后重新分析以获得更准确结论。",
-  };
+
+  return { dimensions, details };
 }
 
 export type ProductAnalysisRunMeta = {
@@ -344,13 +473,6 @@ export async function runProductAnalysis(
 
   p("profit", "利润测算", 72);
 
-  const toolErrorCount =
-    Object.keys(detailErrors).length +
-    trafficErrors.length +
-    Object.keys(reviewErrors).length +
-    marketErrors.length +
-    trendErrors.length;
-
   const contextForAi = {
     marketplace: parsed.marketplace,
     asins: parsed.asins,
@@ -371,6 +493,10 @@ export async function runProductAnalysis(
       marginPct,
       assumptions: profitInput,
     },
+    trends: truncateJson({
+      keepa: keepa.ok ? keepa.data : null,
+      googleTrend: gTrend.ok ? gTrend.data : null,
+    }),
   };
 
   p("claude_review", "Claude 评价洞察", 78);
@@ -379,67 +505,88 @@ export async function runProductAnalysis(
     painPoints?: Array<{ point: string; severity?: string; frequency?: string }>;
     differentiators?: string[];
     reviewSummary?: string;
+    brandKeywords?: string[];
   };
 
   const painJson = await claudeJson<PainJson>({
     system:
-      "你是亚马逊选品分析师。只输出合法 JSON，不要 markdown。字段：painPoints[{point,severity,frequency}], differentiators[string], reviewSummary(string)。",
-    user: `根据以下评价/MCP 数据摘要，提炼用户痛点 TOP5（可少于5）、差异化方向、简短评价总结。\n${truncateJson(reviewByAsin, 8000)}`,
+      "你是亚马逊选品分析师。只输出合法 JSON，不要 markdown。字段：painPoints[{point,severity,frequency}], differentiators[string], reviewSummary(string), brandKeywords[string]。brandKeywords 是你从流量关键词列表中识别出的品牌词（如 Nike、Anker 等品牌名），如果没有品牌词则返回空数组。",
+    user: `根据以下评价/MCP 数据摘要，提炼用户痛点 TOP5（可少于5）、差异化方向、简短评价总结。同时，从以下流量关键词中识别出品牌词。\n评价数据：${truncateJson(reviewByAsin, 6000)}\n流量关键词数据：${truncateJson(kw.ok ? kw.data : null, 2000)}`,
   });
 
-  p("claude_score", "Claude 综合评分", 86);
+  p("claude_score", "数据驱动评分 + Claude 微调", 86);
 
-  type ScoreJson = {
-    total?: number;
-    dimensions?: {
-      marketSpace?: number;
-      competition?: number;
-      profit?: number;
-      differentiation?: number;
-      barrier?: number;
+  // Extract top keywords from traffic data for brand ratio analysis
+  const topKeywords: string[] = [];
+  if (kw.ok && kw.data) {
+    const kwData = kw.data as Record<string, unknown>;
+    const extractKws = (obj: unknown, depth = 0): void => {
+      if (depth > 5 || !obj || typeof obj !== "object") return;
+      if (Array.isArray(obj)) {
+        for (const item of obj.slice(0, 20)) {
+          if (typeof item === "string") topKeywords.push(item);
+          else if (item && typeof item === "object") {
+            const o = item as Record<string, unknown>;
+            const kwStr = o.keyword ?? o.searchTerm ?? o.name ?? o.text;
+            if (typeof kwStr === "string") topKeywords.push(kwStr);
+          }
+        }
+        return;
+      }
+      for (const v of Object.values(obj as Record<string, unknown>)) {
+        extractKws(v, depth + 1);
+      }
     };
+    extractKws(kwData);
+  }
+
+  const brandKeywords = painJson?.brandKeywords ?? [];
+
+  // Data-driven scoring
+  const { dimensions: dataDimensions, details: dimDetails } = calculateDataDrivenScore({
+    trafficKeyword: kw.ok ? kw.data : null,
+    marketResearch: mr.ok ? mr.data : null,
+    asinDetails: byAsin,
+    reviewByAsin,
+    keepa: keepa.ok ? keepa.data : null,
+    googleTrend: gTrend.ok ? gTrend.data : null,
+    marginPct,
+    brandKeywords,
+    allKeywords: topKeywords,
+  });
+
+  const dataTotal = Object.values(dataDimensions).reduce((a, b) => a + b, 0);
+
+  // Claude ±5 adjustment
+  type AdjustJson = {
+    adjustment?: number;
     rationale?: string;
   };
 
-  const scoreJson = await claudeJson<ScoreJson>({
+  const dimDetailStr = Object.entries(dimDetails)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join("\n");
+
+  const adjustJson = await claudeJson<AdjustJson>({
     system:
-      "你是亚马逊选品决策助手。只输出 JSON：{total:0-100, dimensions:{marketSpace,competition,profit,differentiation,barrier 各0-20}, rationale:string}。",
-    user: `结合数据摘要给出综合分与五维得分（每项最高20，总和约等于 total）。\n${truncateJson(contextForAi, 10000)}`,
+      "你是亚马逊选品决策助手。数据驱动评分系统已给出基础分，你需要根据数据摘要中可能遗漏的定性因素（如品牌壁垒、政策风险、季节性等）给出微调。只输出 JSON：{adjustment: -5到5之间的整数, rationale: string}。adjustment 正数表示数据低估了机会，负数表示数据高估了机会。",
+    user: `数据驱动基础分: ${dataTotal}/100\n各维度详情:\n${dimDetailStr}\n\n数据摘要:\n${truncateJson(contextForAi, 8000)}`,
   });
 
-  let score: AnalysisResult["score"];
-  if (
-    scoreJson &&
-    typeof scoreJson.total === "number" &&
-    scoreJson.dimensions
-  ) {
-    const d = scoreJson.dimensions;
-    const dimensions = {
-      marketSpace: Math.min(20, Math.max(0, Number(d.marketSpace ?? 10))),
-      competition: Math.min(20, Math.max(0, Number(d.competition ?? 10))),
-      profit: Math.min(20, Math.max(0, Number(d.profit ?? 10))),
-      differentiation: Math.min(
-        20,
-        Math.max(0, Number(d.differentiation ?? 10))
-      ),
-      barrier: Math.min(20, Math.max(0, Number(d.barrier ?? 10))),
-    };
-    const total = Math.min(100, Math.max(0, Math.round(scoreJson.total)));
-    const band = bandFromTotal(total);
-    score = {
-      total,
-      band,
-      label: bandLabel(band),
-      dimensions,
-      rationale: scoreJson.rationale ?? "",
-    };
-  } else {
-    score = heuristicScore({
-      marginPct,
-      toolErrors: toolErrorCount,
-      lowPriceCount: lowPriceWarnings.length,
-    });
-  }
+  const adjustment = adjustJson && typeof adjustJson.adjustment === "number"
+    ? Math.max(-5, Math.min(5, Math.round(adjustJson.adjustment)))
+    : 0;
+  const adjustRationale = adjustJson?.rationale ?? "";
+
+  const finalTotal = Math.max(0, Math.min(100, dataTotal + adjustment));
+  const band = bandFromTotal(finalTotal);
+  const score: AnalysisResult["score"] = {
+    total: finalTotal,
+    band,
+    label: bandLabel(band),
+    dimensions: dataDimensions,
+    rationale: `数据驱动基础分 ${dataTotal}${adjustment >= 0 ? "+" : ""}${adjustment} = ${finalTotal}。${adjustRationale}`,
+  };
 
   p("claude_report", "生成完整报告", 93);
 

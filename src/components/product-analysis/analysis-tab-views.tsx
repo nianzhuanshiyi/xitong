@@ -593,11 +593,23 @@ export function ReviewsAnalysisTab({ result }: { result: AnalysisResult }) {
 }
 
 const DIM_LABEL: Record<string, string> = {
-  marketSpace: "市场空间",
-  competition: "竞争难度",
+  marketCapacity: "市场容量",
+  competition: "竞争格局",
+  trafficQuality: "流量质量",
   profit: "利润潜力",
-  differentiation: "差异化机会",
-  barrier: "进入门槛",
+  productDifficulty: "产品难度",
+  reviewBarrier: "评论壁垒",
+  trend: "趋势方向",
+};
+
+const DIM_MAX: Record<string, number> = {
+  marketCapacity: 15,
+  competition: 20,
+  trafficQuality: 15,
+  profit: 20,
+  productDifficulty: 10,
+  reviewBarrier: 10,
+  trend: 10,
 };
 
 const SCORE_COLOR: Record<string, string> = {
@@ -656,7 +668,8 @@ export function ScoreAnalysisTab({ score }: { score: AnalysisResult["score"] }) 
 
       <div className="mx-auto w-full max-w-3xl space-y-5 px-1">
         {entries.map(([k, v]) => {
-          const pct = Math.min(100, Math.max(0, (v / 20) * 100));
+          const max = DIM_MAX[k] ?? 20;
+          const pct = Math.min(100, Math.max(0, (v / max) * 100));
           return (
             <div
               key={k}
@@ -672,8 +685,8 @@ export function ScoreAnalysisTab({ score }: { score: AnalysisResult["score"] }) 
                     style={{ width: `${pct}%` }}
                   />
                 </div>
-                <span className="w-12 shrink-0 text-right text-sm font-mono tabular-nums text-slate-800">
-                  {v}/20
+                <span className="w-14 shrink-0 text-right text-sm font-mono tabular-nums text-slate-800">
+                  {v}/{max}
                 </span>
               </div>
             </div>
