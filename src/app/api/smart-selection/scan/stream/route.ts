@@ -1,6 +1,6 @@
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -13,10 +13,8 @@ const bodySchema = z.object({
  * 当前为框架阶段：推送步骤说明，完成后提示待接入卖家精灵与 Claude。
  */
 export async function POST(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return new Response("未登录", { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("selection-analysis");
+  if (error) return error;
 
   let json: unknown;
   try {
@@ -34,6 +32,9 @@ export async function POST(req: Request) {
   });
   if (!plan) {
     return new Response("方案不存在", { status: 404 });
+  }
+  if (plan.createdById !== session!.user.id) {
+    return new Response("无权限", { status: 403 });
   }
   if (!plan.active) {
     return new Response("该方案尚未开放", { status: 403 });

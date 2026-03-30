@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +16,8 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("suppliers");
+  if (error) return error;
   const { id } = await params;
   const ok = await prisma.supplier.findUnique({ where: { id }, select: { id: true } });
   if (!ok) return NextResponse.json({ message: "未找到" }, { status: 404 });

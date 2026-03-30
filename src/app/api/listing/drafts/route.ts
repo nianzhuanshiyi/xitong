@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -17,13 +16,11 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("listing");
+  if (error) return error;
 
   const rows = await prisma.listingDraft.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session!.user.id },
     orderBy: { updatedAt: "desc" },
     take: 80,
     select: {
@@ -40,10 +37,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("listing");
+  if (error) return error;
 
   let body: unknown;
   try {
@@ -74,7 +69,7 @@ export async function POST(req: Request) {
 
   const row = await prisma.listingDraft.create({
     data: {
-      userId: session.user.id,
+      userId: session!.user.id,
       marketplace: parsed.data.marketplace,
       category: parsed.data.category,
       productName: parsed.data.productName,

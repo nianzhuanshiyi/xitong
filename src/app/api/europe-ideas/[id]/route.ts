@@ -1,16 +1,15 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("europe-ideas");
+  if (error) return error;
+  const userId = session.user.id;
 
   const { id } = await ctx.params;
   const idea = await prisma.europeProductIdea.findUnique({
@@ -21,7 +20,7 @@ export async function GET(_req: Request, ctx: Ctx) {
     },
   });
 
-  if (!idea) {
+  if (!idea || idea.createdBy !== userId) {
     return NextResponse.json({ message: "创意不存在" }, { status: 404 });
   }
 
@@ -37,12 +36,17 @@ export async function GET(_req: Request, ctx: Ctx) {
 }
 
 export async function PATCH(req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("europe-ideas");
+  if (error) return error;
+  const userId = session.user.id;
 
   const { id } = await ctx.params;
+
+  const existing = await prisma.europeProductIdea.findUnique({ where: { id } });
+  if (!existing || existing.createdBy !== userId) {
+    return NextResponse.json({ message: "创意不存在" }, { status: 404 });
+  }
+
   const body = (await req.json()) as { status?: string };
 
   const validStatuses = ["draft", "validated", "developing", "abandoned"];
@@ -59,12 +63,17 @@ export async function PATCH(req: Request, ctx: Ctx) {
 }
 
 export async function DELETE(_req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("europe-ideas");
+  if (error) return error;
+  const userId = session.user.id;
 
   const { id } = await ctx.params;
+
+  const existing = await prisma.europeProductIdea.findUnique({ where: { id } });
+  if (!existing || existing.createdBy !== userId) {
+    return NextResponse.json({ message: "创意不存在" }, { status: 404 });
+  }
+
   await prisma.europeProductIdea.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

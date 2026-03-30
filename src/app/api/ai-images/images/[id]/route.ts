@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { publicRoot } from "@/lib/ai-images/paths";
 
 export const dynamic = "force-dynamic";
@@ -16,17 +16,15 @@ const patchSchema = z.object({
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("ai-images");
+  if (error) return error;
   const { id } = await ctx.params;
 
   const row = await prisma.generatedImage.findFirst({
     where: { id },
     include: { project: true },
   });
-  if (!row || row.project.userId !== session.user.id) {
+  if (!row || row.project.userId !== session!.user.id) {
     return NextResponse.json({ message: "图片不存在" }, { status: 404 });
   }
 
@@ -52,17 +50,15 @@ export async function PATCH(req: Request, ctx: Ctx) {
 }
 
 export async function DELETE(_req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("ai-images");
+  if (error) return error;
   const { id } = await ctx.params;
 
   const row = await prisma.generatedImage.findFirst({
     where: { id },
     include: { project: true },
   });
-  if (!row || row.project.userId !== session.user.id) {
+  if (!row || row.project.userId !== session!.user.id) {
     return NextResponse.json({ message: "图片不存在" }, { status: 404 });
   }
 

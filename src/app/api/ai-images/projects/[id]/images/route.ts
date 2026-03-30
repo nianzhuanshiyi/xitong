@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("ai-images");
+  if (error) return error;
   const { id: projectId } = await ctx.params;
 
   const project = await prisma.imageProject.findFirst({
-    where: { id: projectId, userId: session.user.id },
+    where: { id: projectId, userId: session!.user.id },
     select: { id: true },
   });
   if (!project) {

@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 /** GET /api/product-dev/stats — 各状态数量统计 */
 export async function GET() {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("product-dev");
+  if (error) return error;
+  const userId = session.user.id;
 
   try {
     const statuses = [
@@ -23,8 +22,8 @@ export async function GET() {
     ] as const;
 
     const [total, ...counts] = await Promise.all([
-      prisma.productDev.count(),
-      ...statuses.map((s) => prisma.productDev.count({ where: { status: s } })),
+      prisma.productDev.count({ where: { createdBy: userId } }),
+      ...statuses.map((s) => prisma.productDev.count({ where: { status: s, createdBy: userId } })),
     ]);
 
     const byStatus: Record<string, number> = {};

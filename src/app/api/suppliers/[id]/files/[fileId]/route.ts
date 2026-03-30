@@ -3,7 +3,7 @@ import { unlink } from "node:fs/promises";
 import { z } from "zod";
 import type { SupplierFileCategory } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { absolutePathFromRelative } from "@/lib/supplier-uploads";
 
 export const dynamic = "force-dynamic";
@@ -25,10 +25,8 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string; fileId: string }> }
 ) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("suppliers");
+  if (error) return error;
   const { id, fileId } = await params;
 
   const f = await prisma.supplierFile.findFirst({
@@ -66,10 +64,8 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string; fileId: string }> }
 ) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("suppliers");
+  if (error) return error;
   const { id, fileId } = await params;
 
   const f = await prisma.supplierFile.findFirst({

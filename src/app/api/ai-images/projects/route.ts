@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { generateBundlePlanWithClaude } from "@/lib/ai-images/claude-image-prompt";
 import { bundleSlotsFromAi } from "@/lib/ai-images/bundle-resolve";
 import { DEFAULT_AMAZON_BUNDLE } from "@/lib/ai-images/bundle-defaults";
@@ -17,13 +17,11 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("ai-images");
+  if (error) return error;
 
   const rows = await prisma.imageProject.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session!.user.id },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
@@ -41,10 +39,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("ai-images");
+  if (error) return error;
 
   let body: unknown;
   try {
@@ -72,7 +68,7 @@ export async function POST(req: Request) {
 
   const row = await prisma.imageProject.create({
     data: {
-      userId: session.user.id,
+      userId: session!.user.id,
       name,
       asin: asin?.trim() || null,
       category,

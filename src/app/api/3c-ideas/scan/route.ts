@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { claudeJson } from "@/lib/claude-client";
 
 export const dynamic = "force-dynamic";
@@ -56,10 +56,8 @@ type TrendItem = {
 };
 
 export async function POST() {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("3c-ideas");
+  if (error) return error;
 
   try {
     console.info("[3c-scan] 开始调用 Claude API...");

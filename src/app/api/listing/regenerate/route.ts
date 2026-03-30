@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import {
   regenerateAplus,
   regenerateDescription,
@@ -88,10 +87,8 @@ function mergeFlags(f?: z.infer<typeof flagsPartial>): ListingGenerateFlags {
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("listing");
+  if (error) return error;
 
   let json: unknown;
   try {

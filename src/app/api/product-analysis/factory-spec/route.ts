@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { z } from "zod";
-import { authOptions } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import {
   generateFactorySpecMarkdown,
   type FactorySpecContext,
@@ -25,10 +24,8 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("selection-analysis");
+  if (error) return error;
 
   let raw: unknown;
   try {

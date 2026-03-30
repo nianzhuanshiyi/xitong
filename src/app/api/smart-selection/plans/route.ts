@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { US_BEAUTY_DEFAULT_FILTERS } from "@/lib/smart-selection-filters";
 
 export const dynamic = "force-dynamic";
@@ -18,12 +18,11 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("selection-analysis");
+  if (error) return error;
 
   const plans = await prisma.smartSelectionPlan.findMany({
+    where: { createdById: session!.user.id },
     orderBy: [{ active: "desc" }, { slug: "asc" }],
     select: {
       id: true,
@@ -39,10 +38,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("selection-analysis");
+  if (error) return error;
 
   let body: unknown;
   try {
@@ -67,7 +64,7 @@ export async function POST(req: Request) {
         category: parsed.data.category ?? null,
         filtersJson: JSON.stringify(US_BEAUTY_DEFAULT_FILTERS),
         active: true,
-        createdById: session.user.id,
+        createdById: session!.user.id,
       },
     });
     return NextResponse.json(row, { status: 201 });

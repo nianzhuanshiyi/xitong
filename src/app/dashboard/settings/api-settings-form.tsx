@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Database, Download, Eye, EyeOff, Loader2, RefreshCw, Upload } from "lucide-react";
+import { Bot, Database, Download, Eye, EyeOff, Loader2, RefreshCw, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +17,7 @@ type IntegrationGet = {
   sellerspriteSecretPreview: string;
   claudeConfigured: boolean;
   sellerspriteSecretConfigured: boolean;
+  aiAssistantModel?: string;
 };
 
 type ConnState = "idle" | "loading" | "ok" | "fail";
@@ -59,6 +60,9 @@ export function ApiSettingsForm() {
   const [showClaude, setShowClaude] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
 
+  const [aiModel, setAiModel] = useState("sonnet");
+  const [aiModelSaving, setAiModelSaving] = useState(false);
+
   const [claudeTest, setClaudeTest] = useState<ConnState>("idle");
   const [spriteTest, setSpriteTest] = useState<ConnState>("idle");
   const [testMsg, setTestMsg] = useState<{ claude?: string; sprite?: string }>({});
@@ -69,7 +73,18 @@ export function ApiSettingsForm() {
       const res = await fetch("/api/settings/integrations");
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.message ?? "加载失败");
-      setData(j as IntegrationGet);
+      const d = j as IntegrationGet;
+      setData(d);
+      // Load global AI model setting
+      try {
+        const settingsRes = await fetch("/api/admin/settings");
+        if (settingsRes.ok) {
+          const settingsData = await settingsRes.json();
+          if (settingsData.settings?.ai_default_model) {
+            setAiModel(settingsData.settings.ai_default_model);
+          }
+        }
+      } catch { /* ignore */ }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "加载失败");
     } finally {
@@ -395,6 +410,66 @@ export function ApiSettingsForm() {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-heading text-lg">
+            <Bot className="mr-1.5 inline size-5 align-text-bottom" />
+            AI 模型设置（全局）
+          </CardTitle>
+          <CardDescription>选择全公司统一使用的 Claude 模型，影响所有 AI 功能模块</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>全局 AI 模型</Label>
+            <div className="flex gap-2">
+              {[
+                { value: "haiku", label: "Claude Haiku", desc: "快速省钱，适合简单任务", modelId: "claude-haiku-4-5-20251001" },
+                { value: "sonnet", label: "Claude Sonnet", desc: "性价比高，推荐日常使用", modelId: "claude-sonnet-4-20250514" },
+                { value: "opus", label: "Claude Opus", desc: "最强最贵，适合复杂分析", modelId: "claude-opus-4-0-20250514" },
+              ].map((m) => (
+                <button
+                  key={m.value}
+                  type="button"
+                  className={`flex-1 rounded-lg border p-3 text-left transition-colors ${
+                    aiModel === m.value
+                      ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500"
+                      : "hover:bg-slate-50"
+                  }`}
+                  onClick={() => setAiModel(m.value)}
+                >
+                  <div className="text-sm font-medium">{m.label}</div>
+                  <div className="text-xs text-muted-foreground">{m.desc}</div>
+                  <div className="mt-1 text-[10px] font-mono text-gray-400">{m.modelId}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+          <Button
+            type="button"
+            disabled={aiModelSaving}
+            onClick={async () => {
+              setAiModelSaving(true);
+              try {
+                const res = await fetch("/api/admin/settings", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ key: "ai_default_model", value: aiModel }),
+                });
+                if (!res.ok) throw new Error("保存失败");
+                toast.success("全局 AI 模型已保存，所有模块将使用新模型");
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "保存失败");
+              } finally {
+                setAiModelSaving(false);
+              }
+            }}
+          >
+            {aiModelSaving ? <Loader2 className="size-4 animate-spin" /> : "保存全局模型设置"}
+          </Button>
+        </CardContent>
+      </Card>
+
       <Separator />
 
       <Card>

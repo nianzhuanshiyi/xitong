@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { generateFormZ } from "@/lib/ai-images/api-schemas";
 import { generateImagePromptWithClaude } from "@/lib/ai-images/claude-image-prompt";
 import { loadReferencesForClaude } from "@/lib/ai-images/refs";
@@ -14,10 +14,8 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("ai-images");
+  if (error) return error;
 
   let json: unknown;
   try {
@@ -34,7 +32,7 @@ export async function POST(req: Request) {
   }
 
   const project = await prisma.imageProject.findFirst({
-    where: { id: parsed.data.projectId, userId: session.user.id },
+    where: { id: parsed.data.projectId, userId: session!.user.id },
   });
   if (!project) {
     return NextResponse.json({ message: "项目不存在" }, { status: 404 });

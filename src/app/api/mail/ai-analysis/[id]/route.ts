@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -9,10 +9,8 @@ export async function GET(
   _req: Request,
   { params }: { params: { id: string } }
 ) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("email");
+  if (error) return error;
 
   const analysis = await prisma.productAnalysis.findUnique({
     where: { id: params.id },
@@ -27,7 +25,7 @@ export async function GET(
     return NextResponse.json({ message: "未找到" }, { status: 404 });
   }
 
-  if (analysis.createdById !== session.user.id) {
+  if (analysis.createdById !== session!.user.id) {
     return NextResponse.json({ message: "无权限" }, { status: 403 });
   }
 
@@ -39,10 +37,8 @@ export async function DELETE(
   _req: Request,
   { params }: { params: { id: string } }
 ) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("email");
+  if (error) return error;
 
   const analysis = await prisma.productAnalysis.findUnique({
     where: { id: params.id },
@@ -53,7 +49,7 @@ export async function DELETE(
     return NextResponse.json({ message: "未找到" }, { status: 404 });
   }
 
-  if (analysis.createdById !== session.user.id) {
+  if (analysis.createdById !== session!.user.id) {
     return NextResponse.json({ message: "无权限" }, { status: 403 });
   }
 

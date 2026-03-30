@@ -1,16 +1,14 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("beauty-ideas");
+  if (error) return error;
 
   const { id } = await ctx.params;
   const idea = await prisma.productIdea.findUnique({
@@ -25,6 +23,10 @@ export async function GET(_req: Request, ctx: Ctx) {
     return NextResponse.json({ message: "创意不存在" }, { status: 404 });
   }
 
+  if (idea.createdBy !== session!.user.id) {
+    return NextResponse.json({ message: "无权访问" }, { status: 403 });
+  }
+
   return NextResponse.json({
     ...idea,
     keyIngredients: JSON.parse(idea.keyIngredients),
@@ -37,12 +39,19 @@ export async function GET(_req: Request, ctx: Ctx) {
 }
 
 export async function PATCH(req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("beauty-ideas");
+  if (error) return error;
 
   const { id } = await ctx.params;
+
+  const existing = await prisma.productIdea.findUnique({ where: { id }, select: { createdBy: true } });
+  if (!existing) {
+    return NextResponse.json({ message: "创意不存在" }, { status: 404 });
+  }
+  if (existing.createdBy !== session!.user.id) {
+    return NextResponse.json({ message: "无权操作" }, { status: 403 });
+  }
+
   const body = (await req.json()) as { status?: string };
 
   const validStatuses = ["draft", "validated", "developing", "abandoned"];
@@ -59,12 +68,19 @@ export async function PATCH(req: Request, ctx: Ctx) {
 }
 
 export async function DELETE(_req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("beauty-ideas");
+  if (error) return error;
 
   const { id } = await ctx.params;
+
+  const existing = await prisma.productIdea.findUnique({ where: { id }, select: { createdBy: true } });
+  if (!existing) {
+    return NextResponse.json({ message: "创意不存在" }, { status: 404 });
+  }
+  if (existing.createdBy !== session!.user.id) {
+    return NextResponse.json({ message: "无权操作" }, { status: 403 });
+  }
+
   await prisma.productIdea.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

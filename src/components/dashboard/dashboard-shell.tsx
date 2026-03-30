@@ -30,11 +30,14 @@ const QUICK_NAV = [
 
 function useFilteredNav() {
   const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN";
+  const allowed = session?.user?.allowedModules ?? [];
+
   return dashboardNav.filter((i) => {
-    if (session?.user?.role !== "ADMIN") {
-      if (i.href === "/dashboard/users" || i.href === "/dashboard/settings")
-        return false;
-    }
+    // Admin-only items (users, settings, invite-codes)
+    if (i.adminOnly && !isAdmin) return false;
+    // Module-gated items: admin sees all, others need permission
+    if (i.moduleId && !isAdmin && !allowed.includes(i.moduleId)) return false;
     return true;
   });
 }

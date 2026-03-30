@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { EmailDirection } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { inboxEmailWhere } from "@/lib/mail/inbox-filter";
 import { applyAiSummaryToEmail } from "@/lib/mail/imap-sync";
 
@@ -9,10 +9,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST() {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("email");
+  if (error) return error;
 
   const rows = await prisma.email.findMany({
     where: {

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { parseAsinInput } from "@/lib/asin-parser";
 import { guessPriceFromDetail } from "@/lib/product-analysis/utils";
 import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
@@ -8,10 +7,8 @@ import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("selection-analysis");
+  if (error) return error;
 
   let body: { rawInput?: string };
   try {

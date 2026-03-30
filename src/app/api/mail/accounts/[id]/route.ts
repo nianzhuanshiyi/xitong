@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { encryptPassword } from "@/lib/mail/crypto";
 
 export const dynamic = "force-dynamic";
@@ -26,13 +26,11 @@ async function getOwnAccount(userId: string, id: string) {
 
 /** PATCH /api/mail/accounts/[id] — 编辑邮箱 */
 export async function PATCH(req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("email");
+  if (error) return error;
 
   const { id } = await ctx.params;
-  const existing = await getOwnAccount(session.user.id, id);
+  const existing = await getOwnAccount(session!.user.id, id);
   if (!existing) {
     return NextResponse.json({ message: "邮箱不存在" }, { status: 404 });
   }
@@ -97,13 +95,11 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
 /** DELETE /api/mail/accounts/[id] — 删除邮箱 */
 export async function DELETE(_req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("email");
+  if (error) return error;
 
   const { id } = await ctx.params;
-  const existing = await getOwnAccount(session.user.id, id);
+  const existing = await getOwnAccount(session!.user.id, id);
   if (!existing) {
     return NextResponse.json({ message: "邮箱不存在" }, { status: 404 });
   }

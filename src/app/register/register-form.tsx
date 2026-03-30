@@ -53,6 +53,20 @@ export function RegisterForm() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? "注册失败");
 
+      // Check if user needs admin approval
+      if (data.needApproval) {
+        toast.success("注册成功，请等待管理员开通权限");
+        // Still auto-login so they can see the dashboard (with limited access)
+        await signIn("credentials", {
+          email: form.email,
+          password: form.password,
+          redirect: false,
+        });
+        router.push("/dashboard");
+        router.refresh();
+        return;
+      }
+
       // 2. 自动登录
       const signInRes = await signIn("credentials", {
         email: form.email,

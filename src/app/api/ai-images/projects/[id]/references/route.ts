@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import {
   ensureProjectDirs,
   projectUploadDir,
@@ -16,14 +16,12 @@ export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function POST(req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("ai-images");
+  if (error) return error;
   const { id: projectId } = await ctx.params;
 
   const project = await prisma.imageProject.findFirst({
-    where: { id: projectId, userId: session.user.id },
+    where: { id: projectId, userId: session!.user.id },
   });
   if (!project) {
     return NextResponse.json({ message: "项目不存在" }, { status: 404 });
@@ -85,13 +83,11 @@ export async function POST(req: Request, ctx: Ctx) {
 }
 
 export async function DELETE(req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("ai-images");
+  if (error) return error;
   const { id: projectId } = await ctx.params;
   const project = await prisma.imageProject.findFirst({
-    where: { id: projectId, userId: session.user.id },
+    where: { id: projectId, userId: session!.user.id },
   });
   if (!project) {
     return NextResponse.json({ message: "项目不存在" }, { status: 404 });

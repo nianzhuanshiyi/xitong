@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { extractTextFromSupplierFile } from "@/lib/supplier-file-text";
 import { aiAnalyzeFileByCategory } from "@/lib/supplier-ai";
 import { absolutePathFromRelative } from "@/lib/supplier-uploads";
@@ -11,10 +11,8 @@ export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string; fileId: string }> }
 ) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("suppliers");
+  if (error) return error;
   const { id, fileId } = await params;
 
   const f = await prisma.supplierFile.findFirst({

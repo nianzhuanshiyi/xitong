@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("europe-ideas");
+  if (error) return error;
+  const userId = session.user.id;
 
   const reports = await prisma.europeTopPickReport.findMany({
-    where: { dismissed: false, status: "completed" },
+    where: { dismissed: false, status: "completed", createdBy: userId },
     orderBy: { createdAt: "desc" },
     take: 50,
     select: {

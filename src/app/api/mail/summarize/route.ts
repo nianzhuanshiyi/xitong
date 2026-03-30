@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { applyAiSummaryToEmail } from "@/lib/mail/imap-sync";
 import { claudeSummarizeEmail } from "@/lib/mail/claude-mail";
 import { MailPriority } from "@prisma/client";
@@ -21,10 +21,8 @@ function mapPri(s: string): MailPriority {
 }
 
 export async function POST(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("email");
+  if (error) return error;
   let json: unknown;
   try {
     json = await req.json();

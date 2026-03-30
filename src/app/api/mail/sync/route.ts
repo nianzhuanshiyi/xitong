@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import {
   runImapSync,
   type SyncProgressPayload,
@@ -18,10 +18,8 @@ function wantsNdjsonStream(req: Request): boolean {
  * 可选 body: { accountId?: string } 指定同步某个邮箱，不传则同步当前用户全部活跃邮箱。
  */
 export async function POST(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("email");
+  if (error) return error;
 
   let accountId: string | undefined;
   try {
@@ -35,7 +33,7 @@ export async function POST(req: Request) {
 
   const syncOptions = {
     accountId,
-    userId: session.user.id,
+    userId: session!.user.id,
   };
 
   if (wantsNdjsonStream(req)) {

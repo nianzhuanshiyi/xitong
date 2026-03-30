@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { claudeJson } from "@/lib/claude-client";
 import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
 
@@ -62,10 +62,8 @@ export async function POST(req: NextRequest) {
     });
     userId = admin?.id ?? "system";
   } else {
-    const session = await requireDashboardSession();
-    if (!session) {
-      return NextResponse.json({ message: "未登录" }, { status: 401 });
-    }
+    const { session, error } = await requireModuleAccess("europe-ideas");
+    if (error) return error;
     userId = session.user.id;
   }
 
@@ -301,14 +299,13 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("europe-ideas");
+  if (error) return error;
+  const userId = session.user.id;
 
   // Return the latest non-dismissed completed report
   const report = await prisma.europeTopPickReport.findFirst({
-    where: { dismissed: false, status: "completed" },
+    where: { dismissed: false, status: "completed", createdBy: userId },
     orderBy: { createdAt: "desc" },
     include: { idea: { select: ideaSelect } },
   });
@@ -317,16 +314,18 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("europe-ideas");
+  if (error) return error;
+  const userId = session.user.id;
 
   const body = await req.json();
   const { id, action } = body as { id: string; action: string };
 
   if (action === "dismiss") {
     const rpt = await prisma.europeTopPickReport.findUnique({ where: { id } });
+    if (rpt && rpt.createdBy !== userId) {
+      return NextResponse.json({ message: "无权限" }, { status: 403 });
+    }
     if (!rpt) {
       return NextResponse.json({ message: "不存在" }, { status: 404 });
     }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { claudeJson } from "@/lib/claude-client";
 import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
 
@@ -69,11 +69,9 @@ export async function POST(req: NextRequest) {
     });
     userId = admin?.id ?? "system";
   } else {
-    const session = await requireDashboardSession();
-    if (!session) {
-      return NextResponse.json({ message: "未登录" }, { status: 401 });
-    }
-    userId = session.user.id;
+    const { session, error } = await requireModuleAccess("beauty-ideas");
+    if (error) return error;
+    userId = session!.user.id;
   }
 
   const today = getBeijingDate();
@@ -312,14 +310,12 @@ export async function POST(req: NextRequest) {
 // ── GET: Latest top pick report ─────────────────────────────────
 
 export async function GET() {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("beauty-ideas");
+  if (error) return error;
 
-  // Return the latest non-dismissed completed report
+  // Return the latest non-dismissed completed report for this user
   const report = await prisma.topPickReport.findFirst({
-    where: { dismissed: false, status: "completed" },
+    where: { dismissed: false, status: "completed", createdBy: session!.user.id },
     orderBy: { createdAt: "desc" },
     include: { idea: { select: ideaSelect } },
   });
@@ -330,10 +326,8 @@ export async function GET() {
 // ── PATCH: Dismiss a report ─────────────────────────────────────
 
 export async function PATCH(req: NextRequest) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("beauty-ideas");
+  if (error) return error;
 
   const body = await req.json();
   const { id, action } = body as { id: string; action: string };
@@ -342,6 +336,9 @@ export async function PATCH(req: NextRequest) {
     const rpt = await prisma.topPickReport.findUnique({ where: { id } });
     if (!rpt) {
       return NextResponse.json({ message: "不存在" }, { status: 404 });
+    }
+    if (rpt.createdBy !== session!.user.id) {
+      return NextResponse.json({ message: "无权操作" }, { status: 403 });
     }
     const idea = rpt.ideaId
       ? await prisma.productIdea.findUnique({

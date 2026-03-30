@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { encryptPassword } from "@/lib/mail/crypto";
 
 export const dynamic = "force-dynamic";
@@ -20,14 +20,12 @@ const createSchema = z.object({
 
 /** GET /api/mail/accounts — 当前用户的邮箱列表 */
 export async function GET() {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("email");
+  if (error) return error;
 
   try {
     const rows = await prisma.emailAccount.findMany({
-      where: { userId: session.user.id },
+      where: { userId: session!.user.id },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
@@ -56,10 +54,8 @@ export async function GET() {
 
 /** POST /api/mail/accounts — 添加邮箱账号 */
 export async function POST(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("email");
+  if (error) return error;
 
   let body: unknown;
   try {
@@ -78,7 +74,7 @@ export async function POST(req: Request) {
 
   try {
     const existing = await prisma.emailAccount.findUnique({
-      where: { userId_email: { userId: session.user.id, email } },
+      where: { userId_email: { userId: session!.user.id, email } },
     });
     if (existing) {
       return NextResponse.json({ message: "该邮箱已添加过" }, { status: 409 });
@@ -86,7 +82,7 @@ export async function POST(req: Request) {
 
     const row = await prisma.emailAccount.create({
       data: {
-        userId: session.user.id,
+        userId: session!.user.id,
         email,
         displayName: displayName || null,
         imapHost,

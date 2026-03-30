@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { aiMatchSuppliersForCategory } from "@/lib/supplier-ai";
 
 export const dynamic = "force-dynamic";
@@ -11,10 +11,8 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("suppliers");
+  if (error) return error;
 
   let body: unknown;
   try {

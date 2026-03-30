@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { faviconUrlFromWebsite } from "@/lib/supplier-uploads";
 
 export const dynamic = "force-dynamic";
@@ -34,10 +34,8 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("suppliers");
+  if (error) return error;
 
   const { id } = await params;
   const s = await prisma.supplier.findUnique({
@@ -73,10 +71,8 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("suppliers");
+  if (error) return error;
 
   const { id } = await params;
   const exists = await prisma.supplier.findUnique({ where: { id } });
@@ -132,11 +128,9 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
-  if (session.user.role !== "ADMIN") {
+  const { session, error } = await requireModuleAccess("suppliers");
+  if (error) return error;
+  if (session!.user.role !== "ADMIN") {
     return NextResponse.json({ message: "无权限" }, { status: 403 });
   }
 

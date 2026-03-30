@@ -22,6 +22,7 @@ model User {
   password               String?
   role                   UserRole                @default(EMPLOYEE)
   aiAuthorized           Boolean                 @default(false)
+  allowedModules         String?                 @db.Text
   teamId                 String?
   team                   Team?                   @relation(fields: [teamId], references: [id], onDelete: SetNull)
   accounts               Account[]
@@ -625,11 +626,20 @@ model InviteCode {
   createdAt DateTime  @default(now())
 }
 
+/// 全局系统设置（如 AI 默认模型等）
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+}
+
 /// 后台保存的 API 密钥（.env 存在同名变量时优先使用环境变量）
 model IntegrationSecret {
   id                 String   @id @default("default")
   claudeApiKey       String?
   sellerspriteSecret String?
+  aiAssistantModel   String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
@@ -1243,4 +1253,28 @@ model DailyEuropeReport {
   status          String   @default("pending")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+// ─── AI 助手模块 ────────────────────────────────────────────
+
+model AiConversation {
+  id        String      @id @default(cuid())
+  title     String      @default("新对话")
+  userId    String
+  model     String      @default("sonnet")
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  messages  AiMessage[]
+}
+
+model AiMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String         @db.Text
+  fileUrl        String?
+  fileName       String?
+  model          String?
+  createdAt      DateTime       @default(now())
 }

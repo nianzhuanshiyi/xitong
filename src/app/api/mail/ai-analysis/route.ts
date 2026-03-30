@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { claudeMessages } from "@/lib/claude-client";
 
@@ -34,10 +34,8 @@ score 为 1-100 整数，recommendation 为 strong_yes / yes / maybe / no / stro
 
 /** POST - 创建分析 */
 export async function POST(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("email");
+  if (error) return error;
 
   let json: unknown;
   try {
@@ -87,7 +85,7 @@ export async function POST(req: Request) {
     data: {
       emailId: emailId || null,
       supplierId: supplierId || null,
-      createdById: session.user.id,
+      createdById: session!.user.id,
       productName: productName || "",
       query,
       status: "analyzing",
@@ -189,15 +187,13 @@ export async function POST(req: Request) {
 
 /** GET - 分析列表 */
 export async function GET(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("email");
+  if (error) return error;
 
   const url = new URL(req.url);
   const supplierId = url.searchParams.get("supplierId");
 
-  const where: Record<string, unknown> = { createdById: session.user.id };
+  const where: Record<string, unknown> = { createdById: session!.user.id };
   if (supplierId) where.supplierId = supplierId;
 
   const items = await prisma.productAnalysis.findMany({

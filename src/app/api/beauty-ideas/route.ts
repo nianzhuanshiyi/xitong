@@ -1,21 +1,19 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("beauty-ideas");
+  if (error) return error;
 
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
   const recommendation = searchParams.get("recommendation");
   const category = searchParams.get("category");
 
-  const where: Record<string, unknown> = {};
+  const where: Record<string, unknown> = { createdBy: session!.user.id };
   if (status) where.status = status;
   if (recommendation) where.recommendation = recommendation;
   if (category) where.category = category;

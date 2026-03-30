@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -14,18 +14,19 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ planId: string }> }
 ) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("selection-analysis");
+  if (error) return error;
   const { planId } = await params;
 
   const ok = await prisma.smartSelectionPlan.findUnique({
     where: { id: planId },
-    select: { id: true },
+    select: { id: true, createdById: true },
   });
   if (!ok) {
     return NextResponse.json({ message: "未找到" }, { status: 404 });
+  }
+  if (ok.createdById !== session!.user.id) {
+    return NextResponse.json({ message: "无权限" }, { status: 403 });
   }
 
   let body: unknown;

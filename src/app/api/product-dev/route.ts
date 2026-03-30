@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -39,10 +39,9 @@ const createSchema = z.object({
 
 /** GET /api/product-dev — 列表（支持 status / priority / market 筛选） */
 export async function GET(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("product-dev");
+  if (error) return error;
+  const userId = session.user.id;
 
   const { searchParams } = new URL(req.url);
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
@@ -52,7 +51,7 @@ export async function GET(req: Request) {
   const market = searchParams.get("market");
   const q = searchParams.get("q");
 
-  const where: Record<string, unknown> = {};
+  const where: Record<string, unknown> = { createdBy: userId };
   if (status) where.status = status;
   if (priority) where.priority = priority;
   if (market) where.targetMarket = market;
@@ -110,10 +109,9 @@ export async function GET(req: Request) {
 
 /** POST /api/product-dev — 新建产品开发项目 */
 export async function POST(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("product-dev");
+  if (error) return error;
+  const userId = session.user.id;
 
   let body: unknown;
   try {
@@ -135,7 +133,7 @@ export async function POST(req: Request) {
     const row = await prisma.productDev.create({
       data: {
         ...data,
-        createdBy: session.user.id,
+        createdBy: userId,
       },
     });
 
@@ -145,7 +143,7 @@ export async function POST(req: Request) {
         productId: row.id,
         action: "create",
         content: `创建产品开发项目「${row.name}」`,
-        createdBy: session.user.id,
+        createdBy: userId,
       },
     });
 

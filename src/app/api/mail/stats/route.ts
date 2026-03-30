@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { EmailDirection } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { mailUiMock } from "@/lib/mail/config";
 import { mockStats } from "@/lib/mail/fixtures";
 import { inboxEmailWhere } from "@/lib/mail/inbox-filter";
@@ -9,10 +9,8 @@ import { inboxEmailWhere } from "@/lib/mail/inbox-filter";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("email");
+  if (error) return error;
   if (mailUiMock()) {
     return NextResponse.json(mockStats());
   }

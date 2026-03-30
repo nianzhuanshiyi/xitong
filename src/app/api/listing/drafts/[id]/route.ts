@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -20,13 +19,11 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("listing");
+  if (error) return error;
   const { id } = await params;
   const row = await prisma.listingDraft.findFirst({
-    where: { id, userId: session.user.id },
+    where: { id, userId: session!.user.id },
   });
   if (!row) {
     return NextResponse.json({ message: "未找到" }, { status: 404 });
@@ -38,13 +35,11 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("listing");
+  if (error) return error;
   const { id } = await params;
   const own = await prisma.listingDraft.findFirst({
-    where: { id, userId: session.user.id },
+    where: { id, userId: session!.user.id },
   });
   if (!own) {
     return NextResponse.json({ message: "未找到" }, { status: 404 });
@@ -92,13 +87,11 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("listing");
+  if (error) return error;
   const { id } = await params;
   const own = await prisma.listingDraft.findFirst({
-    where: { id, userId: session.user.id },
+    where: { id, userId: session!.user.id },
   });
   if (!own) {
     return NextResponse.json({ message: "未找到" }, { status: 404 });

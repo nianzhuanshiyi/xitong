@@ -21,6 +21,8 @@ export async function GET() {
   const ss = await getSellerspriteSecret();
   const mcpUrl = getSellerspriteMcpUrl();
 
+  const dbRow = await prisma.integrationSecret.findUnique({ where: { id: "default" } });
+
   return NextResponse.json({
     mcpUrl: mcpUrl,
     claudeFromEnv: Boolean(process.env.CLAUDE_API_KEY?.trim()),
@@ -29,12 +31,14 @@ export async function GET() {
     sellerspriteSecretPreview: maskSecret(ss),
     claudeConfigured: Boolean(claude),
     sellerspriteSecretConfigured: Boolean(ss),
+    aiAssistantModel: dbRow?.aiAssistantModel || "sonnet",
   });
 }
 
 const postSchema = z.object({
   claudeApiKey: z.union([z.string(), z.null()]).optional(),
   sellerspriteSecret: z.union([z.string(), z.null()]).optional(),
+  aiAssistantModel: z.string().optional(),
 });
 
 function normalizeSecretInput(
@@ -69,16 +73,20 @@ export async function POST(req: Request) {
     parsed.data.sellerspriteSecret ?? undefined
   );
 
-  if (claudeNorm === undefined && ssNorm === undefined) {
+  const aiModelVal = parsed.data.aiAssistantModel;
+
+  if (claudeNorm === undefined && ssNorm === undefined && aiModelVal === undefined) {
     return NextResponse.json({ message: "请至少提交一个要更新的字段" }, { status: 400 });
   }
 
   const update: {
     claudeApiKey?: string | null;
     sellerspriteSecret?: string | null;
+    aiAssistantModel?: string;
   } = {};
   if (claudeNorm !== undefined) update.claudeApiKey = claudeNorm;
   if (ssNorm !== undefined) update.sellerspriteSecret = ssNorm;
+  if (aiModelVal !== undefined) update.aiAssistantModel = aiModelVal;
 
   await prisma.integrationSecret.upsert({
     where: { id: "default" },

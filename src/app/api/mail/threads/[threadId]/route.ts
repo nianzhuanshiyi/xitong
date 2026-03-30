@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { mailUiMock } from "@/lib/mail/config";
 import { MOCK_MAIL_DETAILS } from "@/lib/mail/fixtures";
 import { emailDetail } from "@/lib/mail/dto";
@@ -36,10 +36,8 @@ function mockThreadableFromDetails(): ThreadableEmail[] {
 }
 
 export async function GET(req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("email");
+  if (error) return error;
   const { threadId } = await ctx.params;
   const { searchParams } = new URL(req.url);
 

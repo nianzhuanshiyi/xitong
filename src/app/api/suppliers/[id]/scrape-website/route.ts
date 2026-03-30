@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { aiExtractWebsiteFields, scrapeWebsitePlainText } from "@/lib/supplier-ai";
 import { faviconUrlFromWebsite } from "@/lib/supplier-uploads";
 
@@ -11,10 +11,8 @@ export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("suppliers");
+  if (error) return error;
   const { id } = await params;
 
   const s = await prisma.supplier.findUnique({ where: { id } });

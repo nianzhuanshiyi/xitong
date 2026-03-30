@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { Prisma, SupplierStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { faviconUrlFromWebsite } from "@/lib/supplier-uploads";
 
 export const dynamic = "force-dynamic";
@@ -34,10 +34,8 @@ function threeMonthsAgo() {
 }
 
 export async function GET(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("suppliers");
+  if (error) return error;
 
   const { searchParams } = new URL(req.url);
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
@@ -134,10 +132,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("suppliers");
+  if (error) return error;
 
   let body: unknown;
   try {

@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST() {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("europe-ideas");
+  if (error) return error;
 
   const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
   const r = await fetch(`${baseUrl}/api/europe-ideas/top-pick`, {

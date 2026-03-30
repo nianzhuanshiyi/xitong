@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { writeFile } from "node:fs/promises";
 import type { SupplierFileCategory } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { extractTextFromSupplierFile } from "@/lib/supplier-file-text";
 import { aiGuessFileCategory } from "@/lib/supplier-ai";
 import {
@@ -30,10 +30,8 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("suppliers");
+  if (error) return error;
   const { id } = await params;
   const ok = await prisma.supplier.findUnique({ where: { id }, select: { id: true } });
   if (!ok) return NextResponse.json({ message: "未找到" }, { status: 404 });
@@ -50,10 +48,8 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("suppliers");
+  if (error) return error;
   const { id } = await params;
   const ok = await prisma.supplier.findUnique({ where: { id }, select: { id: true } });
   if (!ok) return NextResponse.json({ message: "未找到" }, { status: 404 });

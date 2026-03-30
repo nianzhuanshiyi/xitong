@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { mailUiMock } from "@/lib/mail/config";
 import { MOCK_TODOS } from "@/lib/mail/fixtures";
 import { MailPriority } from "@prisma/client";
@@ -9,10 +9,8 @@ import { MailPriority } from "@prisma/client";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("todos");
+  if (error) return error;
 
   const { searchParams } = new URL(req.url);
   const supplierId = searchParams.get("supplierId");
@@ -37,7 +35,7 @@ export async function GET(req: Request) {
     return NextResponse.json(list);
   }
 
-  const where: Prisma.ActionItemWhereInput = {};
+  const where: Prisma.ActionItemWhereInput = { userId: session!.user.id };
   if (supplierId) where.supplierId = supplierId;
   if (q) {
     where.content = { contains: q };

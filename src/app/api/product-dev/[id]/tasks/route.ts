@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -18,16 +18,19 @@ const createSchema = z.object({
 
 /** GET /api/product-dev/[id]/tasks — 任务列表 */
 export async function GET(_req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("product-dev");
+  if (error) return error;
+  const userId = session.user.id;
 
   const { id } = await ctx.params;
 
   const product = await prisma.productDev.findUnique({ where: { id } });
   if (!product) {
     return NextResponse.json({ message: "项目不存在" }, { status: 404 });
+  }
+
+  if (product.createdBy !== userId) {
+    return NextResponse.json({ message: "无权限访问该项目" }, { status: 403 });
   }
 
   const rows = await prisma.productDevTask.findMany({
@@ -40,16 +43,19 @@ export async function GET(_req: Request, ctx: Ctx) {
 
 /** POST /api/product-dev/[id]/tasks — 新建任务 */
 export async function POST(req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("product-dev");
+  if (error) return error;
+  const userId = session.user.id;
 
   const { id } = await ctx.params;
 
   const product = await prisma.productDev.findUnique({ where: { id } });
   if (!product) {
     return NextResponse.json({ message: "项目不存在" }, { status: 404 });
+  }
+
+  if (product.createdBy !== userId) {
+    return NextResponse.json({ message: "无权限操作该项目" }, { status: 403 });
   }
 
   let body: unknown;
@@ -79,7 +85,7 @@ export async function POST(req: Request, ctx: Ctx) {
       productId: id,
       action: "add_task",
       content: `添加任务「${row.title}」`,
-      createdBy: session.user.id,
+      createdBy: userId,
     },
   });
 

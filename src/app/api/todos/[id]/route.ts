@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { mailUiMock } from "@/lib/mail/config";
 import { MailPriority } from "@prisma/client";
 
@@ -17,10 +17,8 @@ const patchSchema = z.object({
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("todos");
+  if (error) return error;
   const { id } = await ctx.params;
 
   let json: unknown;
@@ -41,7 +39,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ ok: true, mock: true });
   }
 
-  const row = await prisma.actionItem.findFirst({ where: { id } });
+  const row = await prisma.actionItem.findFirst({ where: { id, userId: session!.user.id } });
   if (!row) {
     return NextResponse.json({ message: "待办不存在" }, { status: 404 });
   }

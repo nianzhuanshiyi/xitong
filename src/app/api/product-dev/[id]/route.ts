@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -42,10 +42,9 @@ const patchSchema = z.object({
 
 /** GET /api/product-dev/[id] — 详情（含 tasks + logs） */
 export async function GET(_req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("product-dev");
+  if (error) return error;
+  const userId = session.user.id;
 
   const { id } = await ctx.params;
   const row = await prisma.productDev.findUnique({
@@ -60,21 +59,28 @@ export async function GET(_req: Request, ctx: Ctx) {
     return NextResponse.json({ message: "项目不存在" }, { status: 404 });
   }
 
+  if (row.createdBy !== userId) {
+    return NextResponse.json({ message: "无权限访问该项目" }, { status: 403 });
+  }
+
   return NextResponse.json(row);
 }
 
 /** PATCH /api/product-dev/[id] — 更新 */
 export async function PATCH(req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("product-dev");
+  if (error) return error;
+  const userId = session.user.id;
 
   const { id } = await ctx.params;
 
   const existing = await prisma.productDev.findUnique({ where: { id } });
   if (!existing) {
     return NextResponse.json({ message: "项目不存在" }, { status: 404 });
+  }
+
+  if (existing.createdBy !== userId) {
+    return NextResponse.json({ message: "无权限修改该项目" }, { status: 403 });
   }
 
   let body: unknown;
@@ -104,7 +110,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       productId: id,
       action: "update",
       content: `更新字段: ${changedFields}`,
-      createdBy: session.user.id,
+      createdBy: userId,
     },
   });
 
@@ -113,10 +119,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
 /** DELETE /api/product-dev/[id] — 删除（级联删除 tasks + logs） */
 export async function DELETE(_req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("product-dev");
+  if (error) return error;
+  const userId = session.user.id;
 
   if (session.user.role !== "ADMIN") {
     return NextResponse.json({ message: "无权限" }, { status: 403 });
@@ -127,6 +132,10 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   const existing = await prisma.productDev.findUnique({ where: { id } });
   if (!existing) {
     return NextResponse.json({ message: "项目不存在" }, { status: 404 });
+  }
+
+  if (existing.createdBy !== userId && session.user.role !== "ADMIN") {
+    return NextResponse.json({ message: "无权限删除该项目" }, { status: 403 });
   }
 
   await prisma.productDev.delete({ where: { id } });

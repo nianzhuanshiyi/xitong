@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { claudeJson } from "@/lib/claude-client";
 
 export const dynamic = "force-dynamic";
@@ -43,10 +43,8 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("beauty-ideas");
+  if (error) return error;
 
   const { id } = await params;
   const report = await prisma.topPickReport.findUnique({
@@ -60,6 +58,10 @@ export async function POST(
 
   if (!report) {
     return NextResponse.json({ message: "方案不存在" }, { status: 404 });
+  }
+
+  if (report.createdBy !== session!.user.id) {
+    return NextResponse.json({ message: "无权操作" }, { status: 403 });
   }
 
   // Already deep?

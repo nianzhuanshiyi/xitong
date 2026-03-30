@@ -1,5 +1,4 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { generateListingFull } from "@/lib/listing/generate";
@@ -47,13 +46,8 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return new Response(JSON.stringify({ message: "未登录" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+  const { session, error } = await requireModuleAccess("listing");
+  if (error) return error;
 
   let json: unknown;
   try {
@@ -91,7 +85,7 @@ export async function POST(req: Request) {
   };
 
   const encoder = new TextEncoder();
-  const userId = session.user.id;
+  const userId = session!.user.id;
 
   const stream = new ReadableStream({
     async start(controller) {

@@ -1,4 +1,5 @@
 import { getClaudeApiKey } from "@/lib/integration-keys";
+import { getGlobalAiModel } from "@/lib/ai-model";
 
 export function extractJsonBlock(text: string): string {
   // Try fenced code block first
@@ -33,8 +34,7 @@ export async function claudeMessages(params: {
     throw new Error("未配置 Claude API Key（环境变量 CLAUDE_API_KEY 未设置或为空）");
   }
 
-  const model =
-    process.env.CLAUDE_ANALYSIS_MODEL?.trim() || "claude-sonnet-4-20250514";
+  const model = await getGlobalAiModel();
 
   console.info(`[claudeMessages] 调用 Claude API, model=${model}, maxTokens=${params.maxTokens ?? 4096}, key前10位=${key.slice(0, 10)}...`);
 
@@ -105,8 +105,7 @@ export async function claudeMessagesBlocks(params: {
   const key = await getClaudeApiKey();
   if (!key) return null;
 
-  const model =
-    process.env.CLAUDE_ANALYSIS_MODEL?.trim() || "claude-sonnet-4-20250514";
+  const model = await getGlobalAiModel();
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -268,8 +267,7 @@ export async function claudeMessagesStream(params: {
   const key = await getClaudeApiKey();
   if (!key) throw new Error("未配置 Claude API 密钥");
 
-  const model =
-    process.env.CLAUDE_ANALYSIS_MODEL?.trim() || "claude-sonnet-4-20250514";
+  const model = await getGlobalAiModel();
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",

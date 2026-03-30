@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getClaudeApiKey } from "@/lib/integration-keys";
 
@@ -23,10 +23,8 @@ export async function POST(
   req: Request,
   { params }: { params: { id: string } }
 ) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("email");
+  if (error) return error;
 
   let json: unknown;
   try {
@@ -55,7 +53,7 @@ export async function POST(
     return NextResponse.json({ message: "未找到" }, { status: 404 });
   }
 
-  if (analysis.createdById !== session.user.id) {
+  if (analysis.createdById !== session!.user.id) {
     return NextResponse.json({ message: "无权限" }, { status: 403 });
   }
 

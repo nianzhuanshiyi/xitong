@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -8,10 +8,9 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("europe-ideas");
+  if (error) return error;
+  const userId = session.user.id;
 
   const { id } = await params;
   const report = await prisma.europeTopPickReport.findUnique({
@@ -32,7 +31,7 @@ export async function GET(
     },
   });
 
-  if (!report) {
+  if (!report || report.createdBy !== userId) {
     return NextResponse.json({ message: "方案不存在" }, { status: 404 });
   }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { claudeJson } from "@/lib/claude-client";
 import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
 
@@ -113,10 +113,9 @@ function calcScores(idea: {
 }
 
 export async function POST() {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("3c-ideas");
+  if (error) return error;
+  const userId = session.user.id;
 
   try {
     const recentTrends = await prisma.threeCTrend.findMany({
@@ -277,7 +276,7 @@ export async function POST() {
           recommendation: scores.recommendation,
           aiAnalysis,
           status: "draft",
-          createdBy: session.user.id,
+          createdBy: userId,
         },
       });
       results.push(record.id);

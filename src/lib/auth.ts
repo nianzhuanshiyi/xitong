@@ -29,15 +29,31 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name,
           role: user.role,
+          allowedModules: user.allowedModules,
         };
       },
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
         token.role = (user as { role?: UserRole }).role ?? "EMPLOYEE";
+        const raw = (user as { allowedModules?: string | null }).allowedModules;
+        token.allowedModules = raw ? (JSON.parse(raw) as string[]) : [];
+      }
+      // Refresh permissions from DB on session update
+      if (trigger === "update" && token.id) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { role: true, allowedModules: true },
+        });
+        if (dbUser) {
+          token.role = dbUser.role;
+          token.allowedModules = dbUser.allowedModules
+            ? (JSON.parse(dbUser.allowedModules) as string[])
+            : [];
+        }
       }
       return token;
     },
@@ -45,6 +61,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = (token.role as UserRole) ?? "EMPLOYEE";
+        session.user.allowedModules = (token.allowedModules as string[]) ?? [];
       }
       return session;
     },

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { getGoogleAiApiKey } from "@/lib/integration-keys";
 import {
   buildFullPrompt,
@@ -20,10 +20,8 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("ai-images");
+  if (error) return error;
 
   let json: unknown;
   try {
@@ -42,7 +40,7 @@ export async function POST(req: Request) {
   const { projectId, productDescription, style, extraNotes } = parsed.data;
 
   const project = await prisma.imageProject.findFirst({
-    where: { id: projectId, userId: session.user.id },
+    where: { id: projectId, userId: session!.user.id },
   });
   if (!project) {
     return NextResponse.json({ message: "项目不存在" }, { status: 404 });

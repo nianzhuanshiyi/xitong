@@ -1,5 +1,4 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { runProductAnalysis } from "@/lib/product-analysis/pipeline";
 import type { StreamProgressEvent } from "@/lib/product-analysis/types";
 
@@ -7,13 +6,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return new Response(JSON.stringify({ message: "未登录" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+  const { session, error } = await requireModuleAccess("selection-analysis");
+  if (error) return error;
 
   let body: {
     rawInput?: string;
@@ -61,7 +55,7 @@ export async function POST(req: Request) {
         const { result, reportId, fromCache, cacheMeta } = await runProductAnalysis(
           rawInput,
           profitInput,
-          session.user.id,
+          session!.user.id,
           onProgress,
           { forceRefresh: Boolean(body.forceRefresh) }
         );

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { fetchCompetitorContext } from "@/lib/listing/competitor";
 
 export const dynamic = "force-dynamic";
@@ -12,10 +11,8 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("listing");
+  if (error) return error;
 
   let body: unknown;
   try {

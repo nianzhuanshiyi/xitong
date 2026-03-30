@@ -26,12 +26,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 
+const MODULE_LIST = [
+  { id: "beauty-ideas", label: "美妆新品创意" },
+  { id: "3c-ideas", label: "3C新品创意" },
+  { id: "europe-ideas", label: "欧洲蓝海选品" },
+  { id: "email", label: "邮件中心" },
+  { id: "ai-assistant", label: "AI 助手" },
+  { id: "product-dev", label: "产品开发" },
+  { id: "selection-analysis", label: "选品分析" },
+  { id: "listing", label: "Listing 撰写" },
+  { id: "ai-images", label: "AI 图片" },
+  { id: "suppliers", label: "供应商资源库" },
+  { id: "todos", label: "待办中心" },
+] as const;
+
 export type UserRow = {
   id: string;
   name: string | null;
   email: string | null;
   role: "ADMIN" | "EMPLOYEE";
   aiAuthorized: boolean;
+  allowedModules: string[];
   teamId: string | null;
   createdAt: string;
   team: { id: string; name: string } | null;
@@ -46,13 +61,13 @@ export function UsersManagement() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/users");
+      const res = await fetch("/api/admin/users");
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.message ?? "加载失败");
       }
-      const data = (await res.json()) as UserRow[];
-      setUsers(data);
+      const data = await res.json();
+      setUsers(data.users ?? []);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "加载失败");
     } finally {
@@ -93,8 +108,8 @@ export function UsersManagement() {
                   <TableHead>姓名</TableHead>
                   <TableHead>邮箱</TableHead>
                   <TableHead>角色</TableHead>
-                  <TableHead>AI 授权</TableHead>
-                  <TableHead>团队</TableHead>
+                  <TableHead>模块权限</TableHead>
+                  <TableHead>注册时间</TableHead>
                   <TableHead className="w-[120px] text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
@@ -129,12 +144,18 @@ export function UsersManagement() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={u.aiAuthorized ? "success" : "outline"}>
-                          {u.aiAuthorized ? "已授权" : "未授权"}
-                        </Badge>
+                        {u.role === "ADMIN" ? (
+                          <span className="text-xs text-muted-foreground">全部权限</span>
+                        ) : u.allowedModules.length === 0 ? (
+                          <span className="text-xs text-red-500">无权限</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            {u.allowedModules.length} 个模块
+                          </span>
+                        )}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {u.team?.name ?? "—"}
+                      <TableCell className="text-muted-foreground text-xs">
+                        {new Date(u.createdAt).toLocaleDateString("zh-CN")}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
@@ -231,6 +252,7 @@ function UserFormDialog({
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"ADMIN" | "EMPLOYEE">("EMPLOYEE");
   const [aiAuthorized, setAiAuthorized] = useState(false);
+  const [allowedModules, setAllowedModules] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -241,14 +263,32 @@ function UserFormDialog({
       setPassword("");
       setRole(user.role);
       setAiAuthorized(user.aiAuthorized);
+      setAllowedModules(user.allowedModules ?? []);
     } else if (mode === "create") {
       setName("");
       setEmail("");
       setPassword("");
       setRole("EMPLOYEE");
       setAiAuthorized(false);
+      setAllowedModules([]);
     }
   }, [open, mode, user]);
+
+  function toggleModule(moduleId: string) {
+    setAllowedModules((prev) =>
+      prev.includes(moduleId)
+        ? prev.filter((m) => m !== moduleId)
+        : [...prev, moduleId]
+    );
+  }
+
+  function selectAllModules() {
+    setAllowedModules(MODULE_LIST.map((m) => m.id));
+  }
+
+  function clearAllModules() {
+    setAllowedModules([]);
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -278,17 +318,11 @@ function UserFormDialog({
       }
 
       if (!user) return;
-      const body: Record<string, unknown> = {
-        name,
-        email,
-        role,
-        aiAuthorized,
-      };
-      if (password.length > 0) body.password = password;
-      const res = await fetch(`/api/users/${user.id}`, {
+      // Update role and modules via admin API
+      const res = await fetch(`/api/admin/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ role, allowedModules }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message ?? "更新失败");
@@ -359,16 +393,46 @@ function UserFormDialog({
                 <option value="ADMIN">管理员</option>
               </select>
             </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="ai-auth"
-                checked={aiAuthorized}
-                onCheckedChange={(v) => setAiAuthorized(v === true)}
-              />
-              <Label htmlFor="ai-auth" className="font-normal">
-                允许使用 AI 功能（Claude 等）
-              </Label>
-            </div>
+            {role !== "ADMIN" && (
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between">
+                  <Label>模块权限</Label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="text-xs text-blue-600 hover:underline"
+                      onClick={selectAllModules}
+                    >
+                      全选
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs text-gray-500 hover:underline"
+                      onClick={clearAllModules}
+                    >
+                      清空
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 rounded-lg border p-3">
+                  {MODULE_LIST.map((m) => (
+                    <div key={m.id} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`mod-${m.id}`}
+                        checked={allowedModules.includes(m.id)}
+                        onCheckedChange={() => toggleModule(m.id)}
+                      />
+                      <Label
+                        htmlFor={`mod-${m.id}`}
+                        className="text-xs font-normal"
+                      >
+                        {m.label}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

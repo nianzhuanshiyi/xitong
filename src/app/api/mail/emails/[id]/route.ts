@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 import { mailUiMock } from "@/lib/mail/config";
 import { MOCK_MAIL_DETAILS } from "@/lib/mail/fixtures";
 import { emailDetail } from "@/lib/mail/dto";
@@ -18,10 +18,8 @@ const patchSchema = z.object({
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("email");
+  if (error) return error;
   const { id } = await ctx.params;
 
   if (mailUiMock()) {
@@ -47,10 +45,8 @@ export async function GET(_req: Request, ctx: Ctx) {
 }
 
 export async function PATCH(req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { error } = await requireModuleAccess("email");
+  if (error) return error;
   const { id } = await ctx.params;
 
   let body: unknown;

@@ -54,26 +54,44 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "该邮箱已被注册" }, { status: 409 });
     }
 
-    // 3. 创建用户
+    // 3. 判断是否为特殊管理员邮箱或系统中第一个用户
+    const userCount = await prisma.user.count();
+    const isSpecialAdmin =
+      email.toLowerCase() === "ceo@zavyrabeauty.com" || userCount === 0;
+
+    const allModules = JSON.stringify([
+      "beauty-ideas","3c-ideas","europe-ideas","email",
+      "ai-assistant","product-dev","selection-analysis",
+      "listing","ai-images","suppliers","todos",
+    ]);
+
+    // 4. 创建用户
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
       data: {
         name,
         email,
         password: hashedPassword,
-        role: "EMPLOYEE",
-        aiAuthorized: false,
+        role: isSpecialAdmin ? "ADMIN" : "EMPLOYEE",
+        aiAuthorized: isSpecialAdmin,
+        allowedModules: isSpecialAdmin ? allModules : null,
       },
     });
 
-    // 4. 邀请码 usedCount + 1
+    // 5. 邀请码 usedCount + 1
     await prisma.inviteCode.update({
       where: { id: invite.id },
       data: { usedCount: { increment: 1 } },
     });
 
     return NextResponse.json(
-      { message: "注册成功", userId: user.id },
+      {
+        message: isSpecialAdmin
+          ? "注册成功"
+          : "注册成功，请等待管理员开通权限",
+        userId: user.id,
+        needApproval: !isSpecialAdmin,
+      },
       { status: 201 },
     );
   } catch (e) {

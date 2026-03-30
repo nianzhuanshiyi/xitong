@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { requireDashboardSession } from "@/lib/supplier-auth";
+import { requireModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -18,12 +18,19 @@ const patchSchema = z.object({
 
 /** PATCH /api/product-dev/[id]/tasks/[taskId] — 更新任务 */
 export async function PATCH(req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error } = await requireModuleAccess("product-dev");
+  if (error) return error;
+  const userId = session.user.id;
 
   const { id, taskId } = await ctx.params;
+
+  const product = await prisma.productDev.findUnique({ where: { id } });
+  if (!product) {
+    return NextResponse.json({ message: "项目不存在" }, { status: 404 });
+  }
+  if (product.createdBy !== userId) {
+    return NextResponse.json({ message: "无权限操作该项目" }, { status: 403 });
+  }
 
   const task = await prisma.productDevTask.findFirst({
     where: { id: taskId, productId: id },
@@ -57,7 +64,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       productId: id,
       action: "update_task",
       content: `更新任务「${row.title}」`,
-      createdBy: session.user.id,
+      createdBy: userId,
     },
   });
 
@@ -66,12 +73,19 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
 /** DELETE /api/product-dev/[id]/tasks/[taskId] — 删除任务 */
 export async function DELETE(_req: Request, ctx: Ctx) {
-  const session = await requireDashboardSession();
-  if (!session) {
-    return NextResponse.json({ message: "未登录" }, { status: 401 });
-  }
+  const { session, error: authError } = await requireModuleAccess("product-dev");
+  if (authError) return authError;
+  const userId = session.user.id;
 
   const { id, taskId } = await ctx.params;
+
+  const product = await prisma.productDev.findUnique({ where: { id } });
+  if (!product) {
+    return NextResponse.json({ message: "项目不存在" }, { status: 404 });
+  }
+  if (product.createdBy !== userId) {
+    return NextResponse.json({ message: "无权限操作该项目" }, { status: 403 });
+  }
 
   const task = await prisma.productDevTask.findFirst({
     where: { id: taskId, productId: id },
@@ -87,7 +101,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
       productId: id,
       action: "delete_task",
       content: `删除任务「${task.title}」`,
-      createdBy: session.user.id,
+      createdBy: userId,
     },
   });
 
