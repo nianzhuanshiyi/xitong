@@ -17,6 +17,8 @@ export async function GET() {
       email: true,
       role: true,
       allowedModules: true,
+      assignedModel: true,
+      monthlyTokenLimit: true,
       createdAt: true,
       updatedAt: true,
     },
