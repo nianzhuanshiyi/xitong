@@ -17,6 +17,7 @@ import {
   FileText,
   BarChart3,
   Search,
+  Database,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -54,6 +55,9 @@ export default function AiAssistantWorkspace() {
   const [sending, setSending] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [loadingConvos, setLoadingConvos] = useState(true);
+  const [toolCalls, setToolCalls] = useState<
+    { tool: string; label: string; status: string }[]
+  >([]);
   const [uploadedFile, setUploadedFile] = useState<{
     url: string;
     fileName: string;
@@ -194,6 +198,7 @@ export default function AiAssistantWorkspace() {
     setUploadedFile(null);
     setSending(true);
     setStreamingText("");
+    setToolCalls([]);
 
     try {
       const res = await fetch("/api/ai-assistant/chat", {
@@ -234,7 +239,31 @@ export default function AiAssistantWorkspace() {
             if (evt.type === "delta") {
               accumulated += evt.text;
               setStreamingText(accumulated);
+            } else if (evt.type === "tool_call") {
+              setToolCalls((prev) => {
+                const existing = prev.findIndex(
+                  (t) => t.tool === evt.tool,
+                );
+                if (existing >= 0) {
+                  const next = [...prev];
+                  next[existing] = {
+                    tool: evt.tool,
+                    label: evt.label || evt.tool,
+                    status: evt.status || "calling",
+                  };
+                  return next;
+                }
+                return [
+                  ...prev,
+                  {
+                    tool: evt.tool,
+                    label: evt.label || evt.tool,
+                    status: evt.status || "calling",
+                  },
+                ];
+              });
             } else if (evt.type === "done") {
+              setToolCalls([]);
               setMessages((prev) => [
                 ...prev,
                 {
@@ -245,7 +274,6 @@ export default function AiAssistantWorkspace() {
                 },
               ]);
               setStreamingText("");
-              // Refresh conversation list to get updated title
               fetchConversations();
             } else if (evt.type === "error") {
               throw new Error(evt.message);
@@ -386,6 +414,28 @@ export default function AiAssistantWorkspace() {
               {messages.map((msg) => (
                 <MessageBubble key={msg.id} message={msg} />
               ))}
+              {toolCalls.length > 0 && (
+                <div className="flex gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                    <Database className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="flex-1 space-y-1.5">
+                    {toolCalls.map((tc) => (
+                      <div
+                        key={tc.tool}
+                        className="inline-flex items-center gap-2 rounded-lg bg-violet-50 border border-violet-200 px-3 py-1.5 text-xs text-violet-800"
+                      >
+                        {tc.status !== "done" ? (
+                          <Loader2 className="h-3 w-3 animate-spin text-violet-500" />
+                        ) : (
+                          <span className="h-3 w-3 text-center text-violet-500">✓</span>
+                        )}
+                        正在查询卖家精灵：{tc.label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {streamingText && (
                 <div className="flex gap-3">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
