@@ -176,8 +176,8 @@ export function TabCategories() {
               </SelectContent>
             </Select>
 
+            <Button onClick={() => setAddOpen(true)}>添加品类</Button>
             <Dialog open={addOpen} onOpenChange={setAddOpen}>
-              <Button onClick={() => setAddOpen(true)}>添加品类</Button>
               <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>添加品类</DialogTitle>

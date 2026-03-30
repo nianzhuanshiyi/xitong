@@ -305,8 +305,8 @@ export function TabDashboard() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">关键里程碑</CardTitle>
+          <Button size="sm" onClick={() => setDialogOpen(true)}>添加里程碑</Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <Button size="sm" onClick={() => setDialogOpen(true)}>添加里程碑</Button>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>添加里程碑</DialogTitle>

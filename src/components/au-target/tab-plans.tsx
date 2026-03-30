@@ -234,6 +234,7 @@ export function TabPlans() {
     <div className="space-y-4">
       {/* Top: Add plan button */}
       <div className="flex justify-end">
+        <Button onClick={() => { openAddDialog(); setAddPlanOpen(true); }}>添加店铺计划</Button>
         <Dialog open={addPlanOpen} onOpenChange={(open) => {
           setAddPlanOpen(open);
           if (!open) {
@@ -241,7 +242,6 @@ export function TabPlans() {
             setPlanForm(emptyPlanForm);
           }
         }}>
-          <Button onClick={() => { openAddDialog(); setAddPlanOpen(true); }}>添加店铺计划</Button>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{editingPlan ? "编辑店铺计划" : "添加店铺计划"}</DialogTitle>

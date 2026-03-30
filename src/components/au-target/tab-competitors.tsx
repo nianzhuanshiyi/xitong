@@ -197,8 +197,8 @@ export function TabCompetitors() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">竞品店铺</h3>
+          <Button size="sm" onClick={() => setAddStoreOpen(true)}>添加店铺</Button>
           <Dialog open={addStoreOpen} onOpenChange={setAddStoreOpen}>
-            <Button size="sm" onClick={() => setAddStoreOpen(true)}>添加店铺</Button>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>添加竞品店铺</DialogTitle>
