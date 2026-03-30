@@ -120,7 +120,7 @@ export interface MailContextValue {
   mailActionBusy: boolean;
 
   // Actions
-  patchDetailFlags: (data: Partial<{ isRead: boolean; isStarred: boolean; isArchived: boolean }>) => Promise<void>;
+  patchDetailFlags: (data: Partial<{ isRead: boolean; isStarred: boolean; isArchived: boolean; supplierId: null }>) => Promise<void>;
   toggleTodo: (todoId: string, done: boolean) => Promise<void>;
   regenerateSummaryFor: (targetEmailId: string) => Promise<void>;
   regenTargetId: string | null;

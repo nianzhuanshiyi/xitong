@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   Archive,
+  ArchiveRestore,
   Bot,
   ChevronDown,
   ChevronUp,
@@ -63,6 +64,11 @@ export function MailDetail() {
               · 本对话共 {threadMessages.length} 封
             </span>
           )}
+          {detail.supplierName && (
+            <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">
+              已归档至：{detail.supplierName}
+            </span>
+          )}
         </p>
 
         {/* Action buttons */}
@@ -116,7 +122,7 @@ export function MailDetail() {
             />
             星标
           </Button>
-          {!detail.supplierId && (
+          {!detail.supplierId ? (
             <Button
               type="button"
               size="sm"
@@ -126,6 +132,29 @@ export function MailDetail() {
             >
               归入供应商
             </Button>
+          ) : (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1 px-2.5 text-xs text-orange-700 hover:bg-orange-50"
+                disabled={ctx.mailActionBusy}
+                onClick={() => void ctx.patchDetailFlags({ supplierId: null })}
+              >
+                <ArchiveRestore className="size-3.5" />
+                取消归档
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-8 gap-1 px-2.5 text-xs"
+                onClick={() => void ctx.openClassify()}
+              >
+                重新归档
+              </Button>
+            </>
           )}
           <Button
             type="button"

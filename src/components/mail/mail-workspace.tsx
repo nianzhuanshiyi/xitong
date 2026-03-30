@@ -701,7 +701,7 @@ export function MailWorkspace() {
   }
 
   async function patchDetailFlags(
-    data: Partial<{ isRead: boolean; isStarred: boolean; isArchived: boolean }>
+    data: Partial<{ isRead: boolean; isStarred: boolean; isArchived: boolean; supplierId: null }>
   ) {
     if (!detail) return;
     setMailActionBusy(true);

@@ -13,6 +13,7 @@ const patchSchema = z.object({
   isStarred: z.boolean().optional(),
   isArchived: z.boolean().optional(),
   isDeleted: z.boolean().optional(),
+  supplierId: z.null().optional(),
 });
 
 type Ctx = { params: Promise<{ id: string }> };
