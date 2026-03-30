@@ -40,6 +40,16 @@ const MODULE_LIST = [
   { id: "todos", label: "待办中心" },
 ] as const;
 
+const AI_MODELS = [
+  { value: "claude-haiku-4-5-20251001", label: "Claude Haiku" },
+  { value: "claude-sonnet-4-20250514", label: "Claude Sonnet" },
+  { value: "claude-opus-4-0-20250514", label: "Claude Opus" },
+] as const;
+
+function modelLabel(modelId: string): string {
+  return AI_MODELS.find((m) => m.value === modelId)?.label ?? modelId;
+}
+
 export type UserRow = {
   id: string;
   name: string | null;
@@ -47,6 +57,8 @@ export type UserRow = {
   role: "ADMIN" | "EMPLOYEE";
   aiAuthorized: boolean;
   allowedModules: string[];
+  assignedModel: string;
+  monthlyTokenLimit: number;
   teamId: string | null;
   createdAt: string;
   team: { id: string; name: string } | null;
@@ -57,6 +69,7 @@ export function UsersManagement() {
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<UserRow | null>(null);
+  const [batchModelOpen, setBatchModelOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -91,23 +104,34 @@ export function UsersManagement() {
               管理角色权限与 AI 功能授权（仅管理员）
             </CardDescription>
           </div>
-          <Button
-            size="sm"
-            className="w-full shrink-0 gap-1.5 shadow-md sm:w-auto"
-            onClick={() => setCreateOpen(true)}
-          >
-            <Plus className="size-4" />
-            添加用户
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 gap-1.5"
+              onClick={() => setBatchModelOpen(true)}
+            >
+              批量设置模型
+            </Button>
+            <Button
+              size="sm"
+              className="w-full shrink-0 gap-1.5 shadow-md sm:w-auto"
+              onClick={() => setCreateOpen(true)}
+            >
+              <Plus className="size-4" />
+              添加用户
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="px-3 sm:px-6">
           <div className="-mx-1 overflow-x-auto rounded-xl border border-slate-200/90 bg-slate-50/40 shadow-inner sm:mx-0">
-            <Table className="min-w-[640px]">
+            <Table className="min-w-[780px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>姓名</TableHead>
                   <TableHead>邮箱</TableHead>
                   <TableHead>角色</TableHead>
+                  <TableHead>AI 模型</TableHead>
                   <TableHead>模块权限</TableHead>
                   <TableHead>注册时间</TableHead>
                   <TableHead className="w-[120px] text-right">操作</TableHead>
@@ -116,13 +140,13 @@ export function UsersManagement() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center text-muted-foreground">
                       加载中…
                     </TableCell>
                   </TableRow>
                 ) : users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center text-muted-foreground">
                       暂无用户
                     </TableCell>
                   </TableRow>
@@ -142,6 +166,9 @@ export function UsersManagement() {
                         >
                           {u.role === "ADMIN" ? "管理员" : "员工"}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {u.role === "ADMIN" ? "—" : modelLabel(u.assignedModel ?? "claude-haiku-4-5-20251001")}
                       </TableCell>
                       <TableCell>
                         {u.role === "ADMIN" ? (
@@ -196,6 +223,12 @@ export function UsersManagement() {
           setEditUser(null);
           load();
         }}
+      />
+      <BatchModelDialog
+        open={batchModelOpen}
+        onOpenChange={setBatchModelOpen}
+        users={users.filter((u) => u.role !== "ADMIN")}
+        onSuccess={load}
       />
     </div>
   );
@@ -253,6 +286,8 @@ function UserFormDialog({
   const [role, setRole] = useState<"ADMIN" | "EMPLOYEE">("EMPLOYEE");
   const [aiAuthorized, setAiAuthorized] = useState(false);
   const [allowedModules, setAllowedModules] = useState<string[]>([]);
+  const [assignedModel, setAssignedModel] = useState("claude-haiku-4-5-20251001");
+  const [monthlyTokenLimit, setMonthlyTokenLimit] = useState(500000);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -264,6 +299,8 @@ function UserFormDialog({
       setRole(user.role);
       setAiAuthorized(user.aiAuthorized);
       setAllowedModules(user.allowedModules ?? []);
+      setAssignedModel(user.assignedModel ?? "claude-haiku-4-5-20251001");
+      setMonthlyTokenLimit(user.monthlyTokenLimit ?? 500000);
     } else if (mode === "create") {
       setName("");
       setEmail("");
@@ -271,6 +308,8 @@ function UserFormDialog({
       setRole("EMPLOYEE");
       setAiAuthorized(false);
       setAllowedModules([]);
+      setAssignedModel("claude-haiku-4-5-20251001");
+      setMonthlyTokenLimit(500000);
     }
   }, [open, mode, user]);
 
@@ -318,11 +357,10 @@ function UserFormDialog({
       }
 
       if (!user) return;
-      // Update role and modules via admin API
       const res = await fetch(`/api/admin/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role, allowedModules }),
+        body: JSON.stringify({ role, allowedModules, assignedModel, monthlyTokenLimit }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message ?? "更新失败");
@@ -394,44 +432,93 @@ function UserFormDialog({
               </select>
             </div>
             {role !== "ADMIN" && (
-              <div className="grid gap-2">
-                <div className="flex items-center justify-between">
-                  <Label>模块权限</Label>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      className="text-xs text-blue-600 hover:underline"
-                      onClick={selectAllModules}
-                    >
-                      全选
-                    </button>
-                    <button
-                      type="button"
-                      className="text-xs text-gray-500 hover:underline"
-                      onClick={clearAllModules}
-                    >
-                      清空
-                    </button>
+              <>
+                <div className="grid gap-2">
+                  <Label htmlFor="u-model">指定 AI 模型</Label>
+                  <select
+                    id="u-model"
+                    className="flex h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm shadow-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                    value={assignedModel}
+                    onChange={(e) => setAssignedModel(e.target.value)}
+                  >
+                    {AI_MODELS.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="u-limit">月度 Token 上限</Label>
+                  <Input
+                    id="u-limit"
+                    type="number"
+                    min={0}
+                    value={monthlyTokenLimit}
+                    onChange={(e) => setMonthlyTokenLimit(Number(e.target.value))}
+                  />
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { label: "50万", value: 500000 },
+                      { label: "100万", value: 1000000 },
+                      { label: "200万", value: 2000000 },
+                      { label: "无限制", value: 0 },
+                    ].map((opt) => (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        className={`rounded border px-2 py-0.5 text-xs transition-colors ${
+                          monthlyTokenLimit === opt.value
+                            ? "border-blue-500 bg-blue-50 text-blue-700"
+                            : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                        }`}
+                        onClick={() => setMonthlyTokenLimit(opt.value)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">0 表示无限制</p>
+                </div>
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between">
+                    <Label>模块权限</Label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className="text-xs text-blue-600 hover:underline"
+                        onClick={selectAllModules}
+                      >
+                        全选
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs text-gray-500 hover:underline"
+                        onClick={clearAllModules}
+                      >
+                        清空
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 rounded-lg border p-3">
+                    {MODULE_LIST.map((m) => (
+                      <div key={m.id} className="flex items-center gap-2">
+                        <Checkbox
+                          id={`mod-${m.id}`}
+                          checked={allowedModules.includes(m.id)}
+                          onCheckedChange={() => toggleModule(m.id)}
+                        />
+                        <Label
+                          htmlFor={`mod-${m.id}`}
+                          className="text-xs font-normal"
+                        >
+                          {m.label}
+                        </Label>
+                      </div>
+                    ))}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 rounded-lg border p-3">
-                  {MODULE_LIST.map((m) => (
-                    <div key={m.id} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`mod-${m.id}`}
-                        checked={allowedModules.includes(m.id)}
-                        onCheckedChange={() => toggleModule(m.id)}
-                      />
-                      <Label
-                        htmlFor={`mod-${m.id}`}
-                        className="text-xs font-normal"
-                      >
-                        {m.label}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              </>
             )}
           </div>
           <DialogFooter>
@@ -440,6 +527,131 @@ function UserFormDialog({
             </Button>
             <Button type="submit" disabled={submitting}>
               {submitting ? "提交中…" : "保存"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function BatchModelDialog({
+  open,
+  onOpenChange,
+  users,
+  onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  users: UserRow[];
+  onSuccess: () => void;
+}) {
+  const [selectedModel, setSelectedModel] = useState("claude-haiku-4-5-20251001");
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setSelectedModel("claude-haiku-4-5-20251001");
+    setSelectedUsers([]);
+  }, [open]);
+
+  function toggleUser(id: string) {
+    setSelectedUsers((prev) =>
+      prev.includes(id) ? prev.filter((u) => u !== id) : [...prev, id]
+    );
+  }
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (selectedUsers.length === 0) {
+      toast.error("请选择至少一个用户");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await Promise.all(
+        selectedUsers.map((userId) =>
+          fetch(`/api/admin/users/${userId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ assignedModel: selectedModel }),
+          })
+        )
+      );
+      toast.success(`已为 ${selectedUsers.length} 名用户设置模型`);
+      onSuccess();
+      onOpenChange(false);
+    } catch {
+      toast.error("批量设置失败");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <form onSubmit={onSubmit}>
+          <DialogHeader>
+            <DialogTitle>批量设置 AI 模型</DialogTitle>
+            <DialogDescription>选择目标用户和模型，统一更新</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>目标模型</Label>
+              <select
+                className="flex h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm shadow-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+              >
+                {AI_MODELS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label>选择用户</Label>
+                <button
+                  type="button"
+                  className="text-xs text-blue-600 hover:underline"
+                  onClick={() => setSelectedUsers(users.map((u) => u.id))}
+                >
+                  全选
+                </button>
+              </div>
+              <div className="max-h-48 overflow-y-auto rounded-lg border p-2 space-y-1">
+                {users.length === 0 ? (
+                  <p className="text-xs text-muted-foreground p-2">无员工用户</p>
+                ) : (
+                  users.map((u) => (
+                    <div key={u.id} className="flex items-center gap-2 px-1 py-0.5">
+                      <Checkbox
+                        id={`batch-${u.id}`}
+                        checked={selectedUsers.includes(u.id)}
+                        onCheckedChange={() => toggleUser(u.id)}
+                      />
+                      <Label htmlFor={`batch-${u.id}`} className="text-xs font-normal flex-1">
+                        {u.name ?? u.email}
+                        <span className="ml-1 text-muted-foreground">
+                          ({modelLabel(u.assignedModel ?? "claude-haiku-4-5-20251001")})
+                        </span>
+                      </Label>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              取消
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "设置中…" : `确认设置 (${selectedUsers.length})`}
             </Button>
           </DialogFooter>
         </form>

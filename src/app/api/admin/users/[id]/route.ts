@@ -15,9 +15,11 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await req.json();
-  const { role, allowedModules } = body as {
+  const { role, allowedModules, assignedModel, monthlyTokenLimit } = body as {
     role?: string;
     allowedModules?: string[];
+    assignedModel?: string;
+    monthlyTokenLimit?: number;
   };
 
   const user = await prisma.user.findUnique({ where: { id } });
@@ -25,7 +27,12 @@ export async function PATCH(
     return NextResponse.json({ message: "用户不存在" }, { status: 404 });
   }
 
-  const data: { role?: "ADMIN" | "EMPLOYEE"; allowedModules?: string } = {};
+  const data: {
+    role?: "ADMIN" | "EMPLOYEE";
+    allowedModules?: string;
+    assignedModel?: string;
+    monthlyTokenLimit?: number;
+  } = {};
 
   if (role !== undefined) {
     if (role !== "ADMIN" && role !== "EMPLOYEE") {
@@ -41,6 +48,17 @@ export async function PATCH(
     data.allowedModules = JSON.stringify(allowedModules);
   }
 
+  if (assignedModel !== undefined) {
+    data.assignedModel = assignedModel;
+  }
+
+  if (monthlyTokenLimit !== undefined) {
+    if (typeof monthlyTokenLimit !== "number" || monthlyTokenLimit < 0) {
+      return NextResponse.json({ message: "monthlyTokenLimit 必须是非负整数" }, { status: 400 });
+    }
+    data.monthlyTokenLimit = monthlyTokenLimit;
+  }
+
   const updated = await prisma.user.update({
     where: { id },
     data,
@@ -50,6 +68,8 @@ export async function PATCH(
       email: true,
       role: true,
       allowedModules: true,
+      assignedModel: true,
+      monthlyTokenLimit: true,
       createdAt: true,
       updatedAt: true,
     },
