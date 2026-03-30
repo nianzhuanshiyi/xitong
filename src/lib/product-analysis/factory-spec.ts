@@ -21,7 +21,7 @@ export async function generateFactorySpecMarkdown(
   return (
     (await claudeMessages({
       system:
-        "只输出「工厂指示单」正文（Markdown），中文，条列清晰，便于发工厂。",
+        "只输出「工厂指示单」正文（Markdown）。所有内容必须使用中文撰写，不要使用英文（专有名词如 ASIN、MOQ 除外）。条列清晰，便于发工厂。",
       user: `痛点：${truncateJson(painJson, 4000)}\n竞品：${ctx.parsed.asins.join(", ")}\n`,
     })) ?? ""
   );

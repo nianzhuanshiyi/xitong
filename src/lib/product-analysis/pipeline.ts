@@ -510,7 +510,7 @@ export async function runProductAnalysis(
 
   const painJson = await claudeJson<PainJson>({
     system:
-      "你是亚马逊选品分析师。只输出合法 JSON，不要 markdown。字段：painPoints[{point,severity,frequency}], differentiators[string], reviewSummary(string), brandKeywords[string]。brandKeywords 是你从流量关键词列表中识别出的品牌词（如 Nike、Anker 等品牌名），如果没有品牌词则返回空数组。",
+      "你是亚马逊选品分析师。请全部使用中文回答，不要使用英文（专有名词如 ASIN、BSR、FBA 除外）。只输出合法 JSON，不要 markdown。字段：painPoints[{point,severity,frequency}], differentiators[string], reviewSummary(string), brandKeywords[string]。brandKeywords 是你从流量关键词列表中识别出的品牌词（如 Nike、Anker 等品牌名），如果没有品牌词则返回空数组。",
     user: `根据以下评价/MCP 数据摘要，提炼用户痛点 TOP5（可少于5）、差异化方向、简短评价总结。同时，从以下流量关键词中识别出品牌词。\n评价数据：${truncateJson(reviewByAsin, 6000)}\n流量关键词数据：${truncateJson(kw.ok ? kw.data : null, 2000)}`,
   });
 
@@ -569,7 +569,7 @@ export async function runProductAnalysis(
 
   const adjustJson = await claudeJson<AdjustJson>({
     system:
-      "你是亚马逊选品决策助手。数据驱动评分系统已给出基础分，你需要根据数据摘要中可能遗漏的定性因素（如品牌壁垒、政策风险、季节性等）给出微调。只输出 JSON：{adjustment: -5到5之间的整数, rationale: string}。adjustment 正数表示数据低估了机会，负数表示数据高估了机会。",
+      "你是亚马逊选品决策助手。请全部使用中文回答，不要使用英文（专有名词如 ASIN、BSR、FBA、SPR 除外）。数据驱动评分系统已给出基础分，你需要根据数据摘要中可能遗漏的定性因素（如品牌壁垒、政策风险、季节性等）给出微调。只输出 JSON：{adjustment: -5到5之间的整数, rationale: string}。rationale 必须使用中文。adjustment 正数表示数据低估了机会，负数表示数据高估了机会。",
     user: `数据驱动基础分: ${dataTotal}/100\n各维度详情:\n${dimDetailStr}\n\n数据摘要:\n${truncateJson(contextForAi, 8000)}`,
   });
 
@@ -593,10 +593,12 @@ export async function runProductAnalysis(
   const profitRequirement =
     "\n\n**利润分析章节要求：**必须严格使用数据摘要中 profit.assumptions 里用户提供的成本假设（purchaseCost=采购成本、firstMile=头程、fbaEstimate=FBA估算、referralPct=佣金比例、adPct=广告占比、returnPct=退货损耗占比）和 profit.sellingPrice（当前售价）来计算利润。使用表格展示：售价、采购成本、头程、FBA费、佣金、广告费、退货损耗、净利润、利润率。不要自行编造成本数据。同时展示降价10%和提价10%的利润敏感性分析。";
 
+  const cnRequirement = "\n\n**语言要求：**所有内容必须使用中文撰写，包括分析说明、评分理由、表格内容。不要使用英文，专有名词（如 ASIN、BSR、FBA、SPR、PPC、ROI）除外。";
+
   const reportSystemHigh =
-    "用中文撰写亚马逊选品分析报告，使用 Markdown。结构必须包含：## 竞品信息汇总（表格）、## 痛点分析、## 差异化创新建议、## 利润分析、## 工厂指示单（含产品描述、尺寸重量材质、必须改进点、包装、质量标准、目标成本、参考 ASIN、预计首批量）。语气专业简洁。" + profitRequirement;
+    "用中文撰写亚马逊选品分析报告，使用 Markdown。结构必须包含：## 竞品信息汇总（表格）、## 痛点分析、## 差异化创新建议、## 利润分析、## 工厂指示单（含产品描述、尺寸重量材质、必须改进点、包装、质量标准、目标成本、参考 ASIN、预计首批量）。语气专业简洁。" + profitRequirement + cnRequirement;
   const reportSystemLow =
-    "用中文撰写亚马逊选品分析报告，使用 Markdown。结构必须包含：## 竞品信息汇总（表格）、## 痛点分析、## 差异化创新建议、## 利润分析。不要写「工厂指示单」完整章节（读者将在页面底部按需单独生成）；语气专业简洁。" + profitRequirement;
+    "用中文撰写亚马逊选品分析报告，使用 Markdown。结构必须包含：## 竞品信息汇总（表格）、## 痛点分析、## 差异化创新建议、## 利润分析。不要写「工厂指示单」完整章节（读者将在页面底部按需单独生成）；语气专业简洁。" + profitRequirement + cnRequirement;
 
   const profitSummary = `\n\n【用户利润假设 - 必须使用这些数据】\n售价: $${sellingPrice.toFixed(2)}\n采购成本: $${purchaseCost}\n头程: $${firstMile}\nFBA估算: $${fbaEstimate}\n佣金(${(referralPct * 100).toFixed(0)}%): $${referralFee.toFixed(2)}\n广告(${(adPct * 100).toFixed(0)}%): $${adCost.toFixed(2)}\n退货损耗(${(returnPct * 100).toFixed(0)}%): $${returnCost.toFixed(2)}\n净利润: $${netProfit.toFixed(2)}\n利润率: ${marginPct.toFixed(1)}%`;
 
