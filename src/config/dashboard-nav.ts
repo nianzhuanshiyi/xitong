@@ -38,7 +38,7 @@ export type DashboardNavItem = {
 
 export const dashboardNav: DashboardNavItem[] = [
   { href: "/dashboard", label: "仪表盘", title: "仪表盘", Icon: LayoutDashboard },
-  { href: "/dashboard/au-target", label: "澳洲1亿目标", title: "澳洲1亿目标", Icon: Target },
+  { href: "/dashboard/au-target", label: "澳洲亿目标", title: "澳洲1亿目标", Icon: Target, adminOnly: true },
   { href: "/dashboard/users", label: "用户管理", title: "用户管理", Icon: Users, adminOnly: true },
   {
     href: "/dashboard/suppliers",
