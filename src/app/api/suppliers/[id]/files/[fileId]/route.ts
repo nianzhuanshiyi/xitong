@@ -48,7 +48,7 @@ export async function PATCH(
     );
   }
 
-  const { fileData: _, ...row } = await prisma.supplierFile.update({
+  const { fileData: _fileData, ...row } = await prisma.supplierFile.update({
     where: { id: fileId },
     data: { category: parsed.data.category as SupplierFileCategory },
     include: { analysis: true },
