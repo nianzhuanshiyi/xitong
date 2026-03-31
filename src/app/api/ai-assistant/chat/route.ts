@@ -634,14 +634,9 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        // Auto-generate title
+        // Auto-generate title (async, non-blocking)
         if (isFirstMessage && message.length > 0) {
-          const title =
-            message.length <= 20 ? message : message.slice(0, 20) + "...";
-          await prisma.aiConversation.update({
-            where: { id: conversationId },
-            data: { title },
-          });
+          generateTitle(conversationId, message, apiKey).catch(console.error);
         }
 
         await prisma.activityLog.create({
@@ -670,4 +665,41 @@ export async function POST(req: NextRequest) {
       Connection: "keep-alive",
     },
   });
+}
+
+async function generateTitle(conversationId: string, firstMessage: string, apiKey: string) {
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 50,
+        messages: [
+          {
+            role: "user",
+            content: `根据以下用户消息生成一个10字以内的中文对话标题，只返回标题文字，不要引号：\n${firstMessage.substring(0, 200)}`,
+          },
+        ],
+      }),
+    });
+    const data = await response.json();
+    const title = data.content?.[0]?.text?.trim() || firstMessage.substring(0, 20);
+    await prisma.aiConversation.update({
+      where: { id: conversationId },
+      data: { title },
+    });
+  } catch (err) {
+    // Fallback to simple truncation
+    const title = firstMessage.length <= 20 ? firstMessage : firstMessage.slice(0, 20) + "...";
+    await prisma.aiConversation.update({
+      where: { id: conversationId },
+      data: { title },
+    }).catch(() => {});
+    console.error("[generateTitle] failed:", err);
+  }
 }

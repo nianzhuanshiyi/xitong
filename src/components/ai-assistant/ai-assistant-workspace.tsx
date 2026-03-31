@@ -67,6 +67,8 @@ export default function AiAssistantWorkspace() {
     fileBase64?: string | null;
   } | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -142,6 +144,24 @@ export default function AiAssistantWorkspace() {
         setActiveId(null);
         setMessages([]);
       }
+    } catch {
+      // ignore
+    }
+  }
+
+  async function saveTitle(id: string, newTitle: string) {
+    setEditingId(null);
+    const trimmed = newTitle.trim();
+    if (!trimmed) return;
+    try {
+      await fetch(`/api/ai-assistant/conversations/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: trimmed }),
+      });
+      setConversations((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, title: trimmed } : c))
+      );
     } catch {
       // ignore
     }
@@ -362,7 +382,34 @@ export default function AiAssistantWorkspace() {
                   onClick={() => loadConversation(c.id)}
                 >
                   <MessageSquare className="h-4 w-4 flex-shrink-0 opacity-50" />
-                  <span className="flex-1 truncate">{c.title}</span>
+                  {editingId === c.id ? (
+                    <input
+                      autoFocus
+                      className="flex-1 min-w-0 text-sm bg-white border border-blue-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      onBlur={() => saveTitle(c.id, editTitle)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          saveTitle(c.id, editTitle);
+                        }
+                        if (e.key === "Escape") setEditingId(null);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span
+                      className="flex-1 truncate"
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setEditingId(c.id);
+                        setEditTitle(c.title);
+                      }}
+                    >
+                      {c.title}
+                    </span>
+                  )}
                   <button
                     className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-red-100 hover:text-red-600"
                     onClick={(e) => {
