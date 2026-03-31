@@ -43,11 +43,6 @@ interface Milestone {
   status: "pending" | "in_progress" | "completed" | "overdue";
 }
 
-interface StorePlan {
-  storeName: string;
-  revenueRmb: number;
-}
-
 interface DashboardData {
   audToRmb: number;
   currentMonthlyRevenue: number;
