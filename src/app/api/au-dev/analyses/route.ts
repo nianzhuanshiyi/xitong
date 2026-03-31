@@ -5,7 +5,7 @@ import { requireModuleAccess } from "@/lib/permissions";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const { session, error } = await requireModuleAccess("au-dev");
+  const { error } = await requireModuleAccess("au-dev");
   if (error) return error;
 
   const analyses = await prisma.auDevAnalysis.findMany({

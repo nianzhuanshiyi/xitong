@@ -8,7 +8,7 @@ export async function GET(
   _req: Request,
   { params }: { params: { id: string } }
 ) {
-  const { session, error } = await requireModuleAccess("au-dev");
+  const { error } = await requireModuleAccess("au-dev");
   if (error) return error;
 
   const analysis = await prisma.auDevAnalysis.findUnique({
