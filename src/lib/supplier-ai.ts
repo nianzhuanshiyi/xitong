@@ -145,6 +145,73 @@ export async function aiMatchSuppliersForCategory(params: {
   });
 }
 
+export async function aiExtractCatalogProducts(
+  text: string,
+  originalName: string
+) {
+  return claudeJson<{
+    products: Array<{
+      name: string;
+      specs?: string;
+      searchKeyword?: string;
+      estimatedCost?: string;
+    }>;
+  }>({
+    system: `You are analyzing a supplier product catalog. Extract up to 15 distinct products. For each product, provide:
+- name: product name (Chinese if available, otherwise English)
+- specs: key specifications (size, material, weight, etc.)
+- searchKeyword: an English keyword suitable for searching on Amazon Australia (concise, 2-4 words)
+- estimatedCost: estimated unit cost if mentioned in the document
+
+Return JSON: {"products": [{name, specs, searchKeyword, estimatedCost}]}
+Focus on products that are most likely suitable for cross-border e-commerce (Amazon AU).`,
+    user: `Catalog file: ${originalName}\n\nContent:\n${text.slice(0, 45_000)}`,
+  });
+}
+
+export async function aiCatalogRecommendations(params: {
+  products: Array<{
+    name: string;
+    specs?: string;
+    searchKeyword?: string;
+    estimatedCost?: string;
+  }>;
+  marketData: Array<{
+    productName: string;
+    keyword: string;
+    sellerspriteData: Record<string, unknown> | null;
+  }>;
+  marketplace: string;
+}) {
+  const { products, marketData, marketplace } = params;
+  return claudeJson<{
+    products: Array<{
+      name: string;
+      specs?: string;
+      estimatedCost?: string;
+      recommendedPrice?: string;
+      margin?: string;
+      marketDemand?: string;
+      competition?: string;
+      recommendation?: string;
+    }>;
+    summary: string;
+  }>({
+    system: `You are an Amazon ${marketplace} cross-border e-commerce product analyst. Given extracted catalog products and SellerSprite market data, generate recommendations.
+
+For each product evaluate:
+- recommendedPrice: suggested retail price in AUD
+- margin: estimated profit margin percentage
+- marketDemand: demand level (高/中/低) with brief reasoning
+- competition: competition level (激烈/中等/较低) with brief reasoning
+- recommendation: 1-2 sentence recommendation (选品建议) in Chinese
+
+Also provide an overall summary (Chinese, 2-3 sentences) of which products are most promising.
+Return JSON: {products: [{name, specs, estimatedCost, recommendedPrice, margin, marketDemand, competition, recommendation}], summary}`,
+    user: `Products from catalog:\n${JSON.stringify(products, null, 2)}\n\nMarket data (SellerSprite ${marketplace}):\n${JSON.stringify(marketData, null, 2)}`,
+  });
+}
+
 export async function aiFreeformOrNull(prompt: string) {
   return claudeMessages({ user: prompt, maxTokens: 2048 });
 }

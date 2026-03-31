@@ -1,11 +1,14 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
+  ChevronDown,
+  ChevronRight,
   Download,
   ExternalLink,
   Eye,
@@ -70,6 +73,25 @@ type FileRow = {
     summary: string | null;
     structuredJson: string | null;
   } | null;
+};
+
+type CatalogProduct = {
+  name: string;
+  specs?: string;
+  estimatedCost?: string;
+  recommendedPrice?: string;
+  margin?: string;
+  marketDemand?: string;
+  competition?: string;
+  recommendation?: string;
+  sellerspriteData?: Record<string, unknown>;
+};
+
+type CatalogAnalysisResult = {
+  products: CatalogProduct[];
+  summary?: string;
+  progress?: number;
+  error?: string;
 };
 
 type FullSupplier = {
@@ -244,6 +266,9 @@ export function SupplierDetail({ id }: { id: string }) {
   const [scrapeBusy, setScrapeBusy] = useState(false);
   const [evalBusy, setEvalBusy] = useState(false);
   const [analyzeId, setAnalyzeId] = useState<string | null>(null);
+  const [expandedAnalysis, setExpandedAnalysis] = useState<Set<string>>(new Set());
+  const [catalogBusy, setCatalogBusy] = useState<string | null>(null);
+  const [catalogResults, setCatalogResults] = useState<Record<string, CatalogAnalysisResult>>({});
   const [drag, setDrag] = useState(false);
   const [uploadCat, setUploadCat] = useState<string>("OTHER");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -462,6 +487,15 @@ export function SupplierDetail({ id }: { id: string }) {
     }
   }
 
+  function toggleAnalysisExpand(fileId: string) {
+    setExpandedAnalysis((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) next.delete(fileId);
+      else next.add(fileId);
+      return next;
+    });
+  }
+
   async function analyzeFile(fileId: string) {
     setAnalyzeId(fileId);
     try {
@@ -473,10 +507,29 @@ export function SupplierDetail({ id }: { id: string }) {
       if (!res.ok) throw new Error(j.message ?? "分析失败");
       toast.success("分析完成");
       await load();
+      setExpandedAnalysis((prev) => new Set(prev).add(fileId));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "分析失败");
     } finally {
       setAnalyzeId(null);
+    }
+  }
+
+  async function catalogAnalyze(fileId: string) {
+    setCatalogBusy(fileId);
+    try {
+      const res = await fetch(
+        `/api/suppliers/${id}/files/${fileId}/catalog-analysis`,
+        { method: "POST" }
+      );
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message ?? "深度分析失败");
+      setCatalogResults((prev) => ({ ...prev, [fileId]: j }));
+      toast.success("深度选品分析完成");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "深度分析失败");
+    } finally {
+      setCatalogBusy(null);
     }
   }
 
@@ -1214,71 +1267,271 @@ export function SupplierDetail({ id }: { id: string }) {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    data.files.map((f) => (
-                      <TableRow key={f.id}>
-                        <TableCell className="max-w-[200px] truncate font-medium">
-                          {f.originalName}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="font-normal">
-                            {FILE_CATEGORY_LABEL[f.category] ?? f.category}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{fmtBytes(f.size)}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {fmtTime(f.uploadedAt)}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">—</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex flex-wrap justify-end gap-1">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                setPreview({
-                                  fileId: f.id,
-                                  name: f.originalName,
-                                  mime: f.mimeType,
-                                })
-                              }
-                            >
-                              <Eye className="size-3.5" />
-                            </Button>
-                            <a
-                              href={contentUrl(f.id, "download")}
-                              className={cn(
-                                buttonVariants({ variant: "ghost", size: "sm" })
-                              )}
-                            >
-                              <Download className="size-3.5" />
-                            </a>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              disabled={analyzeId === f.id}
-                              onClick={() => analyzeFile(f.id)}
-                            >
-                              {analyzeId === f.id ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              ) : (
-                                <Sparkles className="size-3.5" />
-                              )}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="text-destructive"
-                              onClick={() => deleteFile(f.id)}
-                            >
-                              <Trash2 className="size-3.5" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    data.files.map((f) => {
+                      const hasAnalysis = !!f.analysis?.summary;
+                      const isExpanded = expandedAnalysis.has(f.id);
+                      const isCatalog = f.category === "CATALOG";
+                      const catResult = catalogResults[f.id];
+                      return (
+                        <React.Fragment key={f.id}>
+                          <TableRow>
+                            <TableCell className="max-w-[200px] truncate font-medium">
+                              {f.originalName}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="font-normal">
+                                {FILE_CATEGORY_LABEL[f.category] ?? f.category}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{fmtBytes(f.size)}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {fmtTime(f.uploadedAt)}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">—</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex flex-wrap items-center justify-end gap-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    setPreview({
+                                      fileId: f.id,
+                                      name: f.originalName,
+                                      mime: f.mimeType,
+                                    })
+                                  }
+                                >
+                                  <Eye className="size-3.5" />
+                                </Button>
+                                <a
+                                  href={contentUrl(f.id, "download")}
+                                  className={cn(
+                                    buttonVariants({ variant: "ghost", size: "sm" })
+                                  )}
+                                >
+                                  <Download className="size-3.5" />
+                                </a>
+                                {hasAnalysis ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-1 text-xs"
+                                    onClick={() => toggleAnalysisExpand(f.id)}
+                                  >
+                                    {isExpanded ? (
+                                      <ChevronDown className="size-3" />
+                                    ) : (
+                                      <ChevronRight className="size-3" />
+                                    )}
+                                    AI 分析
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-1 text-xs"
+                                    disabled={analyzeId === f.id}
+                                    onClick={() => analyzeFile(f.id)}
+                                  >
+                                    {analyzeId === f.id ? (
+                                      <Loader2 className="size-3 animate-spin" />
+                                    ) : (
+                                      <Sparkles className="size-3" />
+                                    )}
+                                    AI 分析
+                                  </Button>
+                                )}
+                                {isCatalog && (
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    className="gap-1 text-xs"
+                                    disabled={catalogBusy === f.id}
+                                    onClick={() => catalogAnalyze(f.id)}
+                                    title="深度分析约需 1-2 分钟"
+                                  >
+                                    {catalogBusy === f.id ? (
+                                      <Loader2 className="size-3 animate-spin" />
+                                    ) : (
+                                      <Sparkles className="size-3" />
+                                    )}
+                                    深度选品分析
+                                  </Button>
+                                )}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-destructive"
+                                  onClick={() => deleteFile(f.id)}
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                          {/* Collapsible analysis summary row */}
+                          {hasAnalysis && isExpanded && (
+                            <TableRow className="bg-slate-50/60 hover:bg-slate-50/80">
+                              <TableCell colSpan={6} className="px-4 py-3">
+                                <div className="space-y-2">
+                                  <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                                    {f.analysis!.summary}
+                                  </p>
+                                  {f.analysis!.structuredJson && (() => {
+                                    try {
+                                      const sj = JSON.parse(f.analysis!.structuredJson!);
+                                      if (sj.products?.length) {
+                                        return (
+                                          <div className="mt-2">
+                                            <p className="mb-1 text-xs font-medium text-slate-500">
+                                              产品列表 ({sj.products.length})
+                                            </p>
+                                            <div className="flex flex-wrap gap-1">
+                                              {sj.products.slice(0, 10).map((p: { name: string }, i: number) => (
+                                                <Badge key={i} variant="secondary" className="text-xs">
+                                                  {p.name}
+                                                </Badge>
+                                              ))}
+                                              {sj.products.length > 10 && (
+                                                <Badge variant="secondary" className="text-xs">
+                                                  +{sj.products.length - 10} 更多
+                                                </Badge>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      }
+                                      if (sj.items?.length) {
+                                        return (
+                                          <div className="mt-2">
+                                            <p className="mb-1 text-xs font-medium text-slate-500">
+                                              项目 ({sj.items.length})
+                                            </p>
+                                            <div className="flex flex-wrap gap-1">
+                                              {sj.items.slice(0, 8).map((it: { skuOrName: string; price?: string }, i: number) => (
+                                                <Badge key={i} variant="secondary" className="text-xs">
+                                                  {it.skuOrName}{it.price ? ` - ${it.price}` : ""}
+                                                </Badge>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        );
+                                      }
+                                      return null;
+                                    } catch {
+                                      return null;
+                                    }
+                                  })()}
+                                  <div className="flex gap-2 pt-1">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 gap-1 text-xs text-muted-foreground"
+                                      disabled={analyzeId === f.id}
+                                      onClick={() => analyzeFile(f.id)}
+                                    >
+                                      {analyzeId === f.id ? (
+                                        <Loader2 className="size-3 animate-spin" />
+                                      ) : (
+                                        <Sparkles className="size-3" />
+                                      )}
+                                      重新分析
+                                    </Button>
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          {/* Catalog deep analysis results */}
+                          {isCatalog && catResult && (
+                            <TableRow className="bg-blue-50/40 hover:bg-blue-50/60">
+                              <TableCell colSpan={6} className="px-4 py-3">
+                                <div className="space-y-3">
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-sm font-medium text-blue-900">
+                                      深度选品分析结果
+                                    </p>
+                                    {catResult.summary && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        {catResult.products.length} 个产品
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {catResult.summary && (
+                                    <p className="text-sm text-slate-600">
+                                      {catResult.summary}
+                                    </p>
+                                  )}
+                                  {catResult.error && (
+                                    <p className="text-sm text-red-600">{catResult.error}</p>
+                                  )}
+                                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    {catResult.products.map((p, i) => (
+                                      <div
+                                        key={i}
+                                        className="rounded-lg border border-blue-100 bg-white p-3 shadow-sm"
+                                      >
+                                        <p className="mb-1 font-medium text-sm">
+                                          {p.name}
+                                        </p>
+                                        {p.specs && (
+                                          <p className="text-xs text-muted-foreground mb-1">
+                                            {p.specs}
+                                          </p>
+                                        )}
+                                        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                                          {p.estimatedCost && (
+                                            <div>
+                                              <span className="text-muted-foreground">成本: </span>
+                                              <span className="font-medium">{p.estimatedCost}</span>
+                                            </div>
+                                          )}
+                                          {p.recommendedPrice && (
+                                            <div>
+                                              <span className="text-muted-foreground">建议售价: </span>
+                                              <span className="font-medium">{p.recommendedPrice}</span>
+                                            </div>
+                                          )}
+                                          {p.margin && (
+                                            <div>
+                                              <span className="text-muted-foreground">利润率: </span>
+                                              <span className="font-medium text-green-700">{p.margin}</span>
+                                            </div>
+                                          )}
+                                          {p.marketDemand && (
+                                            <div>
+                                              <span className="text-muted-foreground">需求: </span>
+                                              <span className="font-medium">{p.marketDemand}</span>
+                                            </div>
+                                          )}
+                                          {p.competition && (
+                                            <div className="col-span-2">
+                                              <span className="text-muted-foreground">竞争: </span>
+                                              <span>{p.competition}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                        {p.recommendation && (
+                                          <p className="mt-2 text-xs text-blue-800 bg-blue-50 rounded p-1.5">
+                                            {p.recommendation}
+                                          </p>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
