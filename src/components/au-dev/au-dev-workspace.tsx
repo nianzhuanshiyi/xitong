@@ -14,6 +14,9 @@ import {
   ChevronUp,
   Trash2,
   Rocket,
+  FileText,
+  Copy,
+  Sparkles,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +24,13 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { ModuleGuide } from "@/components/shared/module-guide";
 
 /* ------------------------------------------------------------------ */
@@ -63,6 +73,9 @@ interface DiffPlanItem {
   extraCost: string;
   advantage: string;
   imagePrompt: string;
+  priority?: number;
+  isCustom?: boolean;
+  factoryBrief?: string | null;
   generatedImage?: string;
 }
 
@@ -376,8 +389,12 @@ export function AuDevWorkspace() {
             {marketOverview && <MarketSection market={marketOverview} />}
 
             {/* Section 3: 差异化开发方案 */}
-            {diffPlan && diffPlan.length > 0 && (
-              <DiffPlanSection items={diffPlan} analysisId={selectedAnalysis.id} />
+            {diffPlan && (
+              <DiffPlanSection
+                items={diffPlan}
+                analysisId={selectedAnalysis.id}
+                onUpdate={() => fetchAnalysis(selectedAnalysis.id)}
+              />
             )}
 
             {/* Section 4: 利润计算器 */}
@@ -541,9 +558,33 @@ function MarketSection({ market }: { market: MarketOverview }) {
 /*  Section 3: 差异化开发方案                                           */
 /* ================================================================== */
 
-function DiffPlanSection({ items, analysisId }: { items: DiffPlanItem[]; analysisId: string }) {
+function getPriorityBadge(priority?: number) {
+  if (!priority || priority === 1) return { label: "最推荐", className: "bg-green-100 text-green-700 border-green-200" };
+  if (priority === 2) return { label: "推荐", className: "bg-blue-100 text-blue-700 border-blue-200" };
+  return { label: "备选", className: "bg-gray-100 text-gray-600 border-gray-200" };
+}
+
+function DiffPlanSection({
+  items,
+  analysisId,
+  onUpdate,
+}: {
+  items: DiffPlanItem[];
+  analysisId: string;
+  onUpdate: () => void;
+}) {
   const [generatingIdx, setGeneratingIdx] = useState<number | null>(null);
+  const [briefIdx, setBriefIdx] = useState<number | null>(null);
   const [images, setImages] = useState<Record<number, string>>({});
+  const [briefDialogOpen, setBriefDialogOpen] = useState(false);
+  const [briefContent, setBriefContent] = useState("");
+  const [customIdea, setCustomIdea] = useState("");
+  const [generatingCustom, setGeneratingCustom] = useState(false);
+
+  // Sort by priority ascending
+  const sortedItems = [...items]
+    .map((item, originalIdx) => ({ ...item, _idx: originalIdx }))
+    .sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99));
 
   const handleGenerateImage = async (idx: number, item: DiffPlanItem) => {
     setGeneratingIdx(idx);
@@ -577,20 +618,102 @@ function DiffPlanSection({ items, analysisId }: { items: DiffPlanItem[]; analysi
     a.click();
   };
 
+  const handleGenerateBrief = async (idx: number, item: DiffPlanItem) => {
+    // If already has a brief, show it directly
+    if (item.factoryBrief) {
+      setBriefContent(item.factoryBrief);
+      setBriefDialogOpen(true);
+      return;
+    }
+    setBriefIdx(idx);
+    try {
+      const res = await fetch("/api/au-dev/generate-brief", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ analysisId, diffIndex: idx }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBriefContent(data.factoryBrief);
+        setBriefDialogOpen(true);
+        onUpdate();
+      } else {
+        const err = await res.json().catch(() => ({ message: "生成失败" }));
+        alert(err.message);
+      }
+    } catch {
+      alert("生成指示单请求失败");
+    } finally {
+      setBriefIdx(null);
+    }
+  };
+
+  const handleCopyBrief = async () => {
+    try {
+      await navigator.clipboard.writeText(briefContent);
+      alert("已复制到剪贴板");
+    } catch {
+      // Fallback
+      const textarea = document.createElement("textarea");
+      textarea.value = briefContent;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      alert("已复制到剪贴板");
+    }
+  };
+
+  const handleCustomDiff = async () => {
+    if (!customIdea.trim() || generatingCustom) return;
+    setGeneratingCustom(true);
+    try {
+      const res = await fetch("/api/au-dev/custom-diff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ analysisId, userIdea: customIdea.trim() }),
+      });
+      if (res.ok) {
+        setCustomIdea("");
+        onUpdate();
+      } else {
+        const err = await res.json().catch(() => ({ message: "生成失败" }));
+        alert(err.message);
+      }
+    } catch {
+      alert("生成自定义方案失败");
+    } finally {
+      setGeneratingCustom(false);
+    }
+  };
+
   return (
     <Card className="border-teal-200">
       <CardHeader>
         <CardTitle className="text-teal-700">差异化开发方案</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
-          {items.map((item, idx) => {
+          {sortedItems.map((item) => {
+            const idx = item._idx;
             const img = images[idx] || item.generatedImage;
+            const pBadge = getPriorityBadge(item.priority);
             return (
-              <div key={idx} className="rounded-lg border p-4 space-y-3">
-                <div className="flex items-start justify-between">
-                  <h4 className="font-semibold">{item.title}</h4>
-                  <Badge variant="secondary">{item.extraCost}</Badge>
+              <div
+                key={idx}
+                className={`rounded-lg border p-4 space-y-3 ${item.isCustom ? "border-dashed border-amber-300" : ""}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border shrink-0 ${pBadge.className}`}>
+                      P{item.priority ?? 1} {pBadge.label}
+                    </span>
+                    <h4 className="font-semibold truncate">{item.title}</h4>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {item.isCustom && <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-600">自定义</Badge>}
+                    <Badge variant="secondary">{item.extraCost}</Badge>
+                  </div>
                 </div>
                 <p className="text-sm text-muted-foreground">{item.description}</p>
                 <p className="text-sm">
@@ -622,25 +745,87 @@ function DiffPlanSection({ items, analysisId }: { items: DiffPlanItem[]; analysi
                   </div>
                 )}
 
-                {!img && (
+                {/* action buttons */}
+                <div className="flex gap-2">
+                  {!img && (
+                    <Button
+                      size="sm"
+                      className="bg-teal-600 hover:bg-teal-700"
+                      onClick={() => handleGenerateImage(idx, item)}
+                      disabled={generatingIdx === idx}
+                    >
+                      {generatingIdx === idx ? (
+                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      ) : (
+                        <ImagePlus className="mr-1 h-3 w-3" />
+                      )}
+                      生成效果图
+                    </Button>
+                  )}
                   <Button
                     size="sm"
-                    className="bg-teal-600 hover:bg-teal-700"
-                    onClick={() => handleGenerateImage(idx, item)}
-                    disabled={generatingIdx === idx}
+                    variant="outline"
+                    onClick={() => handleGenerateBrief(idx, item)}
+                    disabled={briefIdx === idx}
                   >
-                    {generatingIdx === idx ? (
+                    {briefIdx === idx ? (
                       <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                     ) : (
-                      <ImagePlus className="mr-1 h-3 w-3" />
+                      <FileText className="mr-1 h-3 w-3" />
                     )}
-                    生成效果图
+                    开发指示单
                   </Button>
-                )}
+                </div>
               </div>
             );
           })}
         </div>
+
+        {/* Custom plan input */}
+        <div className="rounded-lg border-2 border-dashed border-muted-foreground/25 p-4 space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <Sparkles className="h-4 w-4" />
+            自定义方案
+          </div>
+          <p className="text-xs text-muted-foreground">
+            不满意以上方案？输入你的想法，AI 帮你生成新方案。
+          </p>
+          <Textarea
+            placeholder="例如：我想做一个带夜灯功能的排插，价格控制在 ¥25 以内..."
+            value={customIdea}
+            onChange={(e) => setCustomIdea(e.target.value)}
+            className="min-h-[80px]"
+          />
+          <Button
+            onClick={handleCustomDiff}
+            disabled={!customIdea.trim() || generatingCustom}
+            className="bg-teal-600 hover:bg-teal-700"
+          >
+            {generatingCustom ? (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="mr-1 h-4 w-4" />
+            )}
+            {generatingCustom ? "生成中..." : "生成方案"}
+          </Button>
+        </div>
+
+        {/* Factory brief dialog */}
+        <Dialog open={briefDialogOpen} onOpenChange={setBriefDialogOpen}>
+          <DialogContent className="max-w-[640px] max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>工厂开发指示单</DialogTitle>
+            </DialogHeader>
+            <div className="whitespace-pre-wrap text-sm font-mono bg-muted/50 rounded-lg p-4 leading-relaxed">
+              {briefContent}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={handleCopyBrief}>
+                <Copy className="mr-1 h-4 w-4" /> 复制到剪贴板
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

@@ -191,7 +191,9 @@ ${competitorSummary}
       "description": "具体描述怎么改、为什么有效",
       "extraCost": "预估额外采购成本 RMB",
       "advantage": "vs 现有竞品的优势",
-      "imagePrompt": "Professional Amazon product photo, ${productData.title}, [differentiation description], white background, studio lighting, high quality"
+      "imagePrompt": "Professional Amazon product photo, ${productData.title}, [differentiation description], white background, studio lighting, high quality",
+      "priority": 1,
+      "isCustom": false
     }
   ],
   "profitModel": {
@@ -211,6 +213,10 @@ ${competitorSummary}
     }
   ]
 }
+
+每个差异化方案必须包含 priority 字段（1=最推荐，数字越大优先级越低）。
+排序依据：综合考虑"额外成本低 + 竞争优势大 + 落地难度小"，最容易执行且效果最好的排第一。
+每个方案的 isCustom 字段固定为 false。
 
 生成 3-5 个差异化方向和 6 个行动步骤。
 如果有竞品数据，topProducts 直接用真实竞品数据填写；如果没有竞品数据，可以合理推测 8-10 个。
