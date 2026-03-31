@@ -9,7 +9,7 @@ export async function GET() {
   if (error) return error;
 
   const analyses = await prisma.auDevAnalysis.findMany({
-    where: { userId: session!.user.id },
+    where: { status: "completed" },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,

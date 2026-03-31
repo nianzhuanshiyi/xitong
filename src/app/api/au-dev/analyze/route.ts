@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   }
   console.log("[au-dev/analyze] 调用者:", session!.user.email, "角色:", session!.user.role, "allowedModules:", session!.user.allowedModules);
 
-  const { input } = await req.json();
+  const { input, forceRefresh } = await req.json();
   if (!input) {
     return NextResponse.json(
       { message: "请输入 ASIN 或产品链接" },
@@ -38,6 +38,22 @@ export async function POST(req: Request) {
       { message: "无法解析 ASIN，请检查输入" },
       { status: 400 }
     );
+  }
+
+  // 90-day cache: return existing completed analysis if available
+  if (!forceRefresh) {
+    const existing = await prisma.auDevAnalysis.findFirst({
+      where: {
+        asin,
+        status: "completed",
+        createdAt: { gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (existing) {
+      console.log("[au-dev/analyze] 命中 90 天缓存，ASIN:", asin, "id:", existing.id);
+      return NextResponse.json({ cached: true, id: existing.id, cachedAt: existing.createdAt });
+    }
   }
 
   // Create record

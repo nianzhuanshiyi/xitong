@@ -144,6 +144,7 @@ export function AuDevWorkspace() {
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState({ step: 0, label: "", percent: 0 });
   const [loading, setLoading] = useState(true);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
 
   /* ---------- data fetching ---------- */
 
@@ -188,6 +189,7 @@ export function AuDevWorkspace() {
     setSelectedAnalysis(null);
     setInputValue("");
     setAnalyzing(false);
+    setCachedAt(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -204,18 +206,19 @@ export function AuDevWorkspace() {
     }
   };
 
-  const handleAnalyze = async () => {
+  const doAnalyze = async (forceRefresh: boolean) => {
     if (!inputValue.trim() || analyzing) return;
     setAnalyzing(true);
     setProgress({ step: 0, label: "准备中...", percent: 0 });
     setSelectedAnalysis(null);
     setSelectedId(null);
+    setCachedAt(null);
 
     try {
       const res = await fetch("/api/au-dev/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: inputValue.trim() }),
+        body: JSON.stringify({ input: inputValue.trim(), forceRefresh }),
       });
 
       if (!res.ok) {
@@ -223,6 +226,19 @@ export function AuDevWorkspace() {
         const msg = errData.message || errData.error || res.statusText || "未知错误";
         alert(`分析失败 (${res.status}): ${msg}`);
         return;
+      }
+
+      // Check if response is cached JSON (not stream)
+      const contentType = res.headers.get("Content-Type") || "";
+      if (contentType.includes("application/json")) {
+        const data = await res.json() as { cached?: boolean; id?: string; cachedAt?: string };
+        if (data.cached && data.id) {
+          setCachedAt(data.cachedAt || null);
+          setSelectedId(data.id);
+          fetchAnalyses();
+          fetchAnalysis(data.id);
+          return;
+        }
       }
 
       const reader = res.body?.getReader();
@@ -267,6 +283,9 @@ export function AuDevWorkspace() {
       setAnalyzing(false);
     }
   };
+
+  const handleAnalyze = () => doAnalyze(false);
+  const handleForceRefresh = () => doAnalyze(true);
 
   /* ---------- derived data ---------- */
 
@@ -395,6 +414,21 @@ export function AuDevWorkspace() {
         {/* ----- Completed analysis ----- */}
         {!analyzing && selectedAnalysis && isComplete && (
           <div className="max-w-4xl mx-auto space-y-6">
+            {/* Cache banner */}
+            {cachedAt && (
+              <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm text-amber-800">
+                <span>该产品已于 {new Date(cachedAt).toLocaleDateString("zh-CN")} 被分析过，显示缓存结果。</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="ml-4 border-amber-300 text-amber-700 hover:bg-amber-100"
+                  onClick={handleForceRefresh}
+                  disabled={analyzing}
+                >
+                  <RefreshCw className="mr-1 h-3 w-3" /> 重新分析
+                </Button>
+              </div>
+            )}
             {/* Section 1: 竞品快照 */}
             <SnapshotSection analysis={selectedAnalysis} />
 
