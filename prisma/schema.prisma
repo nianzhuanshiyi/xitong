@@ -530,6 +530,7 @@ model SupplierFile {
   size         Int
   category     SupplierFileCategory @default(OTHER)
   relativePath String
+  fileData     Bytes?
   uploadedAt   DateTime             @default(now())
 
   analysis SupplierFileAnalysis?

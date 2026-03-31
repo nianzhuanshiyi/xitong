@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { existsSync } from "node:fs";
 import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
 import { extractTextFromSupplierFile } from "@/lib/supplier-file-text";
@@ -20,8 +21,23 @@ export async function POST(
   });
   if (!f) return NextResponse.json({ message: "未找到" }, { status: 404 });
 
+  // Resolve file data: local filesystem first, then database
   const abs = absolutePathFromRelative(f.relativePath);
-  const text = await extractTextFromSupplierFile(abs, f.mimeType, f.originalName);
+  const localExists = existsSync(abs);
+  let text: string;
+
+  if (localExists) {
+    text = await extractTextFromSupplierFile(abs, f.mimeType, f.originalName);
+  } else if (f.fileData) {
+    const dbBuf = Buffer.from(f.fileData);
+    text = await extractTextFromSupplierFile(dbBuf, f.mimeType, f.originalName);
+  } else {
+    return NextResponse.json(
+      { message: "文件需要重新上传（本地文件已丢失且数据库中无备份）" },
+      { status: 404 }
+    );
+  }
+
   const structured = await aiAnalyzeFileByCategory({
     category: f.category,
     originalName: f.originalName,

@@ -25,7 +25,15 @@ export async function GET(
   try {
     buffer = await readFile(absolutePathFromRelative(f.relativePath));
   } catch {
-    return NextResponse.json({ message: "文件不存在" }, { status: 404 });
+    // Local file missing — try database fallback
+    if (f.fileData) {
+      buffer = Buffer.from(f.fileData);
+    } else {
+      return NextResponse.json(
+        { message: "文件需要重新上传（本地文件已丢失且数据库中无备份）" },
+        { status: 404 }
+      );
+    }
   }
 
   const disposition = mode === "download" ? "attachment" : "inline";

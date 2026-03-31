@@ -41,7 +41,9 @@ export async function GET(
     orderBy: { uploadedAt: "desc" },
     include: { analysis: true },
   });
-  return NextResponse.json(files);
+  // Strip fileData from response to avoid sending large binary blobs
+  const stripped = files.map(({ fileData: _, ...rest }) => rest);
+  return NextResponse.json(stripped);
 }
 
 export async function POST(
@@ -104,6 +106,7 @@ export async function POST(
         size: buf.length,
         category,
         relativePath: rel,
+        fileData: buf,
       },
       include: { analysis: true },
     });
@@ -115,8 +118,10 @@ export async function POST(
     data: { lastActivityAt: new Date() },
   });
 
+  // Strip fileData from response
+  const stripped = created.map(({ fileData: _, ...rest }) => rest);
   return NextResponse.json(
-    created.length === 1 ? created[0] : { files: created },
+    stripped.length === 1 ? stripped[0] : { files: stripped },
     { status: 201 }
   );
 }

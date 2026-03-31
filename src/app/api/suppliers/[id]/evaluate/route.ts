@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { existsSync } from "node:fs";
 import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
 import { aiSupplierEvaluation } from "@/lib/supplier-ai";
@@ -26,24 +27,39 @@ export async function POST(
   });
   if (!s) return NextResponse.json({ message: "未找到" }, { status: 404 });
 
-  // Extract text content from files that haven't been analyzed yet
+  console.log("[EVALUATE] Total files:", s.files.length);
+
+  // Extract text content from each file
   const fileAnalyses = await Promise.all(
     s.files.map(async (f) => {
+      // If we already have a good analysis summary, use it
       if (f.analysis?.summary) {
+        console.log("[EVALUATE] File:", f.originalName, "→ using existing analysis summary");
         return {
           name: f.originalName,
           category: f.category,
           summary: f.analysis.summary,
         };
       }
-      // No analysis exists — extract PDF/text content directly
+
+      // No analysis — extract text from file directly
       const absPath = absolutePathFromRelative(f.relativePath);
-      const textContent = await extractTextFromSupplierFile(
-        absPath,
-        f.mimeType,
-        f.originalName
-      );
-      // Truncate for evaluation context (keep under 8k per file)
+      const localExists = existsSync(absPath);
+      console.log("[EVALUATE] File:", f.originalName, "localExists:", localExists, "hasDbData:", !!f.fileData);
+
+      let textContent: string;
+      if (localExists) {
+        textContent = await extractTextFromSupplierFile(absPath, f.mimeType, f.originalName);
+      } else if (f.fileData) {
+        // Local file missing (e.g. Railway redeployment) — use DB-stored data
+        const dbBuf = Buffer.from(f.fileData);
+        textContent = await extractTextFromSupplierFile(dbBuf, f.mimeType, f.originalName);
+      } else {
+        textContent = `[文件需要重新上传] ${f.originalName}（本地文件已丢失且数据库中无备份数据）`;
+      }
+
+      console.log("[EVALUATE] Extracted text length:", textContent.length, "First 200 chars:", textContent.substring(0, 200));
+
       const truncated = textContent.slice(0, 8000);
       return {
         name: f.originalName,

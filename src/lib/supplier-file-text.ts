@@ -3,19 +3,29 @@ import { existsSync } from "node:fs";
 
 const MAX_CHARS = 48_000;
 
+/**
+ * Extract text from a supplier file.
+ * Accepts either a file path or a Buffer directly (for DB-stored files).
+ */
 export async function extractTextFromSupplierFile(
-  absPath: string,
+  absPathOrBuffer: string | Buffer,
   mime: string,
   originalName: string
 ): Promise<string> {
-  if (!existsSync(absPath)) {
-    return `[文件不存在] ${originalName} (路径: ${absPath})`;
+  let buf: Buffer | null = null;
+
+  if (Buffer.isBuffer(absPathOrBuffer)) {
+    buf = absPathOrBuffer;
+  } else {
+    if (!existsSync(absPathOrBuffer)) {
+      return `[文件不存在] ${originalName} (路径: ${absPathOrBuffer})`;
+    }
+    buf = await readFile(absPathOrBuffer);
   }
 
   const lower = mime.toLowerCase();
   if (lower === "application/pdf") {
     try {
-      const buf = await readFile(absPath);
       const { PDFParse } = await import("pdf-parse");
       const parser = new PDFParse({ data: buf });
       const text = await parser.getText();
@@ -32,8 +42,7 @@ export async function extractTextFromSupplierFile(
     }
   }
   if (lower.startsWith("text/")) {
-    const raw = await readFile(absPath, "utf8");
-    return raw.slice(0, MAX_CHARS);
+    return buf.toString("utf8").slice(0, MAX_CHARS);
   }
   return `[非文本文件，仅提供元数据] 文件名: ${originalName}, MIME: ${mime}`;
 }
