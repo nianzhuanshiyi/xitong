@@ -2349,12 +2349,12 @@ function CollapsibleSummary({ text, previewChars = 300 }: { text: string; previe
   const renderContent = (content: string) => {
     if (hasMarkdown) {
       return (
-        <div className="prose prose-sm prose-slate max-w-none">
+        <div className="prose prose-sm prose-slate max-w-none overflow-hidden break-words [&_table]:block [&_table]:overflow-x-auto [&_table]:max-w-full [&_pre]:overflow-x-auto [&_pre]:max-w-full">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
         </div>
       );
     }
-    return <p className="text-sm text-slate-700 whitespace-pre-wrap">{content}</p>;
+    return <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{content}</p>;
   };
 
   if (!isLong) {
@@ -2362,7 +2362,7 @@ function CollapsibleSummary({ text, previewChars = 300 }: { text: string; previe
   }
 
   return (
-    <div>
+    <div className="min-w-0 overflow-hidden">
       {renderContent(expanded ? text : text.slice(0, previewChars) + "...")}
       <button
         type="button"
