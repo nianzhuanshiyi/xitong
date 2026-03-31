@@ -3,11 +3,39 @@ import { existsSync } from "node:fs";
 import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
 import { extractTextFromSupplierFile } from "@/lib/supplier-file-text";
-import { aiAnalyzeFileByCategory } from "@/lib/supplier-ai";
 import { absolutePathFromRelative } from "@/lib/supplier-uploads";
-import { getClaudeApiKey } from "@/lib/integration-keys";
 
 export const dynamic = "force-dynamic";
+
+// Category-specific system prompts
+const CATEGORY_PROMPTS: Record<string, string> = {
+  CATALOG:
+    "Extract product catalog structure. Return ONLY valid JSON, no markdown. JSON: {summary, products:[{name, specs, highlights}]}. Chinese for summary.",
+  PRICE_LIST:
+    "Extract pricing. Mark competitive:true for unusually good value vs peers if inferable. Return ONLY valid JSON, no markdown. JSON: {summary, items:[{skuOrName, price, moq, note, competitive}]}.",
+  TEST_REPORT:
+    "Assess Amazon US compliance heuristically from test report text. Return ONLY valid JSON, no markdown. JSON: {summary, tests:[{name, result, pass}], amazonCompliance:{ok, notes}}.",
+  CERTIFICATION:
+    "Identify certificate. expiryDate as ISO date YYYY-MM-DD or null. Return ONLY valid JSON, no markdown. JSON: {summary, certType, expiryDate, issuer}.",
+};
+
+const DEFAULT_PROMPT =
+  "Summarize this supplier document in Chinese. Return ONLY valid JSON, no markdown. JSON: {summary, details}.";
+
+function extractJson(rawText: string): Record<string, unknown> | null {
+  let cleaned = rawText.trim();
+  if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
+  else if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
+  if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
+  cleaned = cleaned.trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+  try {
+    return JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(
   _req: Request,
@@ -17,10 +45,13 @@ export async function POST(
   if (error) return error;
   const { id, fileId } = await params;
 
-  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || (await getClaudeApiKey());
+  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
   if (!apiKey) {
     console.error("[ANALYZE] ANTHROPIC_API_KEY is not set!");
-    return NextResponse.json({ error: "Claude API 密钥未配置" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Claude API 密钥未配置，请联系管理员" },
+      { status: 500 }
+    );
   }
 
   const f = await prisma.supplierFile.findFirst({
@@ -45,11 +76,56 @@ export async function POST(
     );
   }
 
-  const structured = await aiAnalyzeFileByCategory({
-    category: f.category,
-    originalName: f.originalName,
-    text,
-  });
+  console.log("[ANALYZE] File:", f.originalName, "category:", f.category, "text length:", text.length);
+
+  // Direct Anthropic API call
+  const systemPrompt = CATEGORY_PROMPTS[f.category] || DEFAULT_PROMPT;
+  const userPrompt = `Document: ${f.originalName}\n\n${text.slice(0, 45_000)}`;
+
+  let structured: Record<string, unknown> | null = null;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("[ANALYZE] API error:", response.status, errText.slice(0, 500));
+      return NextResponse.json(
+        { error: `AI 调用失败: ${response.status}` },
+        { status: 500 }
+      );
+    }
+
+    const data = (await response.json()) as {
+      content?: Array<{ type: string; text?: string }>;
+    };
+    const rawText =
+      data.content
+        ?.filter((b) => b.type === "text")
+        .map((b) => b.text ?? "")
+        .join("") || "";
+
+    console.log("[ANALYZE] AI raw response (first 500 chars):", rawText.slice(0, 500));
+
+    structured = extractJson(rawText);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[ANALYZE] API call failed:", msg);
+    return NextResponse.json({ error: `AI 调用失败: ${msg}` }, { status: 500 });
+  }
 
   if (!structured) {
     return NextResponse.json(
@@ -59,30 +135,22 @@ export async function POST(
   }
 
   const summary =
-    typeof structured === "object" && structured && "summary" in structured
-      ? String((structured as { summary?: string }).summary ?? "")
+    "summary" in structured
+      ? String(structured.summary ?? "")
       : JSON.stringify(structured);
 
   let complianceNotes: string | null = null;
-  if (
-    f.category === "TEST_REPORT" &&
-    structured &&
-    typeof structured === "object" &&
-    "amazonCompliance" in structured
-  ) {
-    const ac = (structured as { amazonCompliance?: { ok: boolean; notes: string } })
-      .amazonCompliance;
+  if (f.category === "TEST_REPORT" && "amazonCompliance" in structured) {
+    const ac = structured.amazonCompliance as {
+      ok: boolean;
+      notes: string;
+    } | null;
     complianceNotes = ac ? JSON.stringify(ac) : null;
   }
 
   let certExpiryDate: Date | null = null;
-  if (
-    f.category === "CERTIFICATION" &&
-    structured &&
-    typeof structured === "object" &&
-    "expiryDate" in structured
-  ) {
-    const ed = (structured as { expiryDate?: string | null }).expiryDate;
+  if (f.category === "CERTIFICATION" && "expiryDate" in structured) {
+    const ed = structured.expiryDate as string | null;
     if (ed) {
       const d = new Date(ed);
       if (!Number.isNaN(d.getTime())) certExpiryDate = d;

@@ -4,16 +4,68 @@ import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
 import { extractTextFromSupplierFile } from "@/lib/supplier-file-text";
 import { absolutePathFromRelative } from "@/lib/supplier-uploads";
-import {
-  aiExtractCatalogProducts,
-  aiCatalogRecommendations,
-} from "@/lib/supplier-ai";
 import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
-import { getClaudeApiKey } from "@/lib/integration-keys";
 
 export const dynamic = "force-dynamic";
 
 const MAX_PRODUCTS = 15;
+
+function extractJson(rawText: string): Record<string, unknown> | null {
+  let cleaned = rawText.trim();
+  if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
+  else if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
+  if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
+  cleaned = cleaned.trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+  try {
+    return JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+async function callAnthropicJson(
+  apiKey: string,
+  systemPrompt: string,
+  userPrompt: string,
+  label: string
+): Promise<Record<string, unknown> | null> {
+  console.log(`[${label}] Calling Anthropic API, model: claude-sonnet-4-20250514`);
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 8192,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error(`[${label}] API error:`, response.status, errText.slice(0, 500));
+    throw new Error(`AI 调用失败: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    content?: Array<{ type: string; text?: string }>;
+  };
+  const rawText =
+    data.content
+      ?.filter((b) => b.type === "text")
+      .map((b) => b.text ?? "")
+      .join("") || "";
+
+  console.log(`[${label}] AI raw response (first 500 chars):`, rawText.slice(0, 500));
+
+  return extractJson(rawText);
+}
 
 export async function POST(
   _req: Request,
@@ -23,10 +75,13 @@ export async function POST(
   if (error) return error;
   const { id, fileId } = await params;
 
-  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || (await getClaudeApiKey());
+  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
   if (!apiKey) {
     console.error("[CATALOG-ANALYSIS] ANTHROPIC_API_KEY is not set!");
-    return NextResponse.json({ error: "Claude API 密钥未配置" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Claude API 密钥未配置，请联系管理员" },
+      { status: 500 }
+    );
   }
 
   const f = await prisma.supplierFile.findFirst({
@@ -58,9 +113,32 @@ export async function POST(
     );
   }
 
-  // Step 2: AI extract products from catalog text
-  const extracted = await aiExtractCatalogProducts(text, f.originalName);
-  if (!extracted?.products?.length) {
+  // Step 2: AI extract products from catalog text (direct fetch)
+  type CatalogProduct = { name: string; specs?: string; searchKeyword?: string; estimatedCost?: string };
+  let extractedProducts: CatalogProduct[] = [];
+
+  try {
+    const result = await callAnthropicJson(
+      apiKey,
+      `You are analyzing a supplier product catalog. Extract up to 15 distinct products. For each product, provide:
+- name: product name (Chinese if available, otherwise English)
+- specs: key specifications (size, material, weight, etc.)
+- searchKeyword: an English keyword suitable for searching on Amazon Australia (concise, 2-4 words)
+- estimatedCost: estimated unit cost if mentioned in the document
+
+Return ONLY valid JSON, no markdown: {"products": [{name, specs, searchKeyword, estimatedCost}]}
+Focus on products that are most likely suitable for cross-border e-commerce (Amazon AU).`,
+      `Catalog file: ${f.originalName}\n\nContent:\n${text.slice(0, 45_000)}`,
+      "CATALOG-EXTRACT"
+    );
+    if (result && Array.isArray(result.products)) {
+      extractedProducts = result.products as CatalogProduct[];
+    }
+  } catch (e) {
+    console.error("[CATALOG-EXTRACT] Failed:", e);
+  }
+
+  if (!extractedProducts.length) {
     return NextResponse.json(
       {
         products: [],
@@ -71,7 +149,7 @@ export async function POST(
     );
   }
 
-  const products = extracted.products.slice(0, MAX_PRODUCTS);
+  const products = extractedProducts.slice(0, MAX_PRODUCTS);
 
   // Step 3: Query SellerSprite for market data on each product
   const mcp = createSellerspriteMcpClient();
@@ -108,12 +186,29 @@ export async function POST(
     });
   }
 
-  // Step 4: AI generate recommendations combining catalog + market data
-  const recommendations = await aiCatalogRecommendations({
-    products,
-    marketData,
-    marketplace,
-  });
+  // Step 4: AI generate recommendations combining catalog + market data (direct fetch)
+  let recommendations: Record<string, unknown> | null = null;
+
+  try {
+    recommendations = await callAnthropicJson(
+      apiKey,
+      `You are an Amazon ${marketplace} cross-border e-commerce product analyst. Given extracted catalog products and SellerSprite market data, generate recommendations.
+
+For each product evaluate:
+- recommendedPrice: suggested retail price in AUD
+- margin: estimated profit margin percentage
+- marketDemand: demand level (高/中/低) with brief reasoning
+- competition: competition level (激烈/中等/较低) with brief reasoning
+- recommendation: 1-2 sentence recommendation (选品建议) in Chinese
+
+Also provide an overall summary (Chinese, 2-3 sentences) of which products are most promising.
+Return ONLY valid JSON, no markdown: {products: [{name, specs, estimatedCost, recommendedPrice, margin, marketDemand, competition, recommendation}], summary}`,
+      `Products from catalog:\n${JSON.stringify(products, null, 2)}\n\nMarket data (SellerSprite ${marketplace}):\n${JSON.stringify(marketData, null, 2)}`,
+      "CATALOG-RECOMMEND"
+    );
+  } catch (e) {
+    console.error("[CATALOG-RECOMMEND] Failed:", e);
+  }
 
   if (!recommendations) {
     return NextResponse.json({

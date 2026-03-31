@@ -5,6 +5,12 @@ const MODEL_MAP: Record<string, string> = {
   opus: "claude-opus-4-20250514",
 };
 
+/** Only these full model IDs are valid — anything else (e.g. haiku) is ignored */
+const VALID_MODELS = new Set([
+  "claude-sonnet-4-20250514",
+  "claude-opus-4-20250514",
+]);
+
 const DEFAULT_MODEL_ID = "claude-sonnet-4-20250514";
 const DEFAULT_ADMIN_MODEL = "claude-opus-4-20250514";
 const DEFAULT_EMPLOYEE_MODEL = "claude-sonnet-4-20250514";
@@ -40,7 +46,10 @@ export async function getUserAiModel(userId: string): Promise<string> {
       where: { id: userId },
       select: { assignedModel: true, role: true },
     });
-    if (user?.assignedModel) return user.assignedModel;
+    // Only use assignedModel if it's a valid (non-haiku) model
+    if (user?.assignedModel && VALID_MODELS.has(user.assignedModel)) {
+      return user.assignedModel;
+    }
     // Role-based default
     return user?.role === "ADMIN" ? DEFAULT_ADMIN_MODEL : DEFAULT_EMPLOYEE_MODEL;
   } catch {

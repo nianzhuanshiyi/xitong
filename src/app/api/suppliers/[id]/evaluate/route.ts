@@ -4,8 +4,6 @@ import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
 import { extractTextFromSupplierFile } from "@/lib/supplier-file-text";
 import { absolutePathFromRelative } from "@/lib/supplier-uploads";
-import { getClaudeApiKey } from "@/lib/integration-keys";
-import { extractJsonBlock } from "@/lib/claude-client";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +16,11 @@ export async function POST(
   const { id } = await params;
 
   // Validate API key upfront
-  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || (await getClaudeApiKey());
+  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
   if (!apiKey) {
     console.error("[EVALUATE] ANTHROPIC_API_KEY is not set!");
     return NextResponse.json(
-      { error: "Claude API 密钥未配置" },
+      { error: "Claude API 密钥未配置，请联系管理员" },
       { status: 500 }
     );
   }
@@ -159,14 +157,17 @@ export async function POST(
     }
 
     // Robust JSON extraction: strip markdown, regex extract
-    const jsonStr = extractJsonBlock(aiText);
-    try {
-      evalResult = JSON.parse(jsonStr);
-    } catch {
-      console.error("[EVALUATE] JSON parse failed, trying regex extraction. Raw:", aiText.slice(0, 800));
-      const match = aiText.match(/\{[\s\S]*\}/);
-      if (match) {
-        evalResult = JSON.parse(match[0]);
+    let cleaned = aiText.trim();
+    if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
+    else if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
+    if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
+    cleaned = cleaned.trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        evalResult = JSON.parse(jsonMatch[0]);
+      } catch {
+        console.error("[EVALUATE] JSON parse failed. Raw:", aiText.slice(0, 800));
       }
     }
   } catch (e) {
