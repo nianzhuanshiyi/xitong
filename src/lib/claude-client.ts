@@ -1,6 +1,6 @@
 import { getClaudeApiKey } from "@/lib/integration-keys";
 
-const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
+const DEFAULT_MODEL = "claude-sonnet-4-20250514";
 
 export function extractJsonBlock(text: string): string {
   // Try fenced code block first (greedy — grab the largest block)

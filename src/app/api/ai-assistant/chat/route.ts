@@ -333,11 +333,12 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { conversationId, message, fileUrl, fileName } = body as {
+  const { conversationId, message, fileUrl, fileName, fileContent } = body as {
     conversationId: string;
     message: string;
     fileUrl?: string;
     fileName?: string;
+    fileContent?: string;
   };
 
   if (!conversationId || !message?.trim()) {
@@ -376,6 +377,14 @@ export async function POST(req: NextRequest) {
     role: m.role as "user" | "assistant",
     content: m.content,
   }));
+
+  // If the latest user message has file content, prepend it to the message for Claude
+  if (fileContent && apiMessages.length > 0) {
+    const lastMsg = apiMessages[apiMessages.length - 1];
+    if (lastMsg.role === "user" && typeof lastMsg.content === "string") {
+      lastMsg.content = `[用户上传了文件: ${fileName || "未知文件"}]\n=== 文件内容 ===\n${fileContent}\n=== 文件内容结束 ===\n\n用户的问题: ${lastMsg.content}`;
+    }
+  }
 
   const isFirstMessage = history.filter((m) => m.role === "user").length === 1;
 

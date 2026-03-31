@@ -20,6 +20,55 @@ const ALLOWED_TYPES = new Set([
 ]);
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_TEXT_CHARS = 8000;
+
+async function extractText(
+  buffer: Buffer,
+  mimeType: string,
+  fileName: string
+): Promise<string | null> {
+  const lower = mimeType.toLowerCase();
+
+  // PDF
+  if (lower === "application/pdf") {
+    try {
+      const { PDFParse } = await import("pdf-parse");
+      const parser = new PDFParse({ data: buffer });
+      const result = await parser.getText();
+      await parser.destroy();
+      const text = result.text?.trim() ?? "";
+      return text ? text.slice(0, MAX_TEXT_CHARS) : null;
+    } catch (err) {
+      console.error(`[ai-upload] PDF parse failed for ${fileName}:`, err);
+      return null;
+    }
+  }
+
+  // Plain text / CSV
+  if (lower === "text/plain" || lower === "text/csv") {
+    return buffer.toString("utf8").slice(0, MAX_TEXT_CHARS);
+  }
+
+  // DOCX
+  if (
+    lower ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    lower === "application/msword"
+  ) {
+    try {
+      const mammoth = await import("mammoth");
+      const result = await mammoth.extractRawText({ buffer });
+      const text = result.value?.trim() ?? "";
+      return text ? text.slice(0, MAX_TEXT_CHARS) : null;
+    } catch (err) {
+      console.error(`[ai-upload] DOCX parse failed for ${fileName}:`, err);
+      return null;
+    }
+  }
+
+  // Excel — skip text extraction (images/spreadsheets)
+  return null;
+}
 
 export async function POST(req: NextRequest) {
   const { error } = await requireModuleAccess("ai-assistant");
@@ -66,9 +115,14 @@ export async function POST(req: NextRequest) {
 
   const url = `/uploads/ai-assistant/${dateDir}/${uniqueName}`;
 
+  // Extract text content for AI analysis
+  const fileContent = await extractText(buffer, file.type, file.name);
+
   return NextResponse.json({
     url,
     fileName: file.name,
     fileType: file.type,
+    fileSize: file.size,
+    fileContent,
   });
 }

@@ -6,6 +6,7 @@ const COST_PER_MILLION: Record<string, { input: number; output: number }> = {
   "claude-haiku-4-5": { input: 1.0, output: 5.0 },
   "claude-sonnet-4-20250514": { input: 3.0, output: 15.0 },
   "claude-sonnet-4-5": { input: 3.0, output: 15.0 },
+  "claude-opus-4-20250514": { input: 15.0, output: 75.0 },
   "claude-opus-4-0-20250514": { input: 15.0, output: 75.0 },
   "claude-opus-4-5": { input: 15.0, output: 75.0 },
 };

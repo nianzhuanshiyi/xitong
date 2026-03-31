@@ -41,9 +41,8 @@ const MODULE_LIST = [
 ] as const;
 
 const AI_MODELS = [
-  { value: "claude-haiku-4-5-20251001", label: "Claude Haiku" },
-  { value: "claude-sonnet-4-20250514", label: "Claude Sonnet" },
-  { value: "claude-opus-4-0-20250514", label: "Claude Opus" },
+  { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
+  { value: "claude-opus-4-20250514", label: "Claude Opus 4" },
 ] as const;
 
 function modelLabel(modelId: string): string {
@@ -168,7 +167,7 @@ export function UsersManagement() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {u.role === "ADMIN" ? "—" : modelLabel(u.assignedModel ?? "claude-haiku-4-5-20251001")}
+                        {u.role === "ADMIN" ? "—" : modelLabel(u.assignedModel ?? "claude-sonnet-4-20250514")}
                       </TableCell>
                       <TableCell>
                         {u.role === "ADMIN" ? (
@@ -286,7 +285,7 @@ function UserFormDialog({
   const [role, setRole] = useState<"ADMIN" | "EMPLOYEE">("EMPLOYEE");
   const [aiAuthorized, setAiAuthorized] = useState(false);
   const [allowedModules, setAllowedModules] = useState<string[]>([]);
-  const [assignedModel, setAssignedModel] = useState("claude-haiku-4-5-20251001");
+  const [assignedModel, setAssignedModel] = useState("claude-sonnet-4-20250514");
   const [monthlyTokenLimit, setMonthlyTokenLimit] = useState(500000);
   const [submitting, setSubmitting] = useState(false);
 
@@ -299,7 +298,7 @@ function UserFormDialog({
       setRole(user.role);
       setAiAuthorized(user.aiAuthorized);
       setAllowedModules(user.allowedModules ?? []);
-      setAssignedModel(user.assignedModel ?? "claude-haiku-4-5-20251001");
+      setAssignedModel(user.assignedModel ?? "claude-sonnet-4-20250514");
       setMonthlyTokenLimit(user.monthlyTokenLimit ?? 500000);
     } else if (mode === "create") {
       setName("");
@@ -308,7 +307,7 @@ function UserFormDialog({
       setRole("EMPLOYEE");
       setAiAuthorized(false);
       setAllowedModules([]);
-      setAssignedModel("claude-haiku-4-5-20251001");
+      setAssignedModel("claude-sonnet-4-20250514");
       setMonthlyTokenLimit(500000);
     }
   }, [open, mode, user]);
@@ -546,13 +545,13 @@ function BatchModelDialog({
   users: UserRow[];
   onSuccess: () => void;
 }) {
-  const [selectedModel, setSelectedModel] = useState("claude-haiku-4-5-20251001");
+  const [selectedModel, setSelectedModel] = useState("claude-sonnet-4-20250514");
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setSelectedModel("claude-haiku-4-5-20251001");
+    setSelectedModel("claude-sonnet-4-20250514");
     setSelectedUsers([]);
   }, [open]);
 
@@ -637,7 +636,7 @@ function BatchModelDialog({
                       <Label htmlFor={`batch-${u.id}`} className="text-xs font-normal flex-1">
                         {u.name ?? u.email}
                         <span className="ml-1 text-muted-foreground">
-                          ({modelLabel(u.assignedModel ?? "claude-haiku-4-5-20251001")})
+                          ({modelLabel(u.assignedModel ?? "claude-sonnet-4-20250514")})
                         </span>
                       </Label>
                     </div>

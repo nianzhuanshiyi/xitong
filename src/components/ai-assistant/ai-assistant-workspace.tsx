@@ -61,6 +61,8 @@ export default function AiAssistantWorkspace() {
   const [uploadedFile, setUploadedFile] = useState<{
     url: string;
     fileName: string;
+    fileSize?: number;
+    fileContent?: string | null;
   } | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -162,7 +164,12 @@ export default function AiAssistantWorkspace() {
       });
       const data = await res.json();
       if (res.ok) {
-        setUploadedFile({ url: data.url, fileName: data.fileName });
+        setUploadedFile({
+          url: data.url,
+          fileName: data.fileName,
+          fileSize: data.fileSize,
+          fileContent: data.fileContent,
+        });
       } else {
         alert(data.message || "上传失败");
       }
@@ -209,6 +216,7 @@ export default function AiAssistantWorkspace() {
           message: msg,
           fileUrl: uploadedFile?.url,
           fileName: uploadedFile?.fileName,
+          fileContent: uploadedFile?.fileContent,
         }),
       });
 
@@ -464,7 +472,15 @@ export default function AiAssistantWorkspace() {
                 <FileText className="h-4 w-4 text-blue-500" />
                 <span className="flex-1 truncate text-blue-700">
                   {uploadedFile.fileName}
+                  {uploadedFile.fileSize ? (
+                    <span className="ml-1.5 text-blue-400 text-xs">
+                      ({(uploadedFile.fileSize / 1024).toFixed(0)} KB)
+                    </span>
+                  ) : null}
                 </span>
+                {uploadedFile.fileContent && (
+                  <span className="text-xs text-green-600 whitespace-nowrap">已解析</span>
+                )}
                 <button
                   onClick={() => setUploadedFile(null)}
                   className="text-gray-400 hover:text-red-500"
