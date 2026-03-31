@@ -3,9 +3,16 @@ import { getClaudeApiKey } from "@/lib/integration-keys";
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 
 export function extractJsonBlock(text: string): string {
-  // Try fenced code block first
+  // Try fenced code block first (greedy — grab the largest block)
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fence?.[1]) return fence[1].trim();
+  // Handle truncated fence (opening ``` but no closing ```)
+  const openFence = text.match(/```(?:json)?\s*([\s\S]+)/);
+  if (openFence?.[1]) {
+    const inner = openFence[1].trim();
+    // Only use if it looks like JSON
+    if (inner.startsWith("{") || inner.startsWith("[")) return inner;
+  }
   // Try to find a JSON array or object in the text
   const arrMatch = text.match(/(\[[\s\S]*\])/);
   if (arrMatch?.[1]) return arrMatch[1].trim();
@@ -172,9 +179,10 @@ export async function claudeJson<T>(params: {
   // claudeMessages now throws on missing key / API errors — let it propagate
   const raw = await claudeMessages({ ...params, maxTokens: params.maxTokens ?? 16384 });
   if (!raw) {
-    console.warn("[claudeJson] ⚠ Claude 返回空文本（API 成功但无内容）");
+    console.warn("[claudeJson] ⚠ Claude 返回空文本（API 成功但无内容），model:", params.model || DEFAULT_MODEL);
     return null;
   }
+  console.log("[claudeJson] AI 原始返回 (前500字):", raw.slice(0, 500));
   const jsonStr = extractJsonBlock(raw);
   try {
     return JSON.parse(jsonStr) as T;
