@@ -218,11 +218,23 @@ export function AuDevWorkspace() {
         body: JSON.stringify({ input: inputValue.trim() }),
       });
 
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({})) as { message?: string; error?: string };
+        const msg = errData.message || errData.error || res.statusText || "未知错误";
+        alert(`分析失败 (${res.status}): ${msg}`);
+        return;
+      }
+
       const reader = res.body?.getReader();
+      if (!reader) {
+        alert("分析失败: 无法读取响应流");
+        return;
+      }
+
       const decoder = new TextDecoder();
       let buffer = "";
 
-      while (reader) {
+      while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
@@ -231,16 +243,17 @@ export function AuDevWorkspace() {
         for (const line of lines) {
           if (!line.trim()) continue;
           try {
-            const event = JSON.parse(line);
+            const event = JSON.parse(line) as { type: string; step?: number; label?: string; percent?: number; id?: string; message?: string };
             if (event.type === "progress") {
-              setProgress({ step: event.step, label: event.label, percent: event.percent });
+              setProgress({ step: event.step ?? 0, label: event.label ?? "", percent: event.percent ?? 0 });
             } else if (event.type === "complete") {
-              setSelectedId(event.id);
+              setSelectedId(event.id!);
               setInputValue("");
               fetchAnalyses();
-              fetchAnalysis(event.id);
+              fetchAnalysis(event.id!);
             } else if (event.type === "error") {
-              alert(event.message);
+              console.error("[au-dev analyze] stream error:", event.message);
+              alert(`分析失败: ${event.message || "未知错误"}`);
             }
           } catch {
             /* ignore non-JSON lines */
@@ -248,8 +261,8 @@ export function AuDevWorkspace() {
         }
       }
     } catch (err) {
-      console.error(err);
-      alert("分析请求失败");
+      console.error("[au-dev analyze] request error:", err);
+      alert(`分析请求失败: ${err instanceof Error ? err.message : "网络错误"}`);
     } finally {
       setAnalyzing(false);
     }

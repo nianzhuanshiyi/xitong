@@ -58,6 +58,7 @@ export async function POST(req: Request) {
         });
 
         if (!asinResult.ok) {
+          console.error("[au-dev/analyze] 卖家精灵 asin_detail 失败:", asinResult.error);
           throw new Error(`卖家精灵数据拉取失败: ${asinResult.error}`);
         }
 
@@ -235,6 +236,7 @@ ${competitorSummary}
         });
 
         if (!result) {
+          console.error("[au-dev/analyze] claudeJson 返回空结果，ASIN:", asin);
           throw new Error("AI 分析失败，请重试");
         }
 
@@ -266,6 +268,7 @@ ${competitorSummary}
         send({ type: "complete", id: analysis.id, percent: 100 });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "分析失败";
+        console.error("[au-dev/analyze] 分析流程异常:", e);
         send({ type: "error", message: msg });
         await prisma.auDevAnalysis
           .update({
