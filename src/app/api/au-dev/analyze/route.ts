@@ -1,6 +1,6 @@
 import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
-import { claudeJson, getLastClaudeUsage } from "@/lib/claude-client";
+import { getClaudeApiKey } from "@/lib/integration-keys";
 import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
 import { NextResponse } from "next/server";
 
@@ -154,131 +154,118 @@ export async function POST(req: Request) {
           }
         }
 
-        // Step 3: AI analysis with REAL data as context
+        // Step 3: AI analysis with REAL data — direct Anthropic API call
         send({ type: "progress", step: 3, label: "AI 生成开发方案...", percent: 50 });
 
-        const competitorSummary = competitorData.length > 0
-          ? competitorData.slice(0, 10).map((c, i) => {
-              const item = c as Record<string, unknown>;
-              return `  ${i + 1}. ${item.title ?? item.productTitle ?? "未知"} | A$${item.price ?? "?"} | ★${item.rating ?? "?"} | ${item.ratings ?? item.reviews ?? "?"}评论 | 月销${item.monthlySales ?? item.sales ?? "?"}`;
-            }).join("\n")
-          : "（暂无竞品数据）";
+        // Prepare compact context for AI (reduce tokens)
+        const compactCompetitors = competitorData.slice(0, 5).map((c) => {
+          const ci = c as Record<string, unknown>;
+          return {
+            title: String(ci.title ?? ci.productTitle ?? "").slice(0, 80),
+            price: ci.price,
+            rating: ci.rating,
+            reviews: ci.ratings ?? ci.reviews,
+            monthlySales: ci.monthlySales ?? ci.sales,
+            seller: ci.sellerName,
+          };
+        });
 
-        const systemPrompt = `你是 Amazon 澳洲站产品开发顾问。澳洲是小市场，竞争远弱于美国。
-你的任务不是评分筛选（默认都值得做），而是给出具体可执行的产品开发方案。
+        const systemPrompt = `你是Amazon澳洲站产品开发顾问。澳洲是小市场，竞争远弱于美国。
+核心假设：A$500-2000广告预算能进Top 10，50-100条评价就能建立信任度，中国供应链有优势。
+你必须只返回一个JSON对象，不要包含任何其他文字、解释或markdown标记。
+JSON结构：
+{"marketOverview":{"competitionLevel":"弱/中/强","topConcentration":"描述","avgReviews":数字,"newProductShare":"描述","entryBudget":"A$XX-XX","entryTime":"X周","summary":"一段话","topProducts":[{"rank":1,"title":"标题","price":数字,"rating":数字,"reviews":数字,"monthlySales":数字}]},"diffPlan":[{"title":"方向","description":"详细描述","extraCost":"¥XX","advantage":"优势","imagePrompt":"English prompt for product photo","priority":1,"isCustom":false}],"profitModel":{"suggestedPrice":数字,"priceRange":"A$XX-XX","reasoning":"理由","estimatedFba":数字,"estimatedRefFee":15},"actionPlan":[{"step":1,"title":"标题","description":"内容","timeline":"时间","cost":"费用"}]}
+生成3-5个差异化方向，6个行动步骤。priority 1=最推荐。`;
 
-核心假设：
-- 澳洲站大多数品类，A$500-2000 广告预算能进 Top 10
-- 评价 50-100 条就能建立信任度
-- 中国供应链有价格和速度优势
+        const userPrompt = `产品：${productData.title}
+ASIN：${asin} | 品牌：${productData.brand} | 价格：A$${productData.price}
+评分：${productData.rating}（${productData.reviews}评论）| BSR：#${productData.bsr} in ${productData.bsrLabel}
+品类：${productData.categoryPath} | 卖家：${productData.sellerName} | 配送：${productData.fulfillment}
+重量：${productData.weight} | 尺寸：${productData.dimensions} | 变体：${productData.variations}
+同类Top5：${JSON.stringify(compactCompetitors)}
+请返回JSON开发方案。`;
 
-以下是卖家精灵返回的真实产品数据，请基于这些真实数据进行分析：
-- 产品标题：${productData.title}
-- ASIN：${asin}
-- 品牌：${productData.brand}
-- 价格：A$${productData.price}
-- 评分：${productData.rating}（${productData.reviews}条评论）
-- BSR：#${productData.bsr} in ${productData.bsrLabel}
-- 品类路径：${productData.categoryPath}
-- 卖家：${productData.sellerName}
-- 配送方式：${productData.fulfillment}
-- 变体数：${productData.variations}
-- 重量：${productData.weight}
-- 尺寸：${productData.dimensions}
+        const apiKey = await getClaudeApiKey();
+        if (!apiKey) throw new Error("未配置 Claude API Key");
 
-同品类竞品（Top 10）：
-${competitorSummary}
+        // Helper: call Anthropic API directly and extract JSON
+        const callAnthropicForJson = async (model: string): Promise<Record<string, unknown> | null> => {
+          console.log("[au-dev/analyze] 调用 Anthropic API, model:", model);
+          const apiRes = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "x-api-key": apiKey,
+              "anthropic-version": "2023-06-01",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              model,
+              max_tokens: 4096,
+              system: systemPrompt,
+              messages: [{ role: "user", content: userPrompt }],
+            }),
+          });
 
-请基于以上真实数据，生成以下 JSON（不要修改产品的真实数据，只分析和建议）：
-{
-  "marketOverview": {
-    "competitionLevel": "弱/中/强",
-    "topConcentration": "Top 3 占销量百分比描述",
-    "avgReviews": 数字,
-    "newProductShare": "12个月内新品占 Top 10 百分比描述",
-    "entryBudget": "预估进 Top 3 需要的广告预算区间 AUD",
-    "entryTime": "预估进 Top 3 的时间",
-    "summary": "一段话总结市场环境和机会",
-    "topProducts": [
-      {
-        "rank": 1,
-        "title": "产品标题",
-        "price": 数字,
-        "rating": 数字,
-        "reviews": 数字,
-        "monthlySales": 数字
-      }
-    ]
-  },
-  "diffPlan": [
-    {
-      "title": "差异化方向标题",
-      "description": "具体描述怎么改、为什么有效",
-      "extraCost": "预估额外采购成本 RMB",
-      "advantage": "vs 现有竞品的优势",
-      "imagePrompt": "Professional Amazon product photo, ${productData.title}, [differentiation description], white background, studio lighting, high quality",
-      "priority": 1,
-      "isCustom": false
-    }
-  ],
-  "profitModel": {
-    "suggestedPrice": 数字(AUD),
-    "priceRange": "A$XX - A$XX",
-    "reasoning": "定价理由",
-    "estimatedFba": 数字(AUD),
-    "estimatedRefFee": 15
-  },
-  "actionPlan": [
-    {
-      "step": 1,
-      "title": "步骤标题",
-      "description": "具体内容",
-      "timeline": "预计时间",
-      "cost": "预计费用"
-    }
-  ]
-}
+          const apiText = await apiRes.text();
+          if (!apiRes.ok) {
+            console.error(`[au-dev/analyze] API ${apiRes.status}:`, apiText.slice(0, 500));
+            throw new Error(`Claude API ${apiRes.status}: ${apiText.slice(0, 200)}`);
+          }
 
-每个差异化方案必须包含 priority 字段（1=最推荐，数字越大优先级越低）。
-排序依据：综合考虑"额外成本低 + 竞争优势大 + 落地难度小"，最容易执行且效果最好的排第一。
-每个方案的 isCustom 字段固定为 false。
+          const apiData = JSON.parse(apiText) as {
+            content?: Array<{ type: string; text?: string }>;
+            usage?: { input_tokens?: number; output_tokens?: number };
+          };
+          const rawText = apiData.content
+            ?.filter((b) => b.type === "text")
+            .map((b) => b.text ?? "")
+            .join("") ?? "";
 
-生成 3-5 个差异化方向和 6 个行动步骤。
-如果有竞品数据，topProducts 直接用真实竞品数据填写；如果没有竞品数据，可以合理推测 8-10 个。
-回复必须是纯 JSON，不要包含 markdown 代码块标记。`;
+          console.log("[au-dev/analyze] AI 原始返回 (前500字):", rawText.slice(0, 500));
 
+          // Strip markdown fences
+          let cleaned = rawText.trim();
+          if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
+          else if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
+          if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
+          cleaned = cleaned.trim();
+
+          // Extract JSON object
+          const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+          if (!jsonMatch) {
+            console.error("[au-dev/analyze] 无法从返回中提取JSON，cleaned前200字:", cleaned.slice(0, 200));
+            return null;
+          }
+
+          const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+
+          // Store token usage for activity log
+          tokenUsage = (apiData.usage?.input_tokens ?? 0) + (apiData.usage?.output_tokens ?? 0);
+
+          return parsed;
+        };
+
+        let tokenUsage = 0;
         type AnalysisResult = {
           marketOverview: Record<string, unknown>;
           diffPlan: Array<Record<string, unknown>>;
           profitModel: Record<string, unknown>;
           actionPlan: Array<Record<string, unknown>>;
         };
-        const userMsg = `请基于上面提供的卖家精灵真实数据，为 ASIN ${asin}（${productData.title}）生成完整的澳洲站产品开发方案。`;
-
         let result: AnalysisResult | null = null;
         let usedModel = "claude-opus-4-20250514";
+
         try {
-          result = await claudeJson<AnalysisResult>({
-            system: systemPrompt,
-            user: userMsg,
-            maxTokens: 8192,
-            model: usedModel,
-          });
+          result = (await callAnthropicForJson(usedModel)) as AnalysisResult | null;
         } catch (opusErr) {
-          console.error("[au-dev/analyze] Opus 调用失败，降级到 Sonnet:", opusErr instanceof Error ? opusErr.message : opusErr);
-          send({ type: "progress", step: 3, label: "Opus 不可用，切换 Sonnet 重试...", percent: 55 });
+          console.error("[au-dev/analyze] Opus 失败，降级 Sonnet:", opusErr instanceof Error ? opusErr.message : opusErr);
+          send({ type: "progress", step: 3, label: "Opus 不可用，切换 Sonnet...", percent: 55 });
           usedModel = "claude-sonnet-4-20250514";
-          result = await claudeJson<AnalysisResult>({
-            system: systemPrompt,
-            user: userMsg,
-            maxTokens: 8192,
-            model: usedModel,
-          });
+          result = (await callAnthropicForJson(usedModel)) as AnalysisResult | null;
         }
 
         if (!result) {
-          console.error("[au-dev/analyze] claudeJson 返回空结果，model:", usedModel, "ASIN:", asin);
-          throw new Error(`AI 分析失败 (${usedModel})：模型返回空结果，请重试`);
+          throw new Error(`AI 分析失败 (${usedModel})：无法解析返回的JSON，请重试`);
         }
         console.log("[au-dev/analyze] AI 分析完成，model:", usedModel, "ASIN:", asin);
 
@@ -296,14 +283,13 @@ ${competitorSummary}
           },
         });
 
-        const usage = getLastClaudeUsage();
         await prisma.activityLog.create({
           data: {
             userId: session!.user.id,
             module: "au-dev",
             action: "analyze",
-            detail: JSON.stringify({ asin, title: productData.title }),
-            tokenUsed: usage ? usage.inputTokens + usage.outputTokens : null,
+            detail: JSON.stringify({ asin, title: productData.title, model: usedModel }),
+            tokenUsed: tokenUsage || null,
           },
         }).catch(() => {});
 
