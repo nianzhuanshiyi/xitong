@@ -7,8 +7,14 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  try {
+  console.log("[au-dev/analyze] 请求到达 API");
   const { session, error } = await requireModuleAccess("au-dev");
-  if (error) return error;
+  if (error) {
+    console.warn("[au-dev/analyze] 权限拒绝 — 未登录或无 au-dev 权限");
+    return error;
+  }
+  console.log("[au-dev/analyze] 调用者:", session!.user.email, "角色:", session!.user.role, "allowedModules:", session!.user.allowedModules);
 
   const { input } = await req.json();
   if (!input) {
@@ -288,4 +294,11 @@ ${competitorSummary}
       "Cache-Control": "no-cache",
     },
   });
+  } catch (outerErr) {
+    console.error("[au-dev/analyze] 外层未捕获异常:", outerErr);
+    return NextResponse.json(
+      { message: outerErr instanceof Error ? outerErr.message : "服务器内部错误" },
+      { status: 500 }
+    );
+  }
 }
