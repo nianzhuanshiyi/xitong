@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
 import { aiSupplierEvaluation } from "@/lib/supplier-ai";
+import { extractTextFromSupplierFile } from "@/lib/supplier-file-text";
+import { absolutePathFromRelative } from "@/lib/supplier-uploads";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,34 @@ export async function POST(
   });
   if (!s) return NextResponse.json({ message: "未找到" }, { status: 404 });
 
+  // Extract text content from files that haven't been analyzed yet
+  const fileAnalyses = await Promise.all(
+    s.files.map(async (f) => {
+      if (f.analysis?.summary) {
+        return {
+          name: f.originalName,
+          category: f.category,
+          summary: f.analysis.summary,
+        };
+      }
+      // No analysis exists — extract PDF/text content directly
+      const absPath = absolutePathFromRelative(f.relativePath);
+      const textContent = await extractTextFromSupplierFile(
+        absPath,
+        f.mimeType,
+        f.originalName
+      );
+      // Truncate for evaluation context (keep under 8k per file)
+      const truncated = textContent.slice(0, 8000);
+      return {
+        name: f.originalName,
+        category: f.category,
+        summary: null as string | null,
+        extractedContent: truncated,
+      };
+    })
+  );
+
   const payload = {
     name: s.name,
     nameEn: s.nameEn,
@@ -36,11 +66,7 @@ export async function POST(
     productionLeadDays: s.productionLeadDays,
     profileSummary: s.profileSummary,
     remarks: s.remarks,
-    fileAnalyses: s.files.map((f) => ({
-      name: f.originalName,
-      category: f.category,
-      summary: f.analysis?.summary,
-    })),
+    fileAnalyses,
     recentOrders: s.orders,
     recentRatings: s.ratings,
     qualityIssues: s.qualityIssues,
