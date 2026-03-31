@@ -26,15 +26,15 @@ export async function POST(req: Request) {
     const price = analysis.price ?? 0;
     const categoryPath = analysis.categoryPath || "";
 
-    const result = await claudeJson<{
+    type DiffResult = {
       title: string;
       description: string;
       extraCost: string;
       advantage: string;
       imagePrompt: string;
       priority: number;
-    }>({
-      system: `你是 Amazon 澳洲站产品开发顾问。用户对现有差异化方案不满意，提出了自己的想法。
+    };
+    const diffSystemPrompt = `你是 Amazon 澳洲站产品开发顾问。用户对现有差异化方案不满意，提出了自己的想法。
 请基于用户的想法和竞品数据，生成一个新的差异化方案。
 
 竞品信息：
@@ -53,16 +53,31 @@ export async function POST(req: Request) {
   "priority": 数字(1-5，基于可行性评估)
 }
 
-回复必须是纯 JSON，不要包含 markdown 代码块标记。`,
-      user: `用户的想法：${userIdea.trim()}
+回复必须是纯 JSON，不要包含 markdown 代码块标记。`;
+    const diffUserMsg = `用户的想法：${userIdea.trim()}
 
-请基于这个想法，为 ASIN ${analysis.asin}（${productTitle}）生成一个具体的差异化方案。`,
-      maxTokens: 2048,
-      model: "claude-opus-4-20250514", // 澳洲开发模块固定用 Opus，不走员工分配模型
-    });
+请基于这个想法，为 ASIN ${analysis.asin}（${productTitle}）生成一个具体的差异化方案。`;
+
+    let result: DiffResult | null = null;
+    try {
+      result = await claudeJson<DiffResult>({
+        system: diffSystemPrompt,
+        user: diffUserMsg,
+        maxTokens: 2048,
+        model: "claude-opus-4-20250514",
+      });
+    } catch (opusErr) {
+      console.error("[au-dev/custom-diff] Opus 失败，降级 Sonnet:", opusErr instanceof Error ? opusErr.message : opusErr);
+      result = await claudeJson<DiffResult>({
+        system: diffSystemPrompt,
+        user: diffUserMsg,
+        maxTokens: 2048,
+        model: "claude-sonnet-4-20250514",
+      });
+    }
 
     if (!result) {
-      return NextResponse.json({ message: "生成方案失败" }, { status: 500 });
+      return NextResponse.json({ message: "生成方案失败：模型返回空结果" }, { status: 500 });
     }
 
     const newItem = {

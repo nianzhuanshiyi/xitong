@@ -229,22 +229,40 @@ ${competitorSummary}
 如果有竞品数据，topProducts 直接用真实竞品数据填写；如果没有竞品数据，可以合理推测 8-10 个。
 回复必须是纯 JSON，不要包含 markdown 代码块标记。`;
 
-        const result = await claudeJson<{
+        type AnalysisResult = {
           marketOverview: Record<string, unknown>;
           diffPlan: Array<Record<string, unknown>>;
           profitModel: Record<string, unknown>;
           actionPlan: Array<Record<string, unknown>>;
-        }>({
-          system: systemPrompt,
-          user: `请基于上面提供的卖家精灵真实数据，为 ASIN ${asin}（${productData.title}）生成完整的澳洲站产品开发方案。`,
-          maxTokens: 8192,
-          model: "claude-opus-4-20250514", // 澳洲开发模块固定用 Opus，不走员工分配模型
-        });
+        };
+        const userMsg = `请基于上面提供的卖家精灵真实数据，为 ASIN ${asin}（${productData.title}）生成完整的澳洲站产品开发方案。`;
+
+        let result: AnalysisResult | null = null;
+        let usedModel = "claude-opus-4-20250514";
+        try {
+          result = await claudeJson<AnalysisResult>({
+            system: systemPrompt,
+            user: userMsg,
+            maxTokens: 8192,
+            model: usedModel,
+          });
+        } catch (opusErr) {
+          console.error("[au-dev/analyze] Opus 调用失败，降级到 Sonnet:", opusErr instanceof Error ? opusErr.message : opusErr);
+          send({ type: "progress", step: 3, label: "Opus 不可用，切换 Sonnet 重试...", percent: 55 });
+          usedModel = "claude-sonnet-4-20250514";
+          result = await claudeJson<AnalysisResult>({
+            system: systemPrompt,
+            user: userMsg,
+            maxTokens: 8192,
+            model: usedModel,
+          });
+        }
 
         if (!result) {
-          console.error("[au-dev/analyze] claudeJson 返回空结果，ASIN:", asin);
-          throw new Error("AI 分析失败，请重试");
+          console.error("[au-dev/analyze] claudeJson 返回空结果，model:", usedModel, "ASIN:", asin);
+          throw new Error(`AI 分析失败 (${usedModel})：模型返回空结果，请重试`);
         }
+        console.log("[au-dev/analyze] AI 分析完成，model:", usedModel, "ASIN:", asin);
 
         // Step 4: Save AI analysis results (product data already saved in step 1)
         send({ type: "progress", step: 4, label: "保存分析结果...", percent: 90 });

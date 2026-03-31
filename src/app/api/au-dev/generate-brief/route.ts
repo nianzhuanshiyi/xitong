@@ -35,8 +35,7 @@ export async function POST(req: Request) {
     const price = analysis.price ?? 0;
     const categoryPath = analysis.categoryPath || "";
 
-    const briefResult = await claudeJson<{ factoryBrief: string }>({
-      system: `你是一位跨境电商产品开发专家，专门帮卖家撰写工厂开发指示单。
+    const briefSystemPrompt = `你是一位跨境电商产品开发专家，专门帮卖家撰写工厂开发指示单。
 请根据以下信息生成一份结构化的工厂开发指示单。
 指示单必须用中文，内容要具体、可操作，工厂看了就能直接开始打样。
 汇率按 1 AUD = 4.6 RMB 计算。
@@ -59,14 +58,29 @@ export async function POST(req: Request) {
 }
 
 每个部分的内容都要基于真实产品数据和差异化方案具体填写，不要留占位符。
-回复必须是纯 JSON，不要包含 markdown 代码块标记。`,
-      user: `请为 ASIN ${asin} 的差异化方案「${item.title}」生成工厂开发指示单。`,
-      maxTokens: 4096,
-      model: "claude-opus-4-20250514", // 澳洲开发模块固定用 Opus，不走员工分配模型
-    });
+回复必须是纯 JSON，不要包含 markdown 代码块标记。`;
+    const briefUserMsg = `请为 ASIN ${asin} 的差异化方案「${item.title}」生成工厂开发指示单。`;
+
+    let briefResult: { factoryBrief: string } | null = null;
+    try {
+      briefResult = await claudeJson<{ factoryBrief: string }>({
+        system: briefSystemPrompt,
+        user: briefUserMsg,
+        maxTokens: 4096,
+        model: "claude-opus-4-20250514",
+      });
+    } catch (opusErr) {
+      console.error("[au-dev/generate-brief] Opus 失败，降级 Sonnet:", opusErr instanceof Error ? opusErr.message : opusErr);
+      briefResult = await claudeJson<{ factoryBrief: string }>({
+        system: briefSystemPrompt,
+        user: briefUserMsg,
+        maxTokens: 4096,
+        model: "claude-sonnet-4-20250514",
+      });
+    }
 
     if (!briefResult?.factoryBrief) {
-      return NextResponse.json({ message: "生成指示单失败" }, { status: 500 });
+      return NextResponse.json({ message: "生成指示单失败：模型返回空结果" }, { status: 500 });
     }
 
     // Save factoryBrief into the diffPlan item
