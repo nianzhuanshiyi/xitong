@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
 import { extractTextFromSupplierFile } from "@/lib/supplier-file-text";
 import { absolutePathFromRelative } from "@/lib/supplier-uploads";
+import { callClaudeWithPdf } from "@/lib/claude-pdf";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +17,6 @@ export async function POST(
   if (error) return error;
   const { id } = await params;
 
-  // Validate API key upfront
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
   if (!apiKey) {
     console.error("[EVALUATE] ANTHROPIC_API_KEY is not set!");
@@ -39,10 +40,12 @@ export async function POST(
 
   console.log("[EVALUATE] Total files:", s.files.length);
 
-  // Extract text content from each file
+  // For unanalyzed PDFs, use Claude native PDF to get summaries first (max 2)
+  let pdfSummaryCount = 0;
+  const MAX_PDF_SUMMARIES = 2;
+
   const fileAnalyses = await Promise.all(
     s.files.map(async (f) => {
-      // If we already have a good analysis summary, use it
       if (f.analysis?.summary) {
         console.log("[EVALUATE] File:", f.originalName, "→ using existing analysis summary");
         return {
@@ -52,7 +55,40 @@ export async function POST(
         };
       }
 
-      // No analysis — extract text from file directly
+      const isPdf = f.mimeType.toLowerCase() === "application/pdf";
+
+      // For unanalyzed PDFs: use Claude native PDF (limited to 2 to avoid token overflow)
+      if (isPdf && pdfSummaryCount < MAX_PDF_SUMMARIES) {
+        const absPath = absolutePathFromRelative(f.relativePath);
+        let buf: Buffer | null = null;
+        if (existsSync(absPath)) {
+          buf = await readFile(absPath);
+        } else if (f.fileData) {
+          buf = Buffer.from(f.fileData);
+        }
+
+        if (buf) {
+          try {
+            pdfSummaryCount++;
+            console.log("[EVALUATE] Using Claude native PDF for:", f.originalName);
+            const base64 = buf.toString("base64");
+            const pdfSummary = await callClaudeWithPdf(
+              base64,
+              "Summarize this supplier document in 2-3 sentences in Chinese. Focus on key facts: products, prices, certifications, or capabilities.",
+              `请用中文总结这个供应商文件: ${f.originalName}`
+            );
+            return {
+              name: f.originalName,
+              category: f.category,
+              summary: pdfSummary.slice(0, 2000),
+            };
+          } catch (e) {
+            console.error("[EVALUATE] Claude PDF failed for:", f.originalName, e);
+          }
+        }
+      }
+
+      // Non-PDF or fallback: extract text
       const absPath = absolutePathFromRelative(f.relativePath);
       const localExists = existsSync(absPath);
       console.log("[EVALUATE] File:", f.originalName, "localExists:", localExists, "hasDbData:", !!f.fileData);
@@ -61,21 +97,19 @@ export async function POST(
       if (localExists) {
         textContent = await extractTextFromSupplierFile(absPath, f.mimeType, f.originalName);
       } else if (f.fileData) {
-        // Local file missing (e.g. Railway redeployment) — use DB-stored data
         const dbBuf = Buffer.from(f.fileData);
         textContent = await extractTextFromSupplierFile(dbBuf, f.mimeType, f.originalName);
       } else {
         textContent = `[文件需要重新上传] ${f.originalName}（本地文件已丢失且数据库中无备份数据）`;
       }
 
-      console.log("[EVALUATE] Extracted text length:", textContent.length, "First 200 chars:", textContent.substring(0, 200));
+      console.log("[EVALUATE] Extracted text length:", textContent.length);
 
-      const truncated = textContent.slice(0, 8000);
       return {
         name: f.originalName,
         category: f.category,
         summary: null as string | null,
-        extractedContent: truncated,
+        extractedContent: textContent.slice(0, 8000),
       };
     })
   );
@@ -98,11 +132,10 @@ export async function POST(
     qualityIssues: s.qualityIssues,
   };
 
-  // Direct Anthropic API call instead of claudeJson wrapper
-  const systemPrompt = "Evaluate supplier for cross-border e-commerce. overallScore 1-5 number. JSON keys: overallScore, strengths[], risks[], recommendedCategories[] (Chinese), demandMatchNote (Chinese). Return ONLY valid JSON, no markdown.";
-  const userPrompt = JSON.stringify(payload);
+  const systemPrompt =
+    "Evaluate supplier for cross-border e-commerce. overallScore 1-5 number. JSON keys: overallScore, strengths[], risks[], recommendedCategories[] (Chinese), demandMatchNote (Chinese). Return ONLY valid JSON, no markdown.";
 
-  console.log("[EVALUATE] Calling Anthropic API directly, model: claude-sonnet-4-20250514");
+  console.log("[EVALUATE] Calling Anthropic API, model: claude-sonnet-4-20250514");
 
   let evalResult: {
     overallScore: number;
@@ -124,7 +157,7 @@ export async function POST(
         model: "claude-sonnet-4-20250514",
         max_tokens: 4096,
         system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
+        messages: [{ role: "user", content: JSON.stringify(payload) }],
       }),
     });
 
@@ -142,21 +175,18 @@ export async function POST(
     const data = JSON.parse(rawText) as {
       content?: Array<{ type: string; text?: string }>;
     };
-    const aiText = data.content
-      ?.filter((b) => b.type === "text")
-      .map((b) => b.text ?? "")
-      .join("") ?? "";
+    const aiText =
+      data.content
+        ?.filter((b) => b.type === "text")
+        .map((b) => b.text ?? "")
+        .join("") ?? "";
 
     console.log("[EVALUATE] AI raw response (first 500 chars):", aiText.slice(0, 500));
 
     if (!aiText.trim()) {
-      return NextResponse.json(
-        { message: "AI 返回空内容" },
-        { status: 502 }
-      );
+      return NextResponse.json({ message: "AI 返回空内容" }, { status: 502 });
     }
 
-    // Robust JSON extraction: strip markdown, regex extract
     let cleaned = aiText.trim();
     if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
     else if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
@@ -173,10 +203,7 @@ export async function POST(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[EVALUATE] API call failed:", msg);
-    return NextResponse.json(
-      { message: `AI 调用失败: ${msg}` },
-      { status: 502 }
-    );
+    return NextResponse.json({ message: `AI 调用失败: ${msg}` }, { status: 502 });
   }
 
   if (!evalResult) {
@@ -186,7 +213,7 @@ export async function POST(
     );
   }
 
-  console.log("[EVALUATE] Evaluation result:", JSON.stringify(evalResult).slice(0, 300));
+  console.log("[EVALUATE] Result:", JSON.stringify(evalResult).slice(0, 300));
 
   const score = Math.min(5, Math.max(1, Number(evalResult.overallScore) || 3));
 

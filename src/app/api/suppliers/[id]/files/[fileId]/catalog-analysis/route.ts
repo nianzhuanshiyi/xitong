@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
+import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
-import { extractTextFromSupplierFile } from "@/lib/supplier-file-text";
 import { absolutePathFromRelative } from "@/lib/supplier-uploads";
+import { callClaudeWithPdfJson } from "@/lib/claude-pdf";
 import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +32,7 @@ async function callAnthropicJson(
   userPrompt: string,
   label: string
 ): Promise<Record<string, unknown> | null> {
-  console.log(`[${label}] Calling Anthropic API, model: claude-sonnet-4-20250514`);
+  console.log(`[${label}] Calling Anthropic API`);
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -62,8 +63,7 @@ async function callAnthropicJson(
       .map((b) => b.text ?? "")
       .join("") || "";
 
-  console.log(`[${label}] AI raw response (first 500 chars):`, rawText.slice(0, 500));
-
+  console.log(`[${label}] AI response (first 500 chars):`, rawText.slice(0, 500));
   return extractJson(rawText);
 }
 
@@ -96,41 +96,64 @@ export async function POST(
     );
   }
 
-  // Step 1: Extract text from file
+  // Step 1: Get file buffer
   const abs = absolutePathFromRelative(f.relativePath);
-  const localExists = existsSync(abs);
-  let text: string;
+  let buf: Buffer | null = null;
 
-  if (localExists) {
-    text = await extractTextFromSupplierFile(abs, f.mimeType, f.originalName);
+  if (existsSync(abs)) {
+    buf = await readFile(abs);
   } else if (f.fileData) {
-    const dbBuf = Buffer.from(f.fileData);
-    text = await extractTextFromSupplierFile(dbBuf, f.mimeType, f.originalName);
-  } else {
+    buf = Buffer.from(f.fileData);
+  }
+
+  if (!buf) {
     return NextResponse.json(
       { message: "文件需要重新上传（本地文件已丢失且数据库中无备份）" },
       { status: 404 }
     );
   }
 
-  // Step 2: AI extract products from catalog text (direct fetch)
-  type CatalogProduct = { name: string; specs?: string; searchKeyword?: string; estimatedCost?: string };
+  const isPdf = f.mimeType.toLowerCase() === "application/pdf";
+
+  // Step 2: Extract products — use Claude native PDF for PDFs
+  type CatalogProduct = {
+    name: string;
+    specs?: string;
+    searchKeyword?: string;
+    estimatedCost?: string;
+  };
   let extractedProducts: CatalogProduct[] = [];
 
-  try {
-    const result = await callAnthropicJson(
-      apiKey,
-      `You are analyzing a supplier product catalog. Extract up to 15 distinct products. For each product, provide:
+  const extractPrompt = `You are analyzing a supplier product catalog. Extract up to 15 distinct products. For each product, provide:
 - name: product name (Chinese if available, otherwise English)
 - specs: key specifications (size, material, weight, etc.)
 - searchKeyword: an English keyword suitable for searching on Amazon Australia (concise, 2-4 words)
 - estimatedCost: estimated unit cost if mentioned in the document
 
 Return ONLY valid JSON, no markdown: {"products": [{name, specs, searchKeyword, estimatedCost}]}
-Focus on products that are most likely suitable for cross-border e-commerce (Amazon AU).`,
-      `Catalog file: ${f.originalName}\n\nContent:\n${text.slice(0, 45_000)}`,
-      "CATALOG-EXTRACT"
-    );
+Focus on products that are most likely suitable for cross-border e-commerce (Amazon AU).`;
+
+  try {
+    let result: Record<string, unknown> | null = null;
+
+    if (isPdf) {
+      console.log("[CATALOG-ANALYSIS] Using Claude native PDF, size:", buf.length);
+      const base64 = buf.toString("base64");
+      result = await callClaudeWithPdfJson(
+        base64,
+        extractPrompt,
+        `请从这个产品目录中提取产品列表: ${f.originalName}`
+      );
+    } else {
+      const text = buf.toString("utf8").slice(0, 45_000);
+      result = await callAnthropicJson(
+        apiKey,
+        extractPrompt,
+        `Catalog file: ${f.originalName}\n\nContent:\n${text}`,
+        "CATALOG-EXTRACT"
+      );
+    }
+
     if (result && Array.isArray(result.products)) {
       extractedProducts = result.products as CatalogProduct[];
     }
@@ -151,7 +174,7 @@ Focus on products that are most likely suitable for cross-border e-commerce (Ama
 
   const products = extractedProducts.slice(0, MAX_PRODUCTS);
 
-  // Step 3: Query SellerSprite for market data on each product
+  // Step 3: Query SellerSprite for market data
   const mcp = createSellerspriteMcpClient();
   const marketplace = "AU";
 
@@ -176,17 +199,13 @@ Focus on products that are most likely suitable for cross-border e-commerce (Ama
         ssData = kwResult.data as Record<string, unknown>;
       }
     } catch {
-      // SellerSprite query failed for this product, continue
+      // continue
     }
 
-    marketData.push({
-      productName: p.name,
-      keyword,
-      sellerspriteData: ssData,
-    });
+    marketData.push({ productName: p.name, keyword, sellerspriteData: ssData });
   }
 
-  // Step 4: AI generate recommendations combining catalog + market data (direct fetch)
+  // Step 4: AI recommendations
   let recommendations: Record<string, unknown> | null = null;
 
   try {
@@ -212,10 +231,7 @@ Return ONLY valid JSON, no markdown: {products: [{name, specs, estimatedCost, re
 
   if (!recommendations) {
     return NextResponse.json({
-      products: products.map((p) => ({
-        name: p.name,
-        specs: p.specs,
-      })),
+      products: products.map((p) => ({ name: p.name, specs: p.specs })),
       summary: "市场数据查询完成，但 AI 推荐生成失败",
     });
   }

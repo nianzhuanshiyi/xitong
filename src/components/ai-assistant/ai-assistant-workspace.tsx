@@ -61,8 +61,10 @@ export default function AiAssistantWorkspace() {
   const [uploadedFile, setUploadedFile] = useState<{
     url: string;
     fileName: string;
+    fileType?: string;
     fileSize?: number;
     fileContent?: string | null;
+    fileBase64?: string | null;
   } | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -167,8 +169,10 @@ export default function AiAssistantWorkspace() {
         setUploadedFile({
           url: data.url,
           fileName: data.fileName,
+          fileType: data.fileType,
           fileSize: data.fileSize,
           fileContent: data.fileContent,
+          fileBase64: data.fileBase64,
         });
       } else {
         alert(data.message || "上传失败");
@@ -216,7 +220,9 @@ export default function AiAssistantWorkspace() {
           message: msg,
           fileUrl: uploadedFile?.url,
           fileName: uploadedFile?.fileName,
+          fileType: uploadedFile?.fileType,
           fileContent: uploadedFile?.fileContent,
+          fileBase64: uploadedFile?.fileBase64,
         }),
       });
 
@@ -478,8 +484,10 @@ export default function AiAssistantWorkspace() {
                     </span>
                   ) : null}
                 </span>
-                {uploadedFile.fileContent && (
-                  <span className="text-xs text-green-600 whitespace-nowrap">已解析</span>
+                {(uploadedFile.fileContent || uploadedFile.fileBase64) && (
+                  <span className="text-xs text-green-600 whitespace-nowrap">
+                    {uploadedFile.fileBase64 ? "PDF 已就绪" : "已解析"}
+                  </span>
                 )}
                 <button
                   onClick={() => setUploadedFile(null)}

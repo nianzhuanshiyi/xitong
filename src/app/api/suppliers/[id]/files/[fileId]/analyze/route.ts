@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
 import { extractTextFromSupplierFile } from "@/lib/supplier-file-text";
 import { absolutePathFromRelative } from "@/lib/supplier-uploads";
+import { callClaudeWithPdfJson } from "@/lib/claude-pdf";
 
 export const dynamic = "force-dynamic";
 
@@ -59,72 +61,96 @@ export async function POST(
   });
   if (!f) return NextResponse.json({ message: "未找到" }, { status: 404 });
 
-  // Resolve file data: local filesystem first, then database
-  const abs = absolutePathFromRelative(f.relativePath);
-  const localExists = existsSync(abs);
-  let text: string;
-
-  if (localExists) {
-    text = await extractTextFromSupplierFile(abs, f.mimeType, f.originalName);
-  } else if (f.fileData) {
-    const dbBuf = Buffer.from(f.fileData);
-    text = await extractTextFromSupplierFile(dbBuf, f.mimeType, f.originalName);
-  } else {
-    return NextResponse.json(
-      { message: "文件需要重新上传（本地文件已丢失且数据库中无备份）" },
-      { status: 404 }
-    );
-  }
-
-  console.log("[ANALYZE] File:", f.originalName, "category:", f.category, "text length:", text.length);
-
-  // Direct Anthropic API call
   const systemPrompt = CATEGORY_PROMPTS[f.category] || DEFAULT_PROMPT;
-  const userPrompt = `Document: ${f.originalName}\n\n${text.slice(0, 45_000)}`;
+  const isPdf = f.mimeType.toLowerCase() === "application/pdf";
 
   let structured: Record<string, unknown> | null = null;
 
-  try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 4096,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
-    });
+  if (isPdf) {
+    // PDF: use Claude native PDF support — send base64 directly
+    const abs = absolutePathFromRelative(f.relativePath);
+    let buf: Buffer | null = null;
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("[ANALYZE] API error:", response.status, errText.slice(0, 500));
+    if (existsSync(abs)) {
+      buf = await readFile(abs);
+    } else if (f.fileData) {
+      buf = Buffer.from(f.fileData);
+    }
+
+    if (!buf) {
       return NextResponse.json(
-        { error: `AI 调用失败: ${response.status}` },
-        { status: 500 }
+        { message: "文件需要重新上传（本地文件已丢失且数据库中无备份）" },
+        { status: 404 }
       );
     }
 
-    const data = (await response.json()) as {
-      content?: Array<{ type: string; text?: string }>;
-    };
-    const rawText =
-      data.content
-        ?.filter((b) => b.type === "text")
-        .map((b) => b.text ?? "")
-        .join("") || "";
+    console.log("[ANALYZE] Using Claude native PDF, file:", f.originalName, "size:", buf.length);
 
-    console.log("[ANALYZE] AI raw response (first 500 chars):", rawText.slice(0, 500));
+    try {
+      const base64 = buf.toString("base64");
+      structured = await callClaudeWithPdfJson(
+        base64,
+        systemPrompt,
+        `请分析这个文件: ${f.originalName}`
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[ANALYZE] Claude PDF call failed:", msg);
+      return NextResponse.json({ error: `AI 调用失败: ${msg}` }, { status: 500 });
+    }
+  } else {
+    // Non-PDF: extract text and send as text
+    const abs = absolutePathFromRelative(f.relativePath);
+    const localExists = existsSync(abs);
+    let text: string;
 
-    structured = extractJson(rawText);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error("[ANALYZE] API call failed:", msg);
-    return NextResponse.json({ error: `AI 调用失败: ${msg}` }, { status: 500 });
+    if (localExists) {
+      text = await extractTextFromSupplierFile(abs, f.mimeType, f.originalName);
+    } else if (f.fileData) {
+      const dbBuf = Buffer.from(f.fileData);
+      text = await extractTextFromSupplierFile(dbBuf, f.mimeType, f.originalName);
+    } else {
+      return NextResponse.json(
+        { message: "文件需要重新上传（本地文件已丢失且数据库中无备份）" },
+        { status: 404 }
+      );
+    }
+
+    console.log("[ANALYZE] Using text extraction, file:", f.originalName, "text length:", text.length);
+
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 4096,
+          system: systemPrompt,
+          messages: [{ role: "user", content: `Document: ${f.originalName}\n\n${text.slice(0, 45_000)}` }],
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error("[ANALYZE] API error:", response.status, errText.slice(0, 500));
+        return NextResponse.json({ error: `AI 调用失败: ${response.status}` }, { status: 500 });
+      }
+
+      const data = (await response.json()) as {
+        content?: Array<{ type: string; text?: string }>;
+      };
+      const rawText = data.content?.filter((b) => b.type === "text").map((b) => b.text ?? "").join("") || "";
+      console.log("[ANALYZE] AI raw response (first 500 chars):", rawText.slice(0, 500));
+      structured = extractJson(rawText);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[ANALYZE] API call failed:", msg);
+      return NextResponse.json({ error: `AI 调用失败: ${msg}` }, { status: 500 });
+    }
   }
 
   if (!structured) {
@@ -141,10 +167,7 @@ export async function POST(
 
   let complianceNotes: string | null = null;
   if (f.category === "TEST_REPORT" && "amazonCompliance" in structured) {
-    const ac = structured.amazonCompliance as {
-      ok: boolean;
-      notes: string;
-    } | null;
+    const ac = structured.amazonCompliance as { ok: boolean; notes: string } | null;
     complianceNotes = ac ? JSON.stringify(ac) : null;
   }
 

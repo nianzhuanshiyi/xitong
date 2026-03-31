@@ -22,74 +22,12 @@ const ALLOWED_TYPES = new Set([
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_TEXT_CHARS = 8000;
 
-/**
- * Robust PDF text extraction with fallback.
- */
-async function extractPdfText(buffer: Buffer): Promise<string> {
-  try {
-    const mod = await import("pdf-parse");
-    if ("PDFParse" in mod && typeof mod.PDFParse === "function") {
-      const parser = new mod.PDFParse({ data: buffer });
-      const result = await parser.getText();
-      await parser.destroy();
-      const text = result.text?.trim() ?? "";
-      if (text.length > 0) return text;
-      return "[PDF 内容为空或为扫描件，无法提取文字]";
-    }
-    const pdfParseFn = (mod as Record<string, unknown>).default;
-    if (typeof pdfParseFn === "function") {
-      const data = await (pdfParseFn as (buf: Buffer) => Promise<{ text: string }>)(buffer);
-      if (data.text && data.text.trim().length > 0) return data.text;
-      return "[PDF 内容为空或为扫描件，无法提取文字]";
-    }
-    return "[PDF 解析模块加载异常]";
-  } catch (error) {
-    console.error("[PDF-PARSE] Failed:", error);
-
-    try {
-      const text = buffer.toString("utf-8");
-      const readable = text
-        .replace(
-          /[^\x20-\x7E\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\n\r\t]/g,
-          " "
-        )
-        .replace(/\s{3,}/g, " ")
-        .trim();
-      if (readable.length > 100) {
-        return readable.substring(0, MAX_TEXT_CHARS);
-      }
-    } catch {
-      /* ignore */
-    }
-
-    return "[PDF 解析失败，请在对话中手动粘贴文件关键内容]";
-  }
-}
-
-async function extractText(
+async function extractTextNonPdf(
   buffer: Buffer,
   mimeType: string,
   fileName: string
 ): Promise<string | null> {
   const lower = mimeType.toLowerCase();
-
-  // PDF
-  if (lower === "application/pdf") {
-    console.log(
-      "[UPLOAD] Attempting PDF parse for:",
-      fileName,
-      "buffer size:",
-      buffer.length
-    );
-    const text = await extractPdfText(buffer);
-    console.log(
-      "[UPLOAD] PDF extracted text length:",
-      text.length,
-      "first 200 chars:",
-      text.slice(0, 200)
-    );
-    return text.slice(0, MAX_TEXT_CHARS);
-  }
 
   // Plain text / CSV
   if (lower === "text/plain" || lower === "text/csv") {
@@ -113,7 +51,7 @@ async function extractText(
     }
   }
 
-  // Excel — skip text extraction (images/spreadsheets)
+  // Excel / Images — no text extraction
   return null;
 }
 
@@ -161,18 +99,28 @@ export async function POST(req: NextRequest) {
   await writeFile(filePath, buffer);
 
   const url = `/uploads/ai-assistant/${dateDir}/${uniqueName}`;
+  const isPdf = file.type.toLowerCase() === "application/pdf";
 
-  // Extract text content for AI analysis
-  const fileContent = await extractText(buffer, file.type, file.name);
+  // For PDFs: return base64 so Claude can read it natively
+  // For other files: extract text content
+  let fileContent: string | null = null;
+  let fileBase64: string | null = null;
 
-  console.log(
-    "[UPLOAD] Extracted text length:",
-    fileContent?.length ?? 0,
-    "for file:",
-    file.name,
-    "type:",
-    file.type
-  );
+  if (isPdf) {
+    fileBase64 = buffer.toString("base64");
+    console.log(
+      "[UPLOAD] PDF file, returning base64, size:",
+      buffer.length,
+      "base64 length:",
+      fileBase64.length
+    );
+  } else {
+    fileContent = await extractTextNonPdf(buffer, file.type, file.name);
+    console.log(
+      "[UPLOAD] Non-PDF file, extracted text length:",
+      fileContent?.length ?? 0
+    );
+  }
 
   return NextResponse.json({
     url,
@@ -180,5 +128,6 @@ export async function POST(req: NextRequest) {
     fileType: file.type,
     fileSize: file.size,
     fileContent,
+    fileBase64,
   });
 }

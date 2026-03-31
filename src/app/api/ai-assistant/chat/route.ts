@@ -304,6 +304,7 @@ function buildMcpArgs(
 
 type ContentBlock =
   | { type: "text"; text: string }
+  | { type: "document"; source: { type: "base64"; media_type: string; data: string } }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; tool_use_id: string; content: string };
 
@@ -333,12 +334,14 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { conversationId, message, fileUrl, fileName, fileContent } = body as {
+  const { conversationId, message, fileUrl, fileName, fileType, fileContent, fileBase64 } = body as {
     conversationId: string;
     message: string;
     fileUrl?: string;
     fileName?: string;
+    fileType?: string;
     fileContent?: string;
+    fileBase64?: string;
   };
 
   if (!conversationId || !message?.trim()) {
@@ -378,16 +381,32 @@ export async function POST(req: NextRequest) {
     content: m.content,
   }));
 
-  // If the latest user message has file content, prepend it to the message for Claude
+  // If the latest user message has a file, inject it for Claude
   if (apiMessages.length > 0 && fileName) {
     const lastMsg = apiMessages[apiMessages.length - 1];
-    if (lastMsg.role === "user" && typeof lastMsg.content === "string") {
-      if (fileContent && fileContent.trim()) {
-        console.log("[CHAT] Injecting file content for:", fileName, "length:", fileContent.length);
-        lastMsg.content = `[用户上传了文件: ${fileName}]\n=== 文件内容 ===\n${fileContent}\n=== 文件内容结束 ===\n\n用户的问题: ${lastMsg.content}`;
-      } else {
-        console.warn("[CHAT] File uploaded but no text content extracted:", fileName);
-        lastMsg.content = `[用户上传了文件: ${fileName}，但未能提取文本内容（可能是扫描件或图片PDF）]\n\n用户的问题: ${lastMsg.content}`;
+    if (lastMsg.role === "user") {
+      const userText = typeof lastMsg.content === "string" ? lastMsg.content : "";
+
+      if (fileBase64 && fileType === "application/pdf") {
+        // PDF: use Claude native document support
+        console.log("[CHAT] Injecting PDF document for:", fileName, "base64 length:", fileBase64.length);
+        lastMsg.content = [
+          {
+            type: "document" as const,
+            source: {
+              type: "base64" as const,
+              media_type: "application/pdf",
+              data: fileBase64,
+            },
+          },
+          { type: "text" as const, text: userText },
+        ];
+      } else if (fileContent && fileContent.trim()) {
+        // Non-PDF with extracted text
+        console.log("[CHAT] Injecting file text for:", fileName, "length:", fileContent.length);
+        lastMsg.content = `[用户上传了文件: ${fileName}]\n=== 文件内容 ===\n${fileContent}\n=== 文件内容结束 ===\n\n用户的问题: ${userText}`;
+      } else if (typeof lastMsg.content === "string") {
+        lastMsg.content = `[用户上传了文件: ${fileName}，但未能提取文本内容]\n\n用户的问题: ${userText}`;
       }
     }
   }
