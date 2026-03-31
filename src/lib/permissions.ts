@@ -57,14 +57,13 @@ const API_TO_MODULE: Record<string, ModuleId> = {
   "/api/au-dev": "au-dev",
 };
 
-/** Check if user has access to a specific module */
+/** Check if user has access to a specific module — currently all logged-in users have access */
 export function hasModuleAccess(
-  role: string,
-  allowedModules: string[],
-  moduleId: ModuleId
+  _role: string,
+  _allowedModules: string[],
+  _moduleId: ModuleId
 ): boolean {
-  if (role === "ADMIN") return true;
-  return allowedModules.includes(moduleId);
+  return true;
 }
 
 /** Get module ID from a dashboard path */
