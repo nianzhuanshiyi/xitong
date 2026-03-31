@@ -58,11 +58,8 @@ const API_TO_MODULE: Record<string, ModuleId> = {
 };
 
 /** Check if user has access to a specific module — currently all logged-in users have access */
-export function hasModuleAccess(
-  _role: string,
-  _allowedModules: string[],
-  _moduleId: ModuleId
-): boolean {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function hasModuleAccess(role: string, allowedModules: string[], moduleId: ModuleId): boolean {
   return true;
 }
 
