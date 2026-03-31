@@ -21,7 +21,10 @@ export async function GET() {
     select: { id: true },
   });
   const accountIds = userAccounts.map((a) => a.id);
-  const accountFilter = accountIds.length > 0 ? { in: accountIds } : undefined;
+  if (accountIds.length === 0) {
+    return NextResponse.json({ unread: 0, openTodos: 0 });
+  }
+  const accountFilter = { in: accountIds };
 
   const [unread, openTodos] = await Promise.all([
     prisma.email.count({
