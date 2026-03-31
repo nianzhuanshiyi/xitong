@@ -4,21 +4,41 @@ import { mailUiMock } from "@/lib/mail/config";
 import { mockStats } from "@/lib/mail/fixtures";
 import { inboxEmailWhere } from "@/lib/mail/inbox-filter";
 
-export async function getMailRelatedDashboardStats() {
+export async function getMailRelatedDashboardStats(userId?: string) {
   if (mailUiMock()) {
     const s = mockStats();
     return { unread: s.unread, openTodos: s.openTodos, beautyReport: null };
   }
   const today = new Date().toISOString().slice(0, 10);
+
+  // Build user-scoped email account filter
+  let emailAccountFilter: { in: string[] } | undefined;
+  if (userId) {
+    const userAccounts = await prisma.emailAccount.findMany({
+      where: { userId, isActive: true },
+      select: { id: true },
+    });
+    const accountIds = userAccounts.map((a) => a.id);
+    emailAccountFilter = accountIds.length > 0 ? { in: accountIds } : undefined;
+  }
+
   const [unread, openTodos, todayReport] = await Promise.all([
-    prisma.email.count({
+    emailAccountFilter
+      ? prisma.email.count({
+          where: {
+            ...inboxEmailWhere(),
+            isRead: false,
+            direction: EmailDirection.RECEIVED,
+            accountId: emailAccountFilter,
+          },
+        })
+      : Promise.resolve(0),
+    prisma.actionItem.count({
       where: {
-        ...inboxEmailWhere(),
-        isRead: false,
-        direction: EmailDirection.RECEIVED,
+        isCompleted: false,
+        ...(userId ? { userId } : {}),
       },
     }),
-    prisma.actionItem.count({ where: { isCompleted: false } }),
     prisma.dailyBeautyReport.findUnique({ where: { reportDate: today } }).catch(() => null),
   ]);
   return {
