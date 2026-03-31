@@ -15,7 +15,6 @@ export const ALL_MODULES = [
   "ai-images",
   "suppliers",
   "todos",
-  "au-target",
   "au-dev",
 ] as const;
 
@@ -35,7 +34,6 @@ const PATH_TO_MODULE: Record<string, ModuleId> = {
   "/dashboard/ai-images": "ai-images",
   "/dashboard/suppliers": "suppliers",
   "/dashboard/todos": "todos",
-  "/dashboard/au-target": "au-target",
   "/dashboard/au-dev": "au-dev",
 };
 
@@ -53,7 +51,6 @@ const API_TO_MODULE: Record<string, ModuleId> = {
   "/api/ai-images": "ai-images",
   "/api/suppliers": "suppliers",
   "/api/todos": "todos",
-  "/api/au-target": "au-target",
   "/api/au-dev": "au-dev",
 };
 

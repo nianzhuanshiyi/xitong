@@ -47,10 +47,6 @@ model User {
   europeProductIdeas      EuropeProductIdea[]
   europeIdeaComments      IdeaCommentEurope[]     @relation("EuropeIdeaComments")
   europeTopPickReports    EuropeTopPickReport[]
-  auCompetitorStores      AuCompetitorStore[]
-  auCategoryOpportunities AuCategoryOpportunity[]
-  auStorePlans            AuStorePlan[]
-  auMilestones            AuMilestone[]
   auDevAnalyses           AuDevAnalysis[]
   activityLogs            ActivityLog[]
   feedbacks               Feedback[]
@@ -1299,99 +1295,6 @@ model AiTokenUsage {
   totalTokens   Int
   estimatedCost Float
   createdAt     DateTime @default(now())
-}
-
-// ── 澳洲1亿目标模块 ──────────────────────────────────────────
-
-model AuCompetitorStore {
-  id               String                @id @default(cuid())
-  name             String?
-  sellerId         String
-  storeUrl         String
-  notes            String?
-  estimatedRevenue Float?
-  productCount     Int?
-  topCategories    String?
-  lastScrapedAt    DateTime?
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
-  userId           String
-  user             User                  @relation(fields: [userId], references: [id])
-  products         AuCompetitorProduct[]
-}
-
-model AuCompetitorProduct {
-  id             String            @id @default(cuid())
-  storeId        String
-  store          AuCompetitorStore @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  asin           String
-  title          String?
-  price          Float?
-  rating         Float?
-  reviews        Int?
-  bsr            Int?
-  category       String?
-  monthlySales   Int?
-  monthlyRevenue Float?
-  imageUrl       String?
-  sellerNation   String?
-  fulfillment    String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-}
-
-model AuCategoryOpportunity {
-  id              String   @id @default(cuid())
-  categoryName    String
-  nodeIdPath      String?
-  marketSize      Float?
-  avgPrice        Float?
-  competitorCount Int?
-  cnSellerShare   Float?
-  avgReviews      Int?
-  entryDifficulty String?
-  profitMargin    Float?
-  score           Int?
-  status          String   @default("research")
-  notes           String?
-  sourceStoreId   String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  userId          String
-  user            User     @relation(fields: [userId], references: [id])
-}
-
-model AuStorePlan {
-  id                   String        @id @default(cuid())
-  storeName            String
-  brandName            String?
-  category             String?
-  status               String        @default("planning")
-  targetMonthlyRevenue Float?
-  actualMonthlyRevenue Float?
-  skuCount             Int           @default(0)
-  launchDate           DateTime?
-  notes                String?
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-  userId               String
-  user                 User          @relation(fields: [userId], references: [id])
-  milestones           AuMilestone[]
-}
-
-model AuMilestone {
-  id            String       @id @default(cuid())
-  storePlanId   String?
-  storePlan     AuStorePlan? @relation(fields: [storePlanId], references: [id], onDelete: Cascade)
-  title         String
-  description   String?
-  targetDate    DateTime?
-  completedDate DateTime?
-  status        String       @default("pending")
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  userId        String
-  user          User         @relation(fields: [userId], references: [id])
 }
 
 // ── 澳洲产品开发模块 ──────────────────────────────────────────

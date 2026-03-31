@@ -13,13 +13,11 @@ import {
   FileText,
   ImageIcon,
   Package,
-  Truck,
   History,
   Settings,
   Ticket,
   Bot,
   BarChart3,
-  Target,
   Rocket,
   Activity,
   MessageSquarePlus,
@@ -40,7 +38,6 @@ export type DashboardNavItem = {
 
 export const dashboardNav: DashboardNavItem[] = [
   { href: "/dashboard", label: "仪表盘", title: "仪表盘", Icon: LayoutDashboard },
-  { href: "/dashboard/au-target", label: "澳洲亿目标", title: "澳洲1亿目标", Icon: Target, adminOnly: true },
   { href: "/dashboard/users", label: "用户管理", title: "用户管理", Icon: Users, adminOnly: true },
   {
     href: "/dashboard/suppliers",
@@ -126,12 +123,6 @@ export const dashboardNav: DashboardNavItem[] = [
     title: "产品开发",
     Icon: Package,
     moduleId: "product-dev",
-  },
-  {
-    href: "/dashboard/supply-chain",
-    label: "供应链分析",
-    title: "供应链分析",
-    Icon: Truck,
   },
   {
     href: "/dashboard/feedback",
