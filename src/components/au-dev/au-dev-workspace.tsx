@@ -256,7 +256,7 @@ export function AuDevWorkspace() {
       {/* ==================== Left sidebar ==================== */}
       <div className="w-[280px] shrink-0 border-r flex flex-col">
         <div className="p-3 border-b">
-          <Button onClick={handleNewAnalysis} className="w-full bg-teal-600 hover:bg-teal-700">
+          <Button onClick={handleNewAnalysis} disabled={analyzing} className="w-full bg-teal-600 hover:bg-teal-700">
             <Plus className="mr-2 h-4 w-4" /> 新建分析
           </Button>
         </div>
@@ -339,15 +339,16 @@ export function AuDevWorkspace() {
                 placeholder="输入 ASIN 或 Amazon 产品链接..."
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAnalyze()}
+                onKeyDown={(e) => e.key === "Enter" && !analyzing && handleAnalyze()}
                 className="flex-1 h-10"
+                disabled={analyzing}
               />
               <Button
                 onClick={handleAnalyze}
-                disabled={!inputValue.trim()}
+                disabled={!inputValue.trim() || analyzing}
                 className="bg-teal-600 hover:bg-teal-700 h-10 px-6"
               >
-                开始分析
+                {analyzing ? "分析中..." : "开始分析"}
               </Button>
             </div>
           </div>
