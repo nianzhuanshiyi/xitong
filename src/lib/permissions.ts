@@ -16,6 +16,7 @@ export const ALL_MODULES = [
   "suppliers",
   "todos",
   "au-target",
+  "au-dev",
 ] as const;
 
 export type ModuleId = (typeof ALL_MODULES)[number];
@@ -35,6 +36,7 @@ const PATH_TO_MODULE: Record<string, ModuleId> = {
   "/dashboard/suppliers": "suppliers",
   "/dashboard/todos": "todos",
   "/dashboard/au-target": "au-target",
+  "/dashboard/au-dev": "au-dev",
 };
 
 /** Map API paths to module IDs */
@@ -52,6 +54,7 @@ const API_TO_MODULE: Record<string, ModuleId> = {
   "/api/suppliers": "suppliers",
   "/api/todos": "todos",
   "/api/au-target": "au-target",
+  "/api/au-dev": "au-dev",
 };
 
 /** Check if user has access to a specific module */

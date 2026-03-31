@@ -51,6 +51,7 @@ model User {
   auCategoryOpportunities AuCategoryOpportunity[]
   auStorePlans            AuStorePlan[]
   auMilestones            AuMilestone[]
+  auDevAnalyses           AuDevAnalysis[]
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
 }
@@ -1388,4 +1389,35 @@ model AuMilestone {
   updatedAt     DateTime     @updatedAt
   userId        String
   user          User         @relation(fields: [userId], references: [id])
+}
+
+// ── 澳洲产品开发模块 ──────────────────────────────────────────
+
+model AuDevAnalysis {
+  id              String   @id @default(cuid())
+  asin            String
+  marketplace     String   @default("AU")
+  productTitle    String?
+  productImage    String?
+  price           Float?
+  rating          Float?
+  reviews         Int?
+  bsr             Int?
+  categoryPath    String?
+  monthlySales    Int?
+  monthlyRevenue  Float?
+  sellerName      String?
+  sellerNation    String?
+  fulfillment     String?
+  marketOverview  String?
+  diffPlan        String?
+  profitModel     String?
+  actionPlan      String?
+  generatedImages String?
+  status          String   @default("pending")
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
 }

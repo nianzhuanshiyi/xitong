@@ -20,6 +20,7 @@ import {
   Bot,
   BarChart3,
   Target,
+  Rocket,
 } from "lucide-react";
 
 export type DashboardNavItem = {
@@ -95,6 +96,12 @@ export const dashboardNav: DashboardNavItem[] = [
     title: "欧洲蓝海选品",
     Icon: Globe,
     moduleId: "europe-ideas",
+  },
+  {
+    href: "/dashboard/au-dev",
+    label: "澳洲开发",
+    title: "澳洲产品开发",
+    Icon: Rocket,
   },
   {
     href: "/dashboard/listing",
