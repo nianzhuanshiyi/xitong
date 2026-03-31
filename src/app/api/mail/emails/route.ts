@@ -53,7 +53,7 @@ function mockThreadableFiltered(searchParams: URLSearchParams): ThreadableEmail[
 }
 
 export async function GET(req: Request) {
-  const { error } = await requireModuleAccess("email");
+  const { session, error } = await requireModuleAccess("email");
   if (error) return error;
 
   const { searchParams } = new URL(req.url);
@@ -72,7 +72,16 @@ export async function GET(req: Request) {
     return NextResponse.json({ threads: [] });
   }
 
+  // Get current user's account IDs for data isolation
+  const userAccounts = await prisma.emailAccount.findMany({
+    where: { userId: session!.user.id, isActive: true },
+    select: { id: true },
+  });
+  const accountIds = userAccounts.map((a) => a.id);
+
   const where = buildMailListWhere(searchParams);
+  // Filter emails to only those belonging to user's accounts
+  where.accountId = accountIds.length > 0 ? { in: accountIds } : "___none___";
   const rows = await prisma.email.findMany({
     where,
     select: {

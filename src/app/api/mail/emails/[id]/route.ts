@@ -19,7 +19,7 @@ const patchSchema = z.object({
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: Request, ctx: Ctx) {
-  const { error } = await requireModuleAccess("email");
+  const { session, error } = await requireModuleAccess("email");
   if (error) return error;
   const { id } = await ctx.params;
 
@@ -31,8 +31,15 @@ export async function GET(_req: Request, ctx: Ctx) {
     return NextResponse.json(d);
   }
 
+  // Get current user's account IDs for data isolation
+  const userAccounts = await prisma.emailAccount.findMany({
+    where: { userId: session!.user.id, isActive: true },
+    select: { id: true },
+  });
+  const accountIds = userAccounts.map((a) => a.id);
+
   const row = await prisma.email.findFirst({
-    where: { id, isDeleted: false },
+    where: { id, isDeleted: false, accountId: accountIds.length > 0 ? { in: accountIds } : undefined },
     include: {
       actionItems: true,
       attachments: true,
@@ -46,7 +53,7 @@ export async function GET(_req: Request, ctx: Ctx) {
 }
 
 export async function PATCH(req: Request, ctx: Ctx) {
-  const { error } = await requireModuleAccess("email");
+  const { session, error } = await requireModuleAccess("email");
   if (error) return error;
   const { id } = await ctx.params;
 
@@ -68,7 +75,16 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ ok: true, mock: true });
   }
 
-  const row = await prisma.email.findFirst({ where: { id, isDeleted: false } });
+  // Verify ownership via user's accounts
+  const userAccounts = await prisma.emailAccount.findMany({
+    where: { userId: session!.user.id, isActive: true },
+    select: { id: true },
+  });
+  const accountIds = userAccounts.map((a) => a.id);
+
+  const row = await prisma.email.findFirst({
+    where: { id, isDeleted: false, accountId: accountIds.length > 0 ? { in: accountIds } : undefined },
+  });
   if (!row) {
     return NextResponse.json({ message: "邮件不存在" }, { status: 404 });
   }

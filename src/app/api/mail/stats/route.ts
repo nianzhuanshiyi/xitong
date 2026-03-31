@@ -9,20 +9,35 @@ import { inboxEmailWhere } from "@/lib/mail/inbox-filter";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const { error } = await requireModuleAccess("email");
+  const { session, error } = await requireModuleAccess("email");
   if (error) return error;
   if (mailUiMock()) {
     return NextResponse.json(mockStats());
   }
+
+  // Get current user's account IDs for data isolation
+  const userAccounts = await prisma.emailAccount.findMany({
+    where: { userId: session!.user.id, isActive: true },
+    select: { id: true },
+  });
+  const accountIds = userAccounts.map((a) => a.id);
+  const accountFilter = accountIds.length > 0 ? { in: accountIds } : undefined;
+
   const [unread, openTodos] = await Promise.all([
     prisma.email.count({
       where: {
         ...inboxEmailWhere(),
         isRead: false,
         direction: EmailDirection.RECEIVED,
+        accountId: accountFilter,
       },
     }),
-    prisma.actionItem.count({ where: { isCompleted: false } }),
+    prisma.actionItem.count({
+      where: {
+        isCompleted: false,
+        email: { accountId: accountFilter },
+      },
+    }),
   ]);
   return NextResponse.json({ unread, openTodos });
 }

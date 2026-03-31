@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Loader2,
+  Mail,
   PenSquare,
   RefreshCw,
   Send,
@@ -1001,6 +1002,23 @@ export function MailWorkspace() {
             </Link>
           </div>
         </div>
+
+        {/* No-account setup prompt */}
+        {accounts.length === 0 && !syncBusy && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-6 text-center">
+            <Mail className="mx-auto mb-3 size-10 text-blue-400" />
+            <h3 className="text-lg font-semibold text-blue-900">请先绑定你的工作邮箱</h3>
+            <p className="mt-1 text-sm text-blue-700">
+              配置 IMAP/SMTP 后即可在系统内收发邮件，支持 Gmail、QQ、网易等常用邮箱
+            </p>
+            <Link href="/dashboard/mail/accounts">
+              <Button className="mt-4" size="sm">
+                <Settings className="mr-1.5 size-4" />
+                配置邮箱
+              </Button>
+            </Link>
+          </div>
+        )}
 
         {/* Sync error */}
         {syncErrText && (
