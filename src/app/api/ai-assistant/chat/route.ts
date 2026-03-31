@@ -379,10 +379,16 @@ export async function POST(req: NextRequest) {
   }));
 
   // If the latest user message has file content, prepend it to the message for Claude
-  if (fileContent && apiMessages.length > 0) {
+  if (apiMessages.length > 0 && fileName) {
     const lastMsg = apiMessages[apiMessages.length - 1];
     if (lastMsg.role === "user" && typeof lastMsg.content === "string") {
-      lastMsg.content = `[用户上传了文件: ${fileName || "未知文件"}]\n=== 文件内容 ===\n${fileContent}\n=== 文件内容结束 ===\n\n用户的问题: ${lastMsg.content}`;
+      if (fileContent && fileContent.trim()) {
+        console.log("[CHAT] Injecting file content for:", fileName, "length:", fileContent.length);
+        lastMsg.content = `[用户上传了文件: ${fileName}]\n=== 文件内容 ===\n${fileContent}\n=== 文件内容结束 ===\n\n用户的问题: ${lastMsg.content}`;
+      } else {
+        console.warn("[CHAT] File uploaded but no text content extracted:", fileName);
+        lastMsg.content = `[用户上传了文件: ${fileName}，但未能提取文本内容（可能是扫描件或图片PDF）]\n\n用户的问题: ${lastMsg.content}`;
+      }
     }
   }
 

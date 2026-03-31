@@ -2,12 +2,12 @@ import { prisma } from "@/lib/prisma";
 
 /** 环境变量优先于数据库（便于生产用托管密钥） */
 export async function getClaudeApiKey(): Promise<string | null> {
-  const env = process.env.CLAUDE_API_KEY?.trim();
+  const env = process.env.ANTHROPIC_API_KEY?.trim() || process.env.CLAUDE_API_KEY?.trim();
   if (env) {
-    console.info("[getClaudeApiKey] 使用环境变量 CLAUDE_API_KEY");
+    console.info("[getClaudeApiKey] 使用环境变量", process.env.ANTHROPIC_API_KEY ? "ANTHROPIC_API_KEY" : "CLAUDE_API_KEY");
     return env;
   }
-  console.info("[getClaudeApiKey] 环境变量 CLAUDE_API_KEY 未设置，尝试数据库回退...");
+  console.info("[getClaudeApiKey] 环境变量 ANTHROPIC_API_KEY/CLAUDE_API_KEY 均未设置，尝试数据库回退...");
   try {
     const row = await prisma.integrationSecret.findUnique({
       where: { id: "default" },

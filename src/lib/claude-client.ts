@@ -50,11 +50,12 @@ export async function claudeMessages(params: {
   }
 
   if (!key) {
-    const envSet = !!process.env.CLAUDE_API_KEY;
+    const anthSet = !!process.env.ANTHROPIC_API_KEY;
+    const claudeSet = !!process.env.CLAUDE_API_KEY;
     console.error(
-      `[claudeMessages] ❌ Claude API Key 为空! env CLAUDE_API_KEY ${envSet ? "已设置但为空串" : "未设置"}, 数据库回退也未找到`
+      `[claudeMessages] ❌ Claude API Key 为空! ANTHROPIC_API_KEY ${anthSet ? "已设置但为空串" : "未设置"}, CLAUDE_API_KEY ${claudeSet ? "已设置但为空串" : "未设置"}, 数据库回退也未找到`
     );
-    throw new Error("未配置 Claude API Key（环境变量 CLAUDE_API_KEY 未设置或为空）");
+    throw new Error("未配置 Claude API Key（环境变量 ANTHROPIC_API_KEY / CLAUDE_API_KEY 未设置或为空）");
   }
 
   const model = params.model || DEFAULT_MODEL;

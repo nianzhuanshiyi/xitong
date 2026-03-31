@@ -5,6 +5,7 @@ import { requireModuleAccess } from "@/lib/permissions";
 import { extractTextFromSupplierFile } from "@/lib/supplier-file-text";
 import { aiAnalyzeFileByCategory } from "@/lib/supplier-ai";
 import { absolutePathFromRelative } from "@/lib/supplier-uploads";
+import { getClaudeApiKey } from "@/lib/integration-keys";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,12 @@ export async function POST(
   const { error } = await requireModuleAccess("suppliers");
   if (error) return error;
   const { id, fileId } = await params;
+
+  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || (await getClaudeApiKey());
+  if (!apiKey) {
+    console.error("[ANALYZE] ANTHROPIC_API_KEY is not set!");
+    return NextResponse.json({ error: "Claude API 密钥未配置" }, { status: 500 });
+  }
 
   const f = await prisma.supplierFile.findFirst({
     where: { id: fileId, supplierId: id },
