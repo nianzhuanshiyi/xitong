@@ -3,6 +3,8 @@
 import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -2339,19 +2341,29 @@ export function SupplierDetail({ id }: { id: string }) {
   );
 }
 
-function CollapsibleSummary({ text, previewChars = 100 }: { text: string; previewChars?: number }) {
+function CollapsibleSummary({ text, previewChars = 300 }: { text: string; previewChars?: number }) {
   const [expanded, setExpanded] = useState(false);
+  const hasMarkdown = /^##\s|^\|.*\||\*\*.*\*\*|^---$/m.test(text);
   const isLong = text.length > previewChars;
 
+  const renderContent = (content: string) => {
+    if (hasMarkdown) {
+      return (
+        <div className="prose prose-sm prose-slate max-w-none">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+        </div>
+      );
+    }
+    return <p className="text-sm text-slate-700 whitespace-pre-wrap">{content}</p>;
+  };
+
   if (!isLong) {
-    return <p className="text-sm text-slate-700 whitespace-pre-wrap">{text}</p>;
+    return renderContent(text);
   }
 
   return (
     <div>
-      <p className="text-sm text-slate-700 whitespace-pre-wrap">
-        {expanded ? text : text.slice(0, previewChars) + "..."}
-      </p>
+      {renderContent(expanded ? text : text.slice(0, previewChars) + "...")}
       <button
         type="button"
         className="mt-1 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"

@@ -9,73 +9,105 @@ import { callClaudeWithPdfJson } from "@/lib/claude-pdf";
 
 export const dynamic = "force-dynamic";
 
-// Category-specific system prompts — detailed 300-500 word summaries
+// Category-specific system prompts — comprehensive markdown analysis, no word limit
 const CATEGORY_PROMPTS: Record<string, string> = {
-  CATALOG: `你是供应商资料分析专家。请详细分析这份产品目录文件，在 summary 字段中给出 300-500 字的中文摘要。
+  CATALOG: `你是供应商资料分析专家。请全面深入地分析这份产品目录文件，把所有对跨境电商卖家有价值的信息都完整输出，不限字数。
 
-摘要必须包含以下内容：
-【公司/品牌概述】1-2句简介
-【产品线总览】共有多少个产品/系列，涵盖哪些品类
-【重点产品】列出所有产品名称和简要描述
-【技术/成分亮点】特色技术、成分、工艺
-【价格信息】如果有提及
-【包装/规格信息】
-【适用市场和目标人群】
-【对跨境电商卖家的价值评估】
+在 summary 字段中输出结构化 markdown 格式的完整分析，格式要求：
+- 每个板块用 ## 标题
+- 板块之间用 --- 分隔线
+- 关键数据和亮点用 **加粗**
+- 产品列表用表格或编号列表
 
-请用【】标注各部分标题。同时在 products 数组中提取每个产品的结构化信息。
-Return ONLY valid JSON, no markdown. JSON: {summary, products:[{name, specs, highlights}]}.`,
+必须覆盖以下板块（如文件中有相关信息）：
 
-  PRICE_LIST: `你是供应商资料分析专家。请详细分析这份价格表文件，在 summary 字段中给出 300-500 字的中文摘要。
+## 公司/品牌概述
+## 产品线总览
+## 重点产品分析（用表格：产品名 | 类型 | 规格 | 亮点）
+## 技术/成分亮点
+## 价格信息
+## 包装/规格信息
+## 适用市场和目标人群
+## 跨境电商卖家的价值评估
 
-摘要必须包含以下内容：
-【价格总览】产品数量、价格区间
-【重点产品及价格】列出主要产品和对应价格
-【MOQ 信息】最低起订量要求
-【价格竞争力分析】与市场同类产品相比的价格优势
-【批量折扣/阶梯价格】如有
-【对跨境电商卖家的成本评估】
+同时在 products 数组中提取每个产品的结构化信息。
+Return ONLY valid JSON, no markdown fences. JSON: {summary, products:[{name, specs, highlights}]}.`,
 
-请用【】标注各部分标题。Mark competitive:true for unusually good value vs peers if inferable.
-Return ONLY valid JSON, no markdown. JSON: {summary, items:[{skuOrName, price, moq, note, competitive}]}.`,
+  PRICE_LIST: `你是供应商资料分析专家。请全面深入地分析这份价格表文件，把所有对跨境电商卖家有价值的信息都完整输出，不限字数。
 
-  TEST_REPORT: `你是供应商资料分析专家。请详细分析这份测试报告，在 summary 字段中给出 300-500 字的中文摘要。
+在 summary 字段中输出结构化 markdown 格式的完整分析，格式要求：
+- 每个板块用 ## 标题
+- 板块之间用 --- 分隔线
+- 关键数据和亮点用 **加粗**
+- 价格数据用表格展示
 
-摘要必须包含以下内容：
-【报告概述】测试机构、测试日期、测试标准
-【测试项目及结果】逐项列出测试项和结果
-【合规性评估】是否符合亚马逊美国站销售要求
-【认证/标准达标情况】FDA、CPSC、ASTM 等
-【风险提示】不合格项或需关注的项目
-【对跨境电商卖家的合规建议】
+必须覆盖以下板块：
 
-请用【】标注各部分标题。
-Return ONLY valid JSON, no markdown. JSON: {summary, tests:[{name, result, pass}], amazonCompliance:{ok, notes}}.`,
+## 价格总览（产品数量、价格区间）
+## 产品价格明细（用表格：产品名 | 单价 | MOQ | 备注）
+## MOQ 及起订要求
+## 价格竞争力分析
+## 批量折扣/阶梯价格
+## 跨境电商卖家的成本评估
 
-  CERTIFICATION: `你是供应商资料分析专家。请详细分析这份证书文件，在 summary 字段中给出 300-500 字的中文摘要。
+Mark competitive:true for unusually good value vs peers if inferable.
+Return ONLY valid JSON, no markdown fences. JSON: {summary, items:[{skuOrName, price, moq, note, competitive}]}.`,
 
-摘要必须包含以下内容：
-【证书类型】具体是什么认证
-【签发机构】颁发机构名称和资质
-【有效期限】签发日期和到期日期
-【认证范围】覆盖的产品或服务范围
-【证书等级/标准】具体执行的标准编号
-【对跨境电商卖家的价值】该证书对亚马逊等平台销售的意义
+  TEST_REPORT: `你是供应商资料分析专家。请全面深入地分析这份测试报告，把所有对跨境电商卖家有价值的信息都完整输出，不限字数。
 
-请用【】标注各部分标题。expiryDate as ISO date YYYY-MM-DD or null.
-Return ONLY valid JSON, no markdown. JSON: {summary, certType, expiryDate, issuer}.`,
+在 summary 字段中输出结构化 markdown 格式的完整分析，格式要求：
+- 每个板块用 ## 标题
+- 板块之间用 --- 分隔线
+- 关键数据和亮点用 **加粗**
+- 测试结果用表格展示
+
+必须覆盖以下板块：
+
+## 报告概述（测试机构、日期、标准）
+## 测试项目及结果（用表格：测试项 | 标准 | 结果 | 是否通过）
+## 合规性评估（亚马逊美国站销售要求）
+## 认证/标准达标情况（FDA、CPSC、ASTM 等）
+## 风险提示（不合格项或需关注项）
+## 跨境电商卖家的合规建议
+
+Return ONLY valid JSON, no markdown fences. JSON: {summary, tests:[{name, result, pass}], amazonCompliance:{ok, notes}}.`,
+
+  CERTIFICATION: `你是供应商资料分析专家。请全面深入地分析这份证书文件，把所有对跨境电商卖家有价值的信息都完整输出，不限字数。
+
+在 summary 字段中输出结构化 markdown 格式的完整分析，格式要求：
+- 每个板块用 ## 标题
+- 板块之间用 --- 分隔线
+- 关键数据和亮点用 **加粗**
+
+必须覆盖以下板块：
+
+## 证书类型
+## 签发机构（名称和资质）
+## 有效期限（签发日期和到期日期）
+## 认证范围（覆盖的产品或服务）
+## 证书等级/标准（具体标准编号）
+## 跨境电商卖家的价值评估
+
+expiryDate as ISO date YYYY-MM-DD or null.
+Return ONLY valid JSON, no markdown fences. JSON: {summary, certType, expiryDate, issuer}.`,
 };
 
-const DEFAULT_PROMPT = `你是供应商资料分析专家。请详细分析这份供应商文件，在 summary 字段中给出 300-500 字的中文摘要。
+const DEFAULT_PROMPT = `你是供应商资料分析专家。请全面深入地分析这份供应商文件，把所有对跨境电商卖家有价值的信息都完整输出，不限字数。
 
-根据文件类型灵活调整内容，可能包含：
-【文件概述】文件的基本信息和用途
-【核心内容】文件中最重要的信息点
-【关键数据】涉及的产品、价格、条款等具体数据
-【对跨境电商卖家的参考价值】
+在 summary 字段中输出结构化 markdown 格式的完整分析，格式要求：
+- 每个板块用 ## 标题
+- 板块之间用 --- 分隔线
+- 关键数据和亮点用 **加粗**
+- 列表和表格视内容灵活使用
 
-请用【】标注各部分标题。不要只给一句话概括。
-Return ONLY valid JSON, no markdown. JSON: {summary, details}.`;
+根据文件类型灵活调整板块，可能包含：
+
+## 文件概述
+## 核心内容
+## 关键数据（产品、价格、条款等）
+## 跨境电商卖家的参考价值
+
+Return ONLY valid JSON, no markdown fences. JSON: {summary, details}.`;
 
 function extractJson(rawText: string): Record<string, unknown> | null {
   let cleaned = rawText.trim();
