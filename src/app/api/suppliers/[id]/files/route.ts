@@ -42,6 +42,7 @@ export async function GET(
     include: { analysis: true },
   });
   // Strip fileData from response to avoid sending large binary blobs
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const stripped = files.map(({ fileData: _fileData, ...rest }) => rest);
   return NextResponse.json(stripped);
 }
@@ -119,6 +120,7 @@ export async function POST(
   });
 
   // Strip fileData from response
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const stripped = created.map(({ fileData: _fileData, ...rest }) => rest);
   return NextResponse.json(
     stripped.length === 1 ? stripped[0] : { files: stripped },

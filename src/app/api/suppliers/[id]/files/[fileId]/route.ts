@@ -48,6 +48,7 @@ export async function PATCH(
     );
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { fileData: _fileData, ...row } = await prisma.supplierFile.update({
     where: { id: fileId },
     data: { category: parsed.data.category as SupplierFileCategory },
