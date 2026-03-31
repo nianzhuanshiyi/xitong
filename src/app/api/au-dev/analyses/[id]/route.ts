@@ -11,8 +11,8 @@ export async function GET(
   const { session, error } = await requireModuleAccess("au-dev");
   if (error) return error;
 
-  const analysis = await prisma.auDevAnalysis.findFirst({
-    where: { id: params.id, userId: session!.user.id },
+  const analysis = await prisma.auDevAnalysis.findUnique({
+    where: { id: params.id },
   });
 
   if (!analysis) {
@@ -29,12 +29,19 @@ export async function DELETE(
   const { session, error } = await requireModuleAccess("au-dev");
   if (error) return error;
 
-  const analysis = await prisma.auDevAnalysis.findFirst({
-    where: { id: params.id, userId: session!.user.id },
+  const analysis = await prisma.auDevAnalysis.findUnique({
+    where: { id: params.id },
   });
 
   if (!analysis) {
     return NextResponse.json({ message: "记录不存在" }, { status: 404 });
+  }
+
+  // Only owner or admin can delete
+  const isOwner = analysis.userId === session!.user.id;
+  const isAdmin = session!.user.role === "ADMIN";
+  if (!isOwner && !isAdmin) {
+    return NextResponse.json({ message: "只能删除自己创建的分析记录" }, { status: 403 });
   }
 
   await prisma.auDevAnalysis.delete({ where: { id: params.id } });

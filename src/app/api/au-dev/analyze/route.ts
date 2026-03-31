@@ -40,19 +40,21 @@ export async function POST(req: Request) {
     );
   }
 
-  // 90-day cache: return existing completed analysis if available
+  // Cache: return existing completed analysis if available (shared across all users)
   if (!forceRefresh) {
     const existing = await prisma.auDevAnalysis.findFirst({
-      where: {
-        asin,
-        status: "completed",
-        createdAt: { gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) },
-      },
+      where: { asin, status: "completed" },
       orderBy: { createdAt: "desc" },
+      include: { user: { select: { name: true } } },
     });
     if (existing) {
-      console.log("[au-dev/analyze] 命中 90 天缓存，ASIN:", asin, "id:", existing.id);
-      return NextResponse.json({ cached: true, id: existing.id, cachedAt: existing.createdAt });
+      console.log("[au-dev/analyze] 命中缓存，ASIN:", asin, "id:", existing.id);
+      return NextResponse.json({
+        cached: true,
+        id: existing.id,
+        cachedAt: existing.createdAt,
+        analyzedBy: existing.user?.name || "未知",
+      });
     }
   }
 

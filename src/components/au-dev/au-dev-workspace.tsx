@@ -45,6 +45,7 @@ interface AnalysisListItem {
   price: number | null;
   status: string;
   createdAt: string;
+  userName?: string;
 }
 
 interface TopProduct {
@@ -145,6 +146,7 @@ export function AuDevWorkspace() {
   const [progress, setProgress] = useState({ step: 0, label: "", percent: 0 });
   const [loading, setLoading] = useState(true);
   const [cachedAt, setCachedAt] = useState<string | null>(null);
+  const [cachedBy, setCachedBy] = useState<string | null>(null);
 
   /* ---------- data fetching ---------- */
 
@@ -190,6 +192,7 @@ export function AuDevWorkspace() {
     setInputValue("");
     setAnalyzing(false);
     setCachedAt(null);
+    setCachedBy(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -213,6 +216,7 @@ export function AuDevWorkspace() {
     setSelectedAnalysis(null);
     setSelectedId(null);
     setCachedAt(null);
+    setCachedBy(null);
 
     try {
       const res = await fetch("/api/au-dev/analyze", {
@@ -231,9 +235,10 @@ export function AuDevWorkspace() {
       // Check if response is cached JSON (not stream)
       const contentType = res.headers.get("Content-Type") || "";
       if (contentType.includes("application/json")) {
-        const data = await res.json() as { cached?: boolean; id?: string; cachedAt?: string };
+        const data = await res.json() as { cached?: boolean; id?: string; cachedAt?: string; analyzedBy?: string };
         if (data.cached && data.id) {
           setCachedAt(data.cachedAt || null);
+          setCachedBy(data.analyzedBy || null);
           setSelectedId(data.id);
           fetchAnalyses();
           fetchAnalysis(data.id);
@@ -351,6 +356,9 @@ export function AuDevWorkspace() {
                         {new Date(item.createdAt).toLocaleDateString()}
                       </span>
                     </div>
+                    {item.userName && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{item.userName} 分析</p>
+                    )}
                   </div>
                   <button
                     onClick={(e) => {
@@ -417,7 +425,7 @@ export function AuDevWorkspace() {
             {/* Cache banner */}
             {cachedAt && (
               <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm text-amber-800">
-                <span>该产品已于 {new Date(cachedAt).toLocaleDateString("zh-CN")} 被分析过，显示缓存结果。</span>
+                <span>该产品已于 {new Date(cachedAt).toLocaleDateString("zh-CN")} 由 {cachedBy || "未知"} 分析过，显示缓存结果。</span>
                 <Button
                   size="sm"
                   variant="outline"

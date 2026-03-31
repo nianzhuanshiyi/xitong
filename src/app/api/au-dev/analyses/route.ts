@@ -19,8 +19,11 @@ export async function GET() {
       price: true,
       status: true,
       createdAt: true,
+      user: { select: { name: true } },
     },
   });
 
-  return NextResponse.json(analyses);
+  return NextResponse.json(
+    analyses.map((a) => ({ ...a, userName: a.user?.name || "未知", user: undefined }))
+  );
 }
