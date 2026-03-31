@@ -22,6 +22,7 @@ import {
   Target,
   Rocket,
   Activity,
+  MessageSquarePlus,
 } from "lucide-react";
 
 export type DashboardNavItem = {
@@ -131,6 +132,12 @@ export const dashboardNav: DashboardNavItem[] = [
     label: "供应链分析",
     title: "供应链分析",
     Icon: Truck,
+  },
+  {
+    href: "/dashboard/feedback",
+    label: "需求反馈",
+    title: "需求反馈",
+    Icon: MessageSquarePlus,
   },
   { href: "/dashboard/history", label: "历史记录", title: "历史记录", Icon: History },
   { href: "/dashboard/settings", label: "设置", title: "设置", Icon: Settings, adminOnly: true },

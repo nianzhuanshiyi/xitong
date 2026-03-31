@@ -53,6 +53,7 @@ model User {
   auMilestones            AuMilestone[]
   auDevAnalyses           AuDevAnalysis[]
   activityLogs            ActivityLog[]
+  feedbacks               Feedback[]
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
 }
@@ -1432,4 +1433,20 @@ model ActivityLog {
   detail    String?  @db.Text
   tokenUsed Int?
   createdAt DateTime @default(now())
+}
+
+model Feedback {
+  id          String    @id @default(cuid())
+  type        String
+  title       String
+  description String    @db.Text
+  screenshot  String?
+  module      String?
+  status      String    @default("pending")
+  reply       String?   @db.Text
+  repliedAt   DateTime?
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
