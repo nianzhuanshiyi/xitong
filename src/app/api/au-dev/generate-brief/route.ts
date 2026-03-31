@@ -62,6 +62,7 @@ export async function POST(req: Request) {
 回复必须是纯 JSON，不要包含 markdown 代码块标记。`,
       user: `请为 ASIN ${asin} 的差异化方案「${item.title}」生成工厂开发指示单。`,
       maxTokens: 4096,
+      model: "claude-opus-4-20250514", // 澳洲开发模块固定用 Opus，不走员工分配模型
     });
 
     if (!briefResult?.factoryBrief) {

@@ -231,6 +231,7 @@ ${competitorSummary}
           system: systemPrompt,
           user: `请基于上面提供的卖家精灵真实数据，为 ASIN ${asin}（${productData.title}）生成完整的澳洲站产品开发方案。`,
           maxTokens: 8192,
+          model: "claude-opus-4-20250514", // 澳洲开发模块固定用 Opus，不走员工分配模型
         });
 
         if (!result) {

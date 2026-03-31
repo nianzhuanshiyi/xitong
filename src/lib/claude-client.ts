@@ -32,6 +32,7 @@ export async function claudeMessages(params: {
   system?: string;
   user: string;
   maxTokens?: number;
+  model?: string;
 }): Promise<string | null> {
   let key: string | null = null;
   try {
@@ -49,7 +50,7 @@ export async function claudeMessages(params: {
     throw new Error("未配置 Claude API Key（环境变量 CLAUDE_API_KEY 未设置或为空）");
   }
 
-  const model = DEFAULT_MODEL;
+  const model = params.model || DEFAULT_MODEL;
 
   console.info(`[claudeMessages] 调用 Claude API, model=${model}, maxTokens=${params.maxTokens ?? 4096}, key前10位=${key.slice(0, 10)}...`);
 
@@ -166,6 +167,7 @@ export async function claudeJson<T>(params: {
   system: string;
   user: string;
   maxTokens?: number;
+  model?: string;
 }): Promise<T | null> {
   // claudeMessages now throws on missing key / API errors — let it propagate
   const raw = await claudeMessages({ ...params, maxTokens: params.maxTokens ?? 16384 });

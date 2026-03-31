@@ -58,6 +58,7 @@ export async function POST(req: Request) {
 
 请基于这个想法，为 ASIN ${analysis.asin}（${productTitle}）生成一个具体的差异化方案。`,
       maxTokens: 2048,
+      model: "claude-opus-4-20250514", // 澳洲开发模块固定用 Opus，不走员工分配模型
     });
 
     if (!result) {
