@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { ModuleGuide } from "@/components/shared/module-guide";
 
 /* ── Types ────────────────────────────────────────────────────── */
 
@@ -241,6 +242,16 @@ export function ThreeCIdeasDashboard() {
 
   return (
     <div className="space-y-6">
+      <ModuleGuide moduleKey="3c-ideas">
+        <p className="font-medium text-foreground mb-1">AI 3C 新品扫描</p>
+        <ul className="list-disc pl-4 space-y-0.5">
+          <li>系统每日自动扫描 3C 数码品类趋势、技术创新和 Amazon 新品动态</li>
+          <li>AI 从技术门槛、供应链成熟度、利润空间、市场需求 4 个维度评分</li>
+          <li>Today&apos;s Pick 展示当日最高分 3C 产品创意，含技术可行性分析</li>
+          <li>点击任意创意卡片查看完整报告：竞品对比、BOM 成本估算、认证要求</li>
+          <li>重点关注中国供应链优势品类：充电配件、智能家居、音频设备等</li>
+        </ul>
+      </ModuleGuide>
       {/* ── Today's Pick (Hero) ──────────────────────────────── */}
       {topPick && !isOldFormat ? (
         <div className="relative overflow-hidden rounded-2xl border-2 border-cyan-200/80 bg-gradient-to-br from-cyan-50 via-blue-50/50 to-indigo-50/30 p-5 shadow-sm sm:p-6">

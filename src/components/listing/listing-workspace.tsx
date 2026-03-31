@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ModuleGuide } from "@/components/shared/module-guide";
 import { exportListingToDocx } from "@/lib/listing/export-docx";
 import { normalizeListingResult } from "@/lib/listing/normalize";
 import type {
@@ -534,6 +535,16 @@ export function ListingWorkspace() {
           使用 Claude（claude-opus-4-6）生成标题、五点、描述、搜索词与 A+
           建议；支持流式输出、竞品参考与草稿保存。
         </p>
+        <ModuleGuide moduleKey="listing">
+          <p className="font-medium text-foreground mb-1">AI Listing 生成工具</p>
+          <ul className="list-disc pl-4 space-y-0.5">
+            <li>输入产品信息和关键词，AI 一键生成完整 Listing：标题、五点、描述、搜索词</li>
+            <li>支持 A+ Content 建议：品牌故事、对比图、场景图、FAQ 模块</li>
+            <li>可添加竞品 ASIN 作为参考，AI 会分析竞品 Listing 优劣势并优化</li>
+            <li>生成结果支持逐条编辑、一键复制，以及导出为 Word 文档</li>
+            <li>草稿自动保存，支持历史记录回溯和版本对比</li>
+          </ul>
+        </ModuleGuide>
       </div>
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">

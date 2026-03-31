@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { ModuleGuide } from "@/components/shared/module-guide";
 
 /* ── Types ────────────────────────────────────────────────────── */
 
@@ -244,6 +245,16 @@ export function BeautyIdeasDashboard() {
 
   return (
     <div className="space-y-6">
+      <ModuleGuide moduleKey="beauty-ideas">
+        <p className="font-medium text-foreground mb-1">AI 美妆趋势扫描</p>
+        <ul className="list-disc pl-4 space-y-0.5">
+          <li>系统每日自动扫描全球美妆趋势、社媒热点和 Amazon 新品数据</li>
+          <li>AI 从成分创新、包装设计、目标人群、价格带 4 个维度评估新品机会</li>
+          <li>Today&apos;s Pick 展示当日最高分产品创意，含详细可行性分析</li>
+          <li>点击任意创意卡片查看完整报告：竞品分析、供应链建议、上架策略</li>
+          <li>支持按评分、日期、状态筛选，快速找到值得跟进的创意</li>
+        </ul>
+      </ModuleGuide>
       {/* ── Today's Pick (Hero) ──────────────────────────────── */}
       {topPick && !isOldFormat ? (
         <div className="relative overflow-hidden rounded-2xl border-2 border-amber-200/80 bg-gradient-to-br from-amber-50 via-orange-50/50 to-yellow-50/30 p-5 shadow-sm sm:p-6">

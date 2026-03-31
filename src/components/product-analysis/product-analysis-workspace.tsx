@@ -20,6 +20,7 @@ import { parseAsinInput } from "@/lib/asin-parser";
 import { AnalysisAiReportSection } from "./analysis-ai-report-section";
 import { AnalysisResultPanel } from "./analysis-result-panel";
 import { cn } from "@/lib/utils";
+import { ModuleGuide } from "@/components/shared/module-guide";
 
 type PreviewRow = {
   asin: string;
@@ -329,6 +330,16 @@ export function ProductAnalysisWorkspace() {
         <p className="mt-1 text-xs leading-relaxed text-slate-600 sm:text-sm">
           输入竞品 ASIN 或链接；3 个月内相同产品将优先使用缓存，节省 Token。
         </p>
+        <ModuleGuide moduleKey="product-analysis">
+          <p className="font-medium text-foreground mb-1">7 维度美国市场打分系统</p>
+          <ul className="list-disc pl-4 space-y-0.5">
+            <li>输入 ASIN 或 Amazon 产品链接，系统自动拉取卖家精灵真实数据</li>
+            <li>AI 从市场容量、竞争强度、利润空间、进入壁垒、季节性、差异化潜力、合规风险 7 个维度打分</li>
+            <li>支持批量分析：一次最多粘贴 10 个 ASIN，用换行或逗号分隔</li>
+            <li>3 个月内同一 ASIN 复用缓存，无需重复消耗 Token</li>
+            <li>分析结果可导出，便于团队决策</li>
+          </ul>
+        </ModuleGuide>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-slate-50/40 shadow-sm">

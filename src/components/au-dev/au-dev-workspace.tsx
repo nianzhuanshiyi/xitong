@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ModuleGuide } from "@/components/shared/module-guide";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -252,7 +253,18 @@ export function AuDevWorkspace() {
   /* ---------- render ---------- */
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-0">
+    <div className="flex flex-col h-[calc(100vh-8rem)]">
+      <ModuleGuide moduleKey="au-dev">
+        <p className="font-medium text-foreground mb-1">澳洲产品开发工具</p>
+        <ul className="list-disc pl-4 space-y-0.5">
+          <li>输入 ASIN 或 Amazon AU 产品链接，自动拉取卖家精灵真实产品数据</li>
+          <li>核心理念：澳洲是小市场、低竞争，重点回答「怎么做」而非「要不要做」</li>
+          <li>AI 基于真实数据生成：市场概览、差异化方案、利润模型、行动计划</li>
+          <li>差异化方案可一键生成 AI 产品效果图，辅助供应商沟通</li>
+          <li>利润计算器支持手动调整各项成本，实时计算毛利率</li>
+        </ul>
+      </ModuleGuide>
+      <div className="flex flex-1 min-h-0 gap-0">
       {/* ==================== Left sidebar ==================== */}
       <div className="w-[280px] shrink-0 border-r flex flex-col">
         <div className="p-3 border-b">
@@ -383,6 +395,7 @@ export function AuDevWorkspace() {
             <p className="text-muted-foreground">分析状态: {selectedAnalysis.status}</p>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

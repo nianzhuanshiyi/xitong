@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { ModuleGuide } from "@/components/shared/module-guide";
 
 /* ── Types ────────────────────────────────────────────────────── */
 
@@ -241,6 +242,16 @@ export function EuropeIdeasDashboard() {
 
   return (
     <div className="space-y-6">
+      <ModuleGuide moduleKey="europe-ideas">
+        <p className="font-medium text-foreground mb-1">欧洲蓝海选品</p>
+        <ul className="list-disc pl-4 space-y-0.5">
+          <li>系统每日扫描欧洲五站（UK/DE/FR/IT/ES）的蓝海品类机会</li>
+          <li>AI 重点筛选：低竞争 + 稳定需求 + 中国供应链有优势的品类</li>
+          <li>Today&apos;s Pick 展示当日最佳欧洲市场机会，含多站点对比分析</li>
+          <li>点击创意卡片查看完整报告：VAT 估算、合规要求、物流方案</li>
+          <li>关注欧洲本地化需求差异：电压规格、语言包装、CE/UKCA 认证等</li>
+        </ul>
+      </ModuleGuide>
       {/* ── Today's Pick (Hero) ──────────────────────────────── */}
       {topPick && !isOldFormat ? (
         <div className="relative overflow-hidden rounded-2xl border-2 border-indigo-200/80 bg-gradient-to-br from-indigo-50 via-purple-50/50 to-blue-50/30 p-5 shadow-sm sm:p-6">
