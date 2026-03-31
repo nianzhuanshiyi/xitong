@@ -49,12 +49,13 @@ interface StorePlan {
 }
 
 interface DashboardData {
+  audToRmb: number;
+  currentMonthlyRevenue: number;
   currentMonthlyRevenueRmb: number;
-  currentMonthlyRevenueAud: number;
-  progressPercent: number;
+  progress: number;
   activeStoreCount: number;
   totalStoreCount: number;
-  storePlans: StorePlan[];
+  storePlans: Array<{ storeName: string; actualMonthlyRevenue?: number; revenueRmb?: number }>;
   milestones: Milestone[];
 }
 
