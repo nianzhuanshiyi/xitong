@@ -144,6 +144,15 @@ export async function POST(req: Request) {
           draftId = row.id;
         }
 
+        await prisma.activityLog.create({
+          data: {
+            userId,
+            module: "listing",
+            action: "generate",
+            detail: JSON.stringify({ title: input.productName?.slice(0, 100) }),
+          },
+        }).catch(() => {});
+
         send({ type: "complete", listing, draftId });
       } catch (e) {
         send({

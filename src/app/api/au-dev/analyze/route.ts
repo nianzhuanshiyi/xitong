@@ -1,6 +1,6 @@
 import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
-import { claudeJson } from "@/lib/claude-client";
+import { claudeJson, getLastClaudeUsage } from "@/lib/claude-client";
 import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
 import { NextResponse } from "next/server";
 
@@ -250,6 +250,17 @@ ${competitorSummary}
             status: "completed",
           },
         });
+
+        const usage = getLastClaudeUsage();
+        await prisma.activityLog.create({
+          data: {
+            userId: session!.user.id,
+            module: "au-dev",
+            action: "analyze",
+            detail: JSON.stringify({ asin, title: productData.title }),
+            tokenUsed: usage ? usage.inputTokens + usage.outputTokens : null,
+          },
+        }).catch(() => {});
 
         send({ type: "complete", id: analysis.id, percent: 100 });
       } catch (e) {

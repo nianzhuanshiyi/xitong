@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
-import { claudeJson } from "@/lib/claude-client";
+import { claudeJson, getLastClaudeUsage } from "@/lib/claude-client";
 import { scoreIdeaWithKeywordMiner, buildIdeaAnalysis } from "@/lib/idea-scoring";
 
 export const dynamic = "force-dynamic";
@@ -124,6 +124,17 @@ export async function POST() {
       });
       results.push(record.id);
     }
+
+    const usage = getLastClaudeUsage();
+    await prisma.activityLog.create({
+      data: {
+        userId,
+        module: "3c-ideas",
+        action: "generate",
+        detail: JSON.stringify({ count: results.length }),
+        tokenUsed: usage ? usage.inputTokens + usage.outputTokens : null,
+      },
+    }).catch(() => {});
 
     return NextResponse.json({
       ok: true,

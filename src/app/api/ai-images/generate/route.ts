@@ -104,6 +104,15 @@ export async function POST(req: Request) {
     data: { updatedAt: new Date() },
   });
 
+  await prisma.activityLog.create({
+    data: {
+      userId: session!.user.id,
+      module: "ai-image",
+      action: "generate",
+      detail: JSON.stringify({ prompt: fullPrompt?.slice(0, 50) }),
+    },
+  }).catch(() => {});
+
   return NextResponse.json({
     ok: true,
     image: {

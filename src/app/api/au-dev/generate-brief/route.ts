@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
-import { claudeJson } from "@/lib/claude-client";
+import { claudeJson, getLastClaudeUsage } from "@/lib/claude-client";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +74,17 @@ export async function POST(req: Request) {
       where: { id: analysis.id },
       data: { diffPlan: JSON.stringify(diffPlan) },
     });
+
+    const usage = getLastClaudeUsage();
+    await prisma.activityLog.create({
+      data: {
+        userId: session!.user.id,
+        module: "au-dev",
+        action: "generate-brief",
+        detail: JSON.stringify({ asin: analysis.asin, diffTitle: String(item.title) }),
+        tokenUsed: usage ? usage.inputTokens + usage.outputTokens : null,
+      },
+    }).catch(() => {});
 
     return NextResponse.json({ factoryBrief: briefResult.factoryBrief });
   } catch (e) {

@@ -610,6 +610,15 @@ export async function POST(req: NextRequest) {
           });
         }
 
+        await prisma.activityLog.create({
+          data: {
+            userId: session!.user.id,
+            module: "ai-assistant",
+            action: "chat",
+            detail: JSON.stringify({ messagePreview: message.trim().slice(0, 50) }),
+          },
+        }).catch(() => {});
+
         send({ type: "done", messageId: assistantMsg.id });
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);

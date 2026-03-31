@@ -14,6 +14,20 @@ export function extractJsonBlock(text: string): string {
   return text.trim();
 }
 
+/** Token usage from a Claude API call */
+export interface ClaudeUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** Last usage from claudeMessages — set after each successful call */
+let _lastUsage: ClaudeUsage | null = null;
+
+/** Get the token usage from the most recent claudeMessages/claudeJson call */
+export function getLastClaudeUsage(): ClaudeUsage | null {
+  return _lastUsage;
+}
+
 export async function claudeMessages(params: {
   system?: string;
   user: string;
@@ -70,8 +84,15 @@ export async function claudeMessages(params: {
   const data = JSON.parse(text) as {
     content?: Array<{ type: string; text?: string }>;
     stop_reason?: string;
+    usage?: { input_tokens?: number; output_tokens?: number };
   };
   const block = data.content?.find((c) => c.type === "text");
+
+  // Capture token usage
+  _lastUsage = {
+    inputTokens: data.usage?.input_tokens ?? 0,
+    outputTokens: data.usage?.output_tokens ?? 0,
+  };
 
   // Log if truncated
   if (data.stop_reason === "max_tokens") {

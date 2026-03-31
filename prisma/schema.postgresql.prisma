@@ -52,6 +52,7 @@ model User {
   auStorePlans            AuStorePlan[]
   auMilestones            AuMilestone[]
   auDevAnalyses           AuDevAnalysis[]
+  activityLogs            ActivityLog[]
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
 }
@@ -1420,4 +1421,15 @@ model AuDevAnalysis {
   updatedAt       DateTime @updatedAt
   userId          String
   user            User     @relation(fields: [userId], references: [id])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  module    String
+  action    String
+  detail    String?  @db.Text
+  tokenUsed Int?
+  createdAt DateTime @default(now())
 }

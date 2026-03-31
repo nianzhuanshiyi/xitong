@@ -80,6 +80,15 @@ export async function POST(req: Request) {
       data: { generatedImages: JSON.stringify(existing) },
     });
 
+    await prisma.activityLog.create({
+      data: {
+        userId: session!.user.id,
+        module: "au-dev",
+        action: "generate-image",
+        detail: JSON.stringify({ asin: analysis.asin, prompt: prompt?.slice(0, 100) }),
+      },
+    }).catch(() => {});
+
     return NextResponse.json({ imageUrl, prompt, diffDirection });
   } catch (e) {
     return NextResponse.json(

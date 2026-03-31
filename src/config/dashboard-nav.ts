@@ -21,6 +21,7 @@ import {
   BarChart3,
   Target,
   Rocket,
+  Activity,
 } from "lucide-react";
 
 export type DashboardNavItem = {
@@ -145,6 +146,13 @@ export const dashboardNav: DashboardNavItem[] = [
     label: "Token 用量",
     title: "Token 用量排行",
     Icon: BarChart3,
+    adminOnly: true,
+  },
+  {
+    href: "/dashboard/activity-logs",
+    label: "操作记录",
+    title: "操作记录",
+    Icon: Activity,
     adminOnly: true,
   },
 ];
