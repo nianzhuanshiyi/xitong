@@ -114,26 +114,62 @@ export async function POST(
     })
   );
 
-  const payload = {
-    name: s.name,
-    nameEn: s.nameEn,
-    country: s.country,
-    mainCategories: s.mainCategories,
-    status: s.status,
-    moq: s.moq,
-    paymentTerms: s.paymentTerms,
-    sampleLeadDays: s.sampleLeadDays,
-    productionLeadDays: s.productionLeadDays,
-    profileSummary: s.profileSummary,
-    remarks: s.remarks,
-    fileAnalyses,
-    recentOrders: s.orders,
-    recentRatings: s.ratings,
-    qualityIssues: s.qualityIssues,
-  };
+  // Build structured context for AI evaluation
+  const basicInfo = [
+    `名称: ${s.name}`,
+    s.nameEn ? `英文名: ${s.nameEn}` : null,
+    s.country ? `国家: ${s.country}` : null,
+    s.mainCategories ? `主营品类: ${s.mainCategories}` : null,
+    s.status ? `状态: ${s.status}` : null,
+    s.moq ? `MOQ: ${s.moq}` : null,
+    s.paymentTerms ? `付款方式: ${s.paymentTerms}` : null,
+    s.sampleLeadDays ? `样品交期: ${s.sampleLeadDays}天` : null,
+    s.productionLeadDays ? `生产交期: ${s.productionLeadDays}天` : null,
+    s.profileSummary ? `简介: ${s.profileSummary}` : null,
+    s.remarks ? `备注: ${s.remarks}` : null,
+  ].filter(Boolean).join("\n");
+
+  const fileSection = fileAnalyses.length > 0
+    ? fileAnalyses.map((fa, i) => {
+        const content = fa.summary || (fa as { extractedContent?: string }).extractedContent || "（无内容）";
+        return `文件${i + 1}：${fa.name}（分类：${fa.category}）\n${content}`;
+      }).join("\n\n")
+    : "暂无文件资料";
+
+  const ordersSection = s.orders.length > 0
+    ? JSON.stringify(s.orders, null, 2)
+    : "暂无订单记录";
+
+  const ratingsSection = s.ratings.length > 0
+    ? JSON.stringify(s.ratings, null, 2)
+    : "暂无评分记录";
+
+  const issuesSection = s.qualityIssues.length > 0
+    ? JSON.stringify(s.qualityIssues, null, 2)
+    : "暂无质量问题记录";
+
+  const userContent = `以下是该供应商的完整信息：
+
+===== 基本信息 =====
+${basicInfo}
+
+===== 文件分析（AI 已读取原文生成的摘要）=====
+${fileSection}
+
+===== 合作记录 =====
+订单记录：
+${ordersSection}
+
+评分记录：
+${ratingsSection}
+
+质量问题：
+${issuesSection}
+
+请基于以上信息进行综合评估。`;
 
   const systemPrompt =
-    "Evaluate supplier for cross-border e-commerce. overallScore 1-5 number. JSON keys: overallScore, strengths[], risks[], recommendedCategories[] (Chinese), demandMatchNote (Chinese). Return ONLY valid JSON, no markdown.";
+    "你是跨境电商供应商评估专家。请基于提供的供应商完整信息进行综合评估。overallScore 1-5 number. JSON keys: overallScore, strengths[], risks[], recommendedCategories[] (Chinese), demandMatchNote (Chinese). Return ONLY valid JSON, no markdown.";
 
   console.log("[EVALUATE] Calling Anthropic API, model: claude-sonnet-4-20250514");
 
@@ -157,7 +193,7 @@ export async function POST(
         model: "claude-sonnet-4-20250514",
         max_tokens: 4096,
         system: systemPrompt,
-        messages: [{ role: "user", content: JSON.stringify(payload) }],
+        messages: [{ role: "user", content: userContent }],
       }),
     });
 

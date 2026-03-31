@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Download,
   ExternalLink,
   Eye,
@@ -1379,9 +1380,7 @@ export function SupplierDetail({ id }: { id: string }) {
                             <TableRow className="bg-slate-50/60 hover:bg-slate-50/80">
                               <TableCell colSpan={6} className="px-4 py-3">
                                 <div className="space-y-2">
-                                  <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                                    {f.analysis!.summary}
-                                  </p>
+                                  <CollapsibleSummary text={f.analysis!.summary || ""} />
                                   {f.analysis!.structuredJson && (() => {
                                     try {
                                       const sj = JSON.parse(f.analysis!.structuredJson!);
@@ -1611,9 +1610,7 @@ export function SupplierDetail({ id }: { id: string }) {
                           {FILE_CATEGORY_LABEL[f.category] ?? f.category}
                         </Badge>
                       </div>
-                      <p className="text-sm text-slate-600 whitespace-pre-wrap">
-                        {f.analysis!.summary}
-                      </p>
+                      <CollapsibleSummary text={f.analysis!.summary || ""} />
                     </div>
                   ))
               )}
@@ -2338,6 +2335,40 @@ export function SupplierDetail({ id }: { id: string }) {
             )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function CollapsibleSummary({ text, previewChars = 100 }: { text: string; previewChars?: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = text.length > previewChars;
+
+  if (!isLong) {
+    return <p className="text-sm text-slate-700 whitespace-pre-wrap">{text}</p>;
+  }
+
+  return (
+    <div>
+      <p className="text-sm text-slate-700 whitespace-pre-wrap">
+        {expanded ? text : text.slice(0, previewChars) + "..."}
+      </p>
+      <button
+        type="button"
+        className="mt-1 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {expanded ? (
+          <>
+            <ChevronUp className="size-3" />
+            收起
+          </>
+        ) : (
+          <>
+            <ChevronDown className="size-3" />
+            展开全文
+          </>
+        )}
+      </button>
     </div>
   );
 }
