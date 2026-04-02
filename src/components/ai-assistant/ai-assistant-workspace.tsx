@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -504,9 +504,7 @@ export default function AiAssistantWorkspace() {
                   </div>
                   <div className="flex-1 bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border">
                     <div className="prose prose-sm max-w-none">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {streamingText}
-                      </ReactMarkdown>
+                      <StreamingContent text={streamingText} />
                     </div>
                     <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-0.5" />
                   </div>
@@ -602,6 +600,39 @@ export default function AiAssistantWorkspace() {
     </div>
   );
 }
+
+const StreamingContent = React.memo(function StreamingContent({ text }: { text: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const prevLen = useRef(0);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    const el = ref.current;
+    // 只追加新增的文字，而不是重新渲染整个内容
+    const newText = text.slice(prevLen.current);
+    if (newText) {
+      // 把新文本中的换行替换为 <br>，保留基本格式
+      const fragment = document.createDocumentFragment();
+      const parts = newText.split('\n');
+      parts.forEach((part, i) => {
+        if (i > 0) fragment.appendChild(document.createElement('br'));
+        if (part) fragment.appendChild(document.createTextNode(part));
+      });
+      el.appendChild(fragment);
+    }
+    prevLen.current = text.length;
+  }, [text]);
+
+  // 当 text 变短（新对话开始），重置
+  useEffect(() => {
+    if (text.length < prevLen.current) {
+      if (ref.current) ref.current.textContent = '';
+      prevLen.current = 0;
+    }
+  }, [text]);
+
+  return <div ref={ref} className="whitespace-pre-wrap leading-relaxed" />;
+});
 
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
