@@ -51,58 +51,85 @@ export async function register() {
     setInterval(() => void tick(), SYNC_INTERVAL_MS);
   }, 30_000);
 
-  // ── Beauty auto-scan: daily at 9 AM Beijing time (UTC+8 = 01:00 UTC) ──
-  if (process.env.DISABLE_BEAUTY_SCAN !== "1") {
-    let beautyScanRunning = false;
+  // Helper: schedule a daily API call at a fixed UTC hour+minute
+  function scheduleDailyTopPick(opts: {
+    name: string;
+    url: string;
+    utcHour: number;
+    utcMinute: number;
+    envDisableKey: string;
+  }) {
+    if (process.env[opts.envDisableKey] === "1") return;
 
-    const msUntilNextBeautyScan = () => {
+    let scanRunning = false;
+
+    const msUntilNext = () => {
       const now = new Date();
-      // Target: 09:00 Beijing time = 01:00 UTC
       const target = new Date(now);
-      target.setUTCHours(1, 0, 0, 0);
+      target.setUTCHours(opts.utcHour, opts.utcMinute, 0, 0);
       if (target.getTime() <= now.getTime()) {
         target.setUTCDate(target.getUTCDate() + 1);
       }
       return target.getTime() - now.getTime();
     };
 
-    const beautyScanTick = async () => {
-      if (beautyScanRunning) return;
-      beautyScanRunning = true;
+    const tick = async () => {
+      if (scanRunning) return;
+      scanRunning = true;
       try {
-        const r = await fetch(`${baseUrl}/api/beauty-ideas/top-pick`, {
+        const r = await fetch(opts.url, {
           method: "POST",
           headers: {
-            "x-auto-sync-secret":
-              process.env.AUTO_SYNC_SECRET || "__internal__",
+            "x-auto-sync-secret": process.env.AUTO_SYNC_SECRET || "__internal__",
           },
         });
         if (r.ok) {
           const j = await r.json();
           if (!j.skipped) {
-            console.info(
-              `[beauty-auto-scan] 完成: ${j.report?.productName ?? "unknown"}`
-            );
+            console.info(`[${opts.name}] 完成: ${j.report?.productName ?? "unknown"}`);
           }
         }
       } catch (e) {
-        console.error(
-          "[beauty-auto-scan] 请求失败:",
-          e instanceof Error ? e.message : e
-        );
+        console.error(`[${opts.name}] 请求失败:`, e instanceof Error ? e.message : e);
       } finally {
-        beautyScanRunning = false;
+        scanRunning = false;
       }
     };
 
-    // Schedule first run, then repeat every 24h
-    const delay = msUntilNextBeautyScan();
+    const delay = msUntilNext();
     console.info(
-      `[beauty-auto-scan] 下次扫描: ${new Date(Date.now() + delay).toISOString()} (${Math.round(delay / 3600_000)}h后)`
+      `[${opts.name}] 下次扫描: ${new Date(Date.now() + delay).toISOString()} (${Math.round(delay / 3600_000)}h后)`
     );
     setTimeout(() => {
-      void beautyScanTick();
-      setInterval(() => void beautyScanTick(), 24 * 60 * 60 * 1000);
+      void tick();
+      setInterval(() => void tick(), 24 * 60 * 60 * 1000);
     }, delay);
   }
+
+  // ── Beauty: daily at 09:00 Beijing (01:00 UTC) ──
+  scheduleDailyTopPick({
+    name: "beauty-auto-scan",
+    url: `${baseUrl}/api/beauty-ideas/top-pick`,
+    utcHour: 1,
+    utcMinute: 0,
+    envDisableKey: "DISABLE_BEAUTY_SCAN",
+  });
+
+  // ── 3C新品: daily at 09:30 Beijing (01:30 UTC) ──
+  scheduleDailyTopPick({
+    name: "3c-auto-scan",
+    url: `${baseUrl}/api/3c-ideas/top-pick`,
+    utcHour: 1,
+    utcMinute: 30,
+    envDisableKey: "DISABLE_3C_SCAN",
+  });
+
+  // ── 欧洲蓝海: daily at 10:00 Beijing (02:00 UTC) ──
+  scheduleDailyTopPick({
+    name: "europe-auto-scan",
+    url: `${baseUrl}/api/europe-ideas/top-pick`,
+    utcHour: 2,
+    utcMinute: 0,
+    envDisableKey: "DISABLE_EUROPE_SCAN",
+  });
 }
