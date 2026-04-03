@@ -31,7 +31,7 @@ export async function GET(
     },
   });
 
-  if (!report || report.createdBy !== userId) {
+  if (!report) {
     return NextResponse.json({ message: "方案不存在" }, { status: 404 });
   }
 

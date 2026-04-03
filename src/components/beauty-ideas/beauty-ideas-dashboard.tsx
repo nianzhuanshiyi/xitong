@@ -483,7 +483,7 @@ export function BeautyIdeasDashboard() {
                             {h.productName}
                           </p>
                         </div>
-                        <p className="mt-0.5 text-xs text-slate-400 line-clamp-1 sm:hidden">
+                        <p className="mt-0.5 text-xs text-slate-400 line-clamp-2">
                           {h.executiveSummary}
                         </p>
                       </td>
