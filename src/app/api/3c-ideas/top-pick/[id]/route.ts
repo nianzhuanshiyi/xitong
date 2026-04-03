@@ -8,10 +8,8 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { session, error } = await requireModuleAccess("3c-ideas");
+  const { error } = await requireModuleAccess("3c-ideas");
   if (error) return error;
-  const userId = session.user.id;
-
   const { id } = await params;
   const report = await prisma.threeCTopPickReport.findUnique({
     where: { id },
