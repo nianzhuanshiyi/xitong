@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
   "selectedTrendIndex": 0-4,
   "productName": "中文产品名",
   "productNameEn": "English Product Name",
-  "recommendation": "2-3句话详细推荐理由，说明为什么选这个方向、市场机会在哪、我们的优势是什么",
+  "recommendation": "详细的推荐理由（300字左右），必须包含：1. 为什么选择该趋势；2. 目标市场的痛点分析；3. 产品的差异化核心卖点；4. 为什么适合亚马逊和TikTok Shop销售",
   "ingredientDetails": [
     {"name": "成分名", "efficacy": "功效说明（1-2句话）"},
     {"name": "成分名2", "efficacy": "功效说明"},
