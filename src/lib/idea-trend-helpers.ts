@@ -1,6 +1,9 @@
 /**
  * Shared helpers for the three idea auto-scan modules (beauty / 3C / europe).
- * Extracts keyword items, parses Google Trends direction, and computes trend scores.
+ * Three-layer real data pipeline:
+ *   1. keyword_research (growth-filtered blue ocean keywords)
+ *   2. google_trend (12-week trend verification)
+ *   3. Claude product design (based on verified data only)
  */
 
 import type { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
@@ -26,43 +29,55 @@ export function safeNum(v: unknown): number | null {
   return typeof v === "number" && isFinite(v) ? v : null;
 }
 
-/* ── Google Trends direction parsing ── */
+/* ── Google Trends direction parsing (12-week comparison) ── */
 
-export type TrendDirection = "up" | "stable" | "down" | "unknown";
+export type TrendDirection = "rising" | "stable" | "declining" | "unknown";
 
 /**
  * Parse Google Trends response and determine direction by comparing
- * the average of the last 3 data points vs the previous 3 data points.
- * >10% increase → "up", >10% decrease → "down", else → "stable".
+ * the average of the last 12 weeks vs the previous 12 weeks.
+ * >20% increase → "rising", >10% decrease → "declining", else → "stable".
  */
 export function parseTrendDirection(data: unknown): TrendDirection {
   if (!data || typeof data !== "object") return "unknown";
 
-  // google_trend returns various shapes — try to find a numeric time-series array
   const values = extractTrendValues(data);
-  if (values.length < 6) return "unknown";
+  if (values.length < 24) {
+    // Fallback: if less than 24 points, try 6-point comparison
+    if (values.length >= 6) {
+      const half = Math.floor(values.length / 2);
+      const recent = values.slice(half);
+      const prev = values.slice(0, half);
+      const avgRecent = recent.reduce((a, b) => a + b, 0) / recent.length;
+      const avgPrev = prev.reduce((a, b) => a + b, 0) / prev.length;
+      if (avgPrev === 0) return avgRecent > 0 ? "rising" : "unknown";
+      const change = (avgRecent - avgPrev) / avgPrev;
+      if (change > 0.20) return "rising";
+      if (change < -0.10) return "declining";
+      return "stable";
+    }
+    return "unknown";
+  }
 
-  const recent3 = values.slice(-3);
-  const prev3 = values.slice(-6, -3);
-  const avgRecent = recent3.reduce((a, b) => a + b, 0) / 3;
-  const avgPrev = prev3.reduce((a, b) => a + b, 0) / 3;
+  const recent12 = values.slice(-12);
+  const prev12 = values.slice(-24, -12);
+  const avgRecent = recent12.reduce((a, b) => a + b, 0) / 12;
+  const avgPrev = prev12.reduce((a, b) => a + b, 0) / 12;
 
-  if (avgPrev === 0) return avgRecent > 0 ? "up" : "unknown";
+  if (avgPrev === 0) return avgRecent > 0 ? "rising" : "unknown";
 
   const change = (avgRecent - avgPrev) / avgPrev;
-  if (change > 0.10) return "up";
-  if (change < -0.10) return "down";
+  if (change > 0.20) return "rising";
+  if (change < -0.10) return "declining";
   return "stable";
 }
 
 function extractTrendValues(obj: unknown, depth = 0): number[] {
   if (depth > 6 || obj == null || typeof obj !== "object") return [];
 
-  // Direct number array
   if (Array.isArray(obj)) {
     const nums = obj.filter((v): v is number => typeof v === "number");
     if (nums.length >= 6) return nums;
-    // Array of objects with value/score fields
     const extracted: number[] = [];
     for (const item of obj) {
       if (item && typeof item === "object") {
@@ -75,14 +90,12 @@ function extractTrendValues(obj: unknown, depth = 0): number[] {
   }
 
   const o = obj as Record<string, unknown>;
-  // Try common keys
   for (const key of ["values", "data", "timeline", "timelineData", "items", "trend", "trends", "interestOverTime"]) {
     if (o[key]) {
       const result = extractTrendValues(o[key], depth + 1);
       if (result.length >= 6) return result;
     }
   }
-  // Recurse into all object values
   for (const v of Object.values(o)) {
     const result = extractTrendValues(v, depth + 1);
     if (result.length >= 6) return result;
@@ -90,7 +103,7 @@ function extractTrendValues(obj: unknown, depth = 0): number[] {
   return [];
 }
 
-/* ── Google Trends enrichment for a list of keyword items ── */
+/* ── Google Trends enrichment ── */
 
 export type EnrichedKwItem = Record<string, unknown> & {
   _trendDirection: TrendDirection;
@@ -98,9 +111,9 @@ export type EnrichedKwItem = Record<string, unknown> & {
 };
 
 /**
- * For each keyword item, call google_trend to verify growth direction.
- * Returns the enriched items sorted by priority: up > stable > down.
- * Items with "down" trend are placed last (not removed).
+ * Verify keyword growth via google_trend. Only checks top 10 by search volume
+ * to avoid excessive API calls. Filters out "declining" keywords.
+ * Returns enriched items sorted: rising > stable > unknown.
  */
 export async function enrichWithGoogleTrends(
   kwItems: Record<string, unknown>[],
@@ -108,9 +121,14 @@ export async function enrichWithGoogleTrends(
   mcp: McpClient,
   logPrefix: string,
 ): Promise<EnrichedKwItem[]> {
+  // Sort by searches descending, only verify top 10
+  const sorted = [...kwItems].sort((a, b) => (safeNum(b.searches) ?? 0) - (safeNum(a.searches) ?? 0));
+  const toVerify = sorted.slice(0, 10);
+  const rest = sorted.slice(10);
+
   const enriched: EnrichedKwItem[] = [];
 
-  for (const kw of kwItems) {
+  for (const kw of toVerify) {
     const keyword = String(kw.keywords ?? kw.keyword ?? "");
     if (!keyword) continue;
 
@@ -126,12 +144,25 @@ export async function enrichWithGoogleTrends(
       // keep unknown
     }
 
+    // Filter out declining keywords
+    if (direction === "declining") {
+      console.info(`${logPrefix} ${keyword} → declining ✗ (filtered out)`);
+      continue;
+    }
+
     enriched.push({ ...kw, _trendDirection: direction, _market: marketplace });
-    console.info(`${logPrefix} ${keyword} → Google Trends: ${direction}`);
+    console.info(`${logPrefix} ${keyword} → ${direction}`);
   }
 
-  // Sort: up first, then stable, then unknown, then down
-  const order: Record<TrendDirection, number> = { up: 0, stable: 1, unknown: 2, down: 3 };
+  // Add remaining (unverified) keywords as "unknown" — not filtered
+  for (const kw of rest) {
+    const keyword = String(kw.keywords ?? kw.keyword ?? "");
+    if (!keyword) continue;
+    enriched.push({ ...kw, _trendDirection: "unknown" as TrendDirection, _market: marketplace });
+  }
+
+  // Sort: rising first, then stable, then unknown
+  const order: Record<TrendDirection, number> = { rising: 0, stable: 1, unknown: 2, declining: 3 };
   enriched.sort((a, b) => order[a._trendDirection] - order[b._trendDirection]);
 
   return enriched;
@@ -143,22 +174,26 @@ export function computeTrendScore(kw: EnrichedKwItem, europeMode = false): numbe
   const searches = safeNum(kw.searches) ?? 0;
   const products = safeNum(kw.products) ?? 0;
   const sdr = safeNum(kw.supplyDemandRatio) ?? 0;
+  const growth = safeNum(kw.searchNearlyCr) ?? safeNum(kw.searches_growth) ?? 0;
   const direction = kw._trendDirection;
 
-  const searchThresholdHigh = europeMode ? 3000 : 5000;
-  const searchThresholdMid = europeMode ? 1000 : 2000;
-  const productThresholdLow = europeMode ? 100 : 200;
-  const productThresholdMid = europeMode ? 300 : 500;
+  const searchHigh = europeMode ? 3000 : 5000;
+  const searchMid = europeMode ? 1000 : 2000;
+  const prodLow = europeMode ? 100 : 200;
+  const prodMid = europeMode ? 300 : 500;
 
   let score =
-    (searches >= searchThresholdHigh ? 30 : searches >= searchThresholdMid ? 20 : 10)
-    + (sdr >= 5 ? 25 : sdr >= 3 ? 15 : 5)
-    + (products < productThresholdLow ? 25 : products < productThresholdMid ? 15 : 5);
+    (searches >= searchHigh ? 25 : searches >= searchMid ? 15 : 5)
+    + (sdr >= 5 ? 20 : sdr >= 3 ? 12 : 5)
+    + (products < prodLow ? 20 : products < prodMid ? 12 : 5);
 
-  // Google Trends bonus / penalty
-  if (direction === "up") score += 15;
+  // Growth rate bonus
+  if (growth >= 30) score += 15;
+  else if (growth >= 10) score += 10;
+
+  // Google Trends bonus
+  if (direction === "rising") score += 15;
   else if (direction === "stable") score += 5;
-  else if (direction === "down") score -= 10;
 
   return Math.min(100, Math.max(1, Math.round(score)));
 }
@@ -171,9 +206,11 @@ export function buildTrendContent(kw: EnrichedKwItem, currencySymbol = "$"): str
   const avgRatings = safeNum(kw.avgRatings) ?? 0;
   const sdr = safeNum(kw.supplyDemandRatio) ?? 0;
   const bid = safeNum(kw.bid) ?? 0;
-  const dirLabel = kw._trendDirection === "up" ? "上升↑"
-    : kw._trendDirection === "down" ? "下降↓"
+  const growth = safeNum(kw.searchNearlyCr) ?? safeNum(kw.searches_growth) ?? null;
+  const dirLabel = kw._trendDirection === "rising" ? "上升↑"
+    : kw._trendDirection === "declining" ? "下降↓"
     : kw._trendDirection === "stable" ? "平稳→"
-    : "未知";
-  return `月搜索量${searches.toLocaleString()}，商品数${products}，平均评论${Math.round(avgRatings)}条，供需比${sdr.toFixed(1)}，CPC ${currencySymbol}${bid.toFixed(2)}。Google趋势：${dirLabel}`;
+    : "待验证";
+  const growthStr = growth !== null ? `，增长率${growth.toFixed(0)}%` : "";
+  return `月搜索量${searches.toLocaleString()}${growthStr}，商品数${products}，平均评论${Math.round(avgRatings)}条，供需比${sdr.toFixed(1)}，CPC ${currencySymbol}${bid.toFixed(2)}。Google趋势：${dirLabel}`;
 }

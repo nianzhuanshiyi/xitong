@@ -55,11 +55,11 @@ export async function POST(req: NextRequest) {
       const mcp = createSellerspriteMcpClient();
 
       let kwRes = await mcp.callToolSafe("keyword_research", {
-        request: { marketplace: "US", departments: ["pc", "wireless", "electronics"], minSearches: 1000, maxProducts: 300, minSupplyDemandRatio: 3, maxRatings: 500, maxAraClickRate: 0.7, size: 20, order: { field: "searches", desc: true } },
+        request: { marketplace: "US", departments: ["pc", "wireless", "electronics"], minSearches: 1000, maxProducts: 300, minSupplyDemandRatio: 3, maxRatings: 500, maxAraClickRate: 0.7, minSearchNearlyCr: 10, size: 20, order: { field: "searches_growth", desc: true } },
       });
-      if (kwRes.ok && extractKwItems(kwRes.data).length === 0) {
+      if (kwRes.ok && extractKwItems(kwRes.data).length < 5) {
         kwRes = await mcp.callToolSafe("keyword_research", {
-          request: { marketplace: "US", departments: ["pc", "wireless", "electronics"], minSearches: 500, maxProducts: 500, size: 20, order: { field: "searches", desc: true } },
+          request: { marketplace: "US", departments: ["pc", "wireless", "electronics"], minSearches: 500, maxProducts: 500, size: 20, order: { field: "searches_growth", desc: true } },
         });
       }
       if (!kwRes.ok) throw new Error(`keyword_research 失败: ${kwRes.error}`);
@@ -92,10 +92,10 @@ export async function POST(req: NextRequest) {
       console.info(`[3c-auto-scan] 复用今日已有 ${createdTrends.length} 条趋势`);
     }
 
-    // ── Step 3: Claude 基于真实数据设计产品概念 ──
-    const IDEA_PROMPT = `你是一位资深3C电子产品经理。以下是经过亚马逊数据验证（低竞争高需求）且通过 Google Trends 趋势确认的蓝海关键词。
-每个关键词包含真实的搜索量、商品数、评论数、供需比、CPC 和 Google 趋势方向。
-请基于这些真实关键词设计具体的新品方案。注意：产品必须围绕这些真实关键词设计，不要偏离关键词对应的市场需求。优先为 Google 趋势上升的关键词设计产品。
+    // ── Step 3: Claude 基于验证数据设计产品概念 ──
+    const IDEA_PROMPT = `你是一位资深3C电子产品经理。以下关键词全部来自亚马逊和Google真实数据验证，确认为"需求增长中+竞争低"的蓝海机会。
+每个关键词包含：月搜索量、增长率、商品数、平均评论数、CPC竞价、Google趋势方向。
+请基于每个关键词的真实市场数据设计具体产品方案。严禁编造不存在的产品概念或技术。优先为Google趋势上升的关键词设计产品。
 
 每个创意需要包含：
 {

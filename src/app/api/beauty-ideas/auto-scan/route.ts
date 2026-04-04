@@ -67,15 +67,16 @@ export async function POST(req: NextRequest) {
           minSupplyDemandRatio: 3,
           maxRatings: 500,
           maxAraClickRate: 0.7,
+          minSearchNearlyCr: 10,
           size: 20,
-          order: { field: "searches", desc: true },
+          order: { field: "searches_growth", desc: true },
         },
       });
 
-      if (kwRes.ok && extractKwItems(kwRes.data).length === 0) {
-        console.info("[beauty-auto-scan] 0 results, relaxing filters...");
+      if (kwRes.ok && extractKwItems(kwRes.data).length < 5) {
+        console.info("[beauty-auto-scan] < 5 results, relaxing growth filter...");
         kwRes = await mcp.callToolSafe("keyword_research", {
-          request: { marketplace: "US", departments: ["beauty"], minSearches: 500, maxProducts: 500, size: 20, order: { field: "searches", desc: true } },
+          request: { marketplace: "US", departments: ["beauty"], minSearches: 500, maxProducts: 500, size: 20, order: { field: "searches_growth", desc: true } },
         });
       }
       if (!kwRes.ok) throw new Error(`keyword_research 失败: ${kwRes.error}`);
@@ -83,10 +84,10 @@ export async function POST(req: NextRequest) {
       if (kwItems.length === 0) throw new Error("卖家精灵未返回任何关键词数据");
       console.info(`[beauty-auto-scan] Step1 完成: ${kwItems.length} 条`);
 
-      // Step 2: Google Trends 验证每个关键词
+      // Step 2: Google Trends 验证（top 10 by searches，declining 过滤掉）
       console.info("[beauty-auto-scan] Step2: Google Trends 验证...");
       const enriched = await enrichWithGoogleTrends(kwItems, "US", mcp, "[beauty-auto-scan]");
-      console.info(`[beauty-auto-scan] Step2 完成: ${enriched.filter((e) => e._trendDirection === "up").length} 上升, ${enriched.filter((e) => e._trendDirection === "stable").length} 平稳, ${enriched.filter((e) => e._trendDirection === "down").length} 下降`);
+      console.info(`[beauty-auto-scan] Step2 完成: ${enriched.filter((e) => e._trendDirection === "rising").length} rising, ${enriched.filter((e) => e._trendDirection === "stable").length} stable, ${enriched.length} total (declining filtered out)`);
 
       createdTrends = await prisma.$transaction(
         enriched.map((kw) =>
@@ -110,10 +111,10 @@ export async function POST(req: NextRequest) {
       console.info(`[beauty-auto-scan] 复用今日已有 ${createdTrends.length} 条趋势`);
     }
 
-    // ── Step 3: Claude 基于真实数据设计产品概念 ──
-    const IDEA_PROMPT = `你是一位资深美妆产品经理。以下是经过亚马逊数据验证（低竞争高需求）且通过 Google Trends 趋势确认的蓝海关键词。
-每个关键词包含真实的搜索量、商品数、评论数、供需比、CPC 和 Google 趋势方向。
-请基于这些真实关键词设计具体的新品方案。注意：产品必须围绕这些真实关键词设计，不要偏离关键词对应的市场需求。优先为 Google 趋势上升的关键词设计产品。
+    // ── Step 3: Claude 基于验证数据设计产品概念 ──
+    const IDEA_PROMPT = `你是一位资深美妆产品经理。以下关键词全部来自亚马逊和Google真实数据验证，确认为"需求增长中+竞争低"的蓝海机会。
+每个关键词包含：月搜索量、增长率、商品数、平均评论数、CPC竞价、Google趋势方向。
+请基于每个关键词的真实市场数据设计具体产品方案。严禁编造不存在的产品概念或技术。优先为Google趋势上升的关键词设计产品。
 
 每个创意需要包含：
 {
