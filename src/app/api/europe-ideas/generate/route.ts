@@ -7,10 +7,9 @@ import { scoreIdeaWithKeywordMiner, buildIdeaAnalysis } from "@/lib/idea-scoring
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const SYSTEM_PROMPT = `你是一位资深欧洲跨境电商产品经理，服务于亚马逊欧洲站卖家。
-我们在中国有成熟的供应链，主做亚马逊欧洲站线上销售。
-
-根据提供的趋势信息，为每条趋势生成1-2个具体的新品创意。
+const SYSTEM_PROMPT = `你是一位资深欧洲跨境电商产品经理。以下关键词全部来自亚马逊欧洲站和Google真实数据验证，确认为"需求增长中+竞争低"的蓝海机会。
+每个关键词包含真实的搜索量、增长率、商品数、评论数、CPC和Google趋势方向。
+请基于每个关键词的真实市场数据设计具体产品方案。严禁编造不存在的产品概念或技术。每个产品必须围绕对应的亚马逊搜索关键词设计。
 
 每个创意需要包含：
 {
