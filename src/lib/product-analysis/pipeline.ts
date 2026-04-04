@@ -643,11 +643,10 @@ export async function runProductAnalysis(
 
   const dataTotal = Object.values(dataDimensions).reduce((a, b) => a + b, 0);
 
-  // Claude ±5 adjustment
+  // Claude ±5 adjustment (short JSON, stable parsing)
   type AdjustJson = {
     adjustment?: number;
     verdict?: string;
-    conclusion?: string;
   };
 
   const dimDetailStr = Object.entries(dimDetails)
@@ -655,47 +654,41 @@ export async function runProductAnalysis(
     .join("\n");
 
   const adjustJson = await claudeJson<AdjustJson>({
-    system: `你是一位经验丰富的亚马逊选品顾问。请全部使用中文回答（专有名词如 ASIN、BSR、FBA、SPR、CPC、PPC 除外）。
-
-核心理念：任何品类都有切入机会，关键是找到正确的切入方式。分数不代表"能不能做"，而是代表"难度有多大"。
-
-你的任务：基于数据评分和市场数据，给出详细的切入分析，帮助团队制定进入策略。
-
-请输出 JSON，包含三个字段（注意 conclusion 放在最前面）：
-{
-  "conclusion": "详细分析结论（见下方要求）",
-  "adjustment": -5到5之间的整数（正数=数据低估了机会，负数=数据高估了机会）,
-  "verdict": "容易切入" 或 "正常难度" 或 "较高难度" 或 "高难度"
-}
-
-conclusion 字段必须包含以下 6 个部分，用序号标注，每部分 1-3 句话：
-
-1. 【市场概况】需求规模多大？处于增长期还是成熟期？有没有季节性？
-2. 【竞争格局】头部玩家是谁？新品能不能拿到流量？评论差距需要多久追上？
-3. 【利润空间】当前售价和成本下利润是否健康？广告投入期需要准备多少预算？
-4. 【难度评估】这个品类做起来最难的地方是什么？（具体到某一个点，比如"CPC高导致前期亏损周期长"或"头部评论过万很难撼动转化率"）
-5. 【切入策略】不管难度多高，给出一个具体的切入路径。包括：从哪个关键词切入、建议定价区间、产品差异化方向、首批备货建议。如果是高难度品类，要特别说明需要什么样的创新或差异化才能活下来。
-6. 【预期节奏】从上架到月销稳定大概需要多久？分几个阶段？每个阶段的重点是什么？
-
-语气要求：像一个打过很多品的老运营在跟团队复盘，务实、具体、有操作性。不要说"不建议进入"这种话，而是说清楚"要做的话需要怎么做"。`,
+    system: "你是亚马逊选品决策助手。请全部使用中文回答（专有名词如 ASIN、BSR、FBA、SPR、CPC 除外）。基于数据给出微调和判断。只输出 JSON：{adjustment: -5到5之间的整数, verdict: '容易切入'或'正常难度'或'较高难度'或'高难度'}。adjustment 正数=数据低估了机会，负数=数据高估了机会。",
     user: `数据驱动基础分: ${dataTotal}/100\n各维度详情:\n${dimDetailStr}\n\n数据摘要:\n${truncateJson(contextForAi, 8000)}`,
-    maxTokens: 4096,
   });
 
-  console.log("[scoring] adjustJson raw:", JSON.stringify(adjustJson).slice(0, 1000));
+  console.log("[scoring] adjustJson:", JSON.stringify(adjustJson));
 
   const adjustment = adjustJson && typeof adjustJson.adjustment === "number"
     ? Math.max(-5, Math.min(5, Math.round(adjustJson.adjustment)))
     : 0;
   const verdict = adjustJson?.verdict ?? "";
-  const conclusion = adjustJson?.conclusion ?? "";
-
-  if (!conclusion && adjustJson) {
-    console.warn("[scoring] Claude returned adjustJson but conclusion was empty:", JSON.stringify(adjustJson).slice(0, 500));
-  }
 
   const finalTotal = Math.max(0, Math.min(100, dataTotal + adjustment));
   const band = bandFromTotal(finalTotal);
+
+  // Detailed conclusion via plain-text claudeMessages (no JSON parsing, no truncation risk)
+  const conclusion = (await claudeMessages({
+    system: `你是一位经验丰富的亚马逊选品顾问。请全部使用中文回答（专有名词如 ASIN、BSR、FBA、SPR、CPC、PPC 除外）。
+
+核心理念：任何品类都有切入机会，关键是找到正确的切入方式。分数不代表"能不能做"，而是代表"难度有多大"。
+
+请给出详细的切入分析，包含以下6个部分，用序号标注，每部分1-3句话：
+
+1.【市场概况】需求规模多大？增长还是成熟？有没有季节性？
+2.【竞争格局】头部玩家是谁？新品能不能拿到流量？评论差距需要多久追上？
+3.【利润空间】当前售价和成本下利润是否健康？广告投入期需要准备多少预算？
+4.【难度评估】这个品类做起来最难的地方是什么？（只说最关键的1个点）
+5.【切入策略】给出具体切入路径：从哪个关键词切入、建议定价区间、产品差异化方向、首批备货建议。高难度品类要说明需要什么创新才能活下来。
+6.【预期节奏】从上架到月销稳定大概需要多久？分几个阶段？
+
+语气：像一个打过很多品的老运营在跟团队复盘，务实、具体、不说废话。不要说"不建议进入"，而是说清楚"要做的话需要怎么做"。`,
+    user: `综合评分: ${finalTotal}/100（${verdict || bandLabel(band)}）\n各维度详情:\n${dimDetailStr}\n\n数据摘要:\n${truncateJson(contextForAi, 8000)}`,
+  })) ?? "";
+
+  console.log("[scoring] conclusion length:", conclusion.length);
+
   const score: AnalysisResult["score"] = {
     total: finalTotal,
     band,
