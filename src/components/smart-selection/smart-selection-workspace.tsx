@@ -323,11 +323,9 @@ export function SmartSelectionWorkspace() {
   const [candidates, setCandidates] = useState<ResultRow[]>([]);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [newPlanOpen, setNewPlanOpen] = useState(false);
-  const [newPlan, setNewPlan] = useState({
-    name: "",
-    slug: "",
-    marketplace: "US",
-  });
+  const [newPlanName, setNewPlanName] = useState("");
+  const [creatingPlan, setCreatingPlan] = useState(false);
+  const [plansLoaded, setPlansLoaded] = useState(false);
 
   const currentPlan = useMemo(
     () => plans.find((p) => p.id === planId) ?? null,
@@ -341,10 +339,12 @@ export function SmartSelectionWorkspace() {
     const j = await res.json().catch(() => ({}));
     if (!res.ok) {
       toast.error(j.message ?? "加载方案失败");
+      setPlansLoaded(true);
       return;
     }
     const list = j as PlanListItem[];
     setPlans(list);
+    setPlansLoaded(true);
     setPlanId((prev) => {
       if (prev) return prev;
       const first = list.find((p) => p.slug === "us-beauty") ?? list[0];
@@ -595,30 +595,36 @@ export function SmartSelectionWorkspace() {
     URL.revokeObjectURL(a.href);
   }
 
-  async function createPlan() {
-    if (!newPlan.name.trim() || !newPlan.slug.trim()) {
-      toast.error("请填写方案名称与 slug");
+  async function createPlan(name?: string) {
+    const planName = (name ?? newPlanName).trim();
+    if (!planName) {
+      toast.error("请填写方案名称");
       return;
     }
+    // Auto-generate slug from name
+    const slug = planName
+      .toLowerCase()
+      .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 60) || `plan-${Date.now()}`;
+    setCreatingPlan(true);
     try {
       const res = await fetch("/api/smart-selection/plans", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newPlan.name.trim(),
-          slug: newPlan.slug.trim().toLowerCase(),
-          marketplace: newPlan.marketplace,
-        }),
+        body: JSON.stringify({ name: planName, slug, marketplace: "US" }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.message ?? "创建失败");
-      toast.success("方案已创建");
+      toast.success("方案已创建，请勾选类目后开始扫描");
       setNewPlanOpen(false);
-      setNewPlan({ name: "", slug: "", marketplace: "US" });
+      setNewPlanName("");
       await loadPlans();
       setPlanId(j.id as string);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "创建失败");
+    } finally {
+      setCreatingPlan(false);
     }
   }
 
@@ -686,36 +692,76 @@ export function SmartSelectionWorkspace() {
             按预设类目和筛选条件从亚马逊拉取新品数据，纯代码过滤，零 AI 消耗。点击「深度分析」跳转选品分析页做详细评估。
           </p>
         </div>
-        <Button type="button" variant="outline" onClick={() => setNewPlanOpen(true)}>
-          <Plus className="mr-1 size-4" />
-          新建方案
-        </Button>
+        {plans.length > 0 && (
+          <Button type="button" variant="outline" onClick={() => setNewPlanOpen(true)}>
+            <Plus className="mr-1 size-4" />
+            新建方案
+          </Button>
+        )}
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
-        {plans.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            onClick={() => setPlanId(p.id)}
-            className={cn(
-              "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-              planId === p.id
-                ? "bg-indigo-100 text-indigo-900"
-                : "text-slate-600 hover:bg-slate-100"
-            )}
-          >
-            {p.name}
-            {null}
-          </button>
-        ))}
-      </div>
+      {/* No plans: show inline creation */}
+      {plansLoaded && plans.length === 0 && (
+        <Card>
+          <CardContent className="py-10">
+            <div className="mx-auto max-w-md space-y-4 text-center">
+              <Sparkles className="mx-auto size-10 text-indigo-400" />
+              <h2 className="text-lg font-semibold text-slate-800">创建你的第一个选品方案</h2>
+              <p className="text-sm text-muted-foreground">
+                给方案起个名字（如「2026年5月·护肤选品」），创建后即可勾选类目、设条件、开始扫描。
+              </p>
+              <div className="flex gap-2 justify-center">
+                <Input
+                  className="max-w-xs"
+                  placeholder="输入方案名称…"
+                  value={newPlanName}
+                  onChange={(e) => setNewPlanName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && createPlan()}
+                />
+                <Button onClick={() => createPlan()} disabled={creatingPlan || !newPlanName.trim()}>
+                  {creatingPlan ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Plus className="mr-1 size-4" />}
+                  创建方案
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {loadingPlan ? (
+      {/* Has plans: show plan tabs */}
+      {plans.length > 0 && (
+        <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
+          {plans.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setPlanId(p.id)}
+              className={cn(
+                "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                planId === p.id
+                  ? "bg-indigo-100 text-indigo-900"
+                  : "text-slate-600 hover:bg-slate-100"
+              )}
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!planId && plans.length > 0 && (
+        <Card>
+          <CardContent className="py-12 text-center text-sm text-muted-foreground">
+            请在上方选择一个方案开始操作。
+          </CardContent>
+        </Card>
+      )}
+
+      {loadingPlan && planId ? (
         <div className="flex justify-center py-16 text-muted-foreground">
           <Loader2 className="size-8 animate-spin" />
         </div>
-      ) : (
+      ) : planId ? (
         <>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1377,7 +1423,7 @@ export function SmartSelectionWorkspace() {
             ) : null}
           </div>
         </>
-      )}
+      ) : null}
 
       <Sheet open={candidatesOpen} onOpenChange={setCandidatesOpen}>
         <SheetContent
@@ -1468,45 +1514,21 @@ export function SmartSelectionWorkspace() {
           </DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="space-y-1">
-              <p className={labelCls}>名称</p>
+              <p className={labelCls}>方案名称</p>
               <Input
-                value={newPlan.name}
-                onChange={(e) =>
-                  setNewPlan((n) => ({ ...n, name: e.target.value }))
-                }
-                placeholder="如：加拿大家居选品"
-              />
-            </div>
-            <div className="space-y-1">
-              <p className={labelCls}>slug（小写、短横线）</p>
-              <Input
-                value={newPlan.slug}
-                onChange={(e) =>
-                  setNewPlan((n) => ({ ...n, slug: e.target.value }))
-                }
-                placeholder="ca-home"
-              />
-            </div>
-            <div className="space-y-1">
-              <p className={labelCls}>站点</p>
-              <Input
-                value={newPlan.marketplace}
-                onChange={(e) =>
-                  setNewPlan((n) => ({ ...n, marketplace: e.target.value }))
-                }
-                placeholder="US"
+                value={newPlanName}
+                onChange={(e) => setNewPlanName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && createPlan()}
+                placeholder="如：2026年5月·护肤选品"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setNewPlanOpen(false)}
-            >
+            <Button type="button" variant="outline" onClick={() => setNewPlanOpen(false)}>
               取消
             </Button>
-            <Button type="button" onClick={() => createPlan()}>
+            <Button type="button" onClick={() => createPlan()} disabled={creatingPlan || !newPlanName.trim()}>
+              {creatingPlan ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
               创建
             </Button>
           </DialogFooter>
