@@ -27,7 +27,7 @@ function parseScanFilters(raw: string, planMarketplace: string): ScanFilters {
     newProductMonths: 6,
     minPrice: 20,
     maxPrice: 200,
-    minMonthlyRevenue: 30000,
+    minMonthlyRevenue: 10000,
     maxReviews: 500,
     minRating: 3.0,
   };
@@ -159,7 +159,7 @@ export async function POST(req: Request) {
               marketplace: filters.marketplace,
               nodeIdPath: sub.nodeIdPath,
               newProduct: filters.newProductMonths || 6,
-              topN: 20,
+              topN: 100,
             },
           });
 

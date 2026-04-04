@@ -268,7 +268,7 @@ function ScanCategoryConfig({
         </div>
         <div className="space-y-1">
           <p className={labelCls}>最低月收入 ($)</p>
-          <Input className="h-8" type="number" value={scanConfig.minMonthlyRevenue ?? 30000}
+          <Input className="h-8" type="number" value={scanConfig.minMonthlyRevenue ?? 10000}
             onChange={(e) => updateScan({ minMonthlyRevenue: Number(e.target.value) || 0 })} />
         </div>
         <div className="space-y-1">
