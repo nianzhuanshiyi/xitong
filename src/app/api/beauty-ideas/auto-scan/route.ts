@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     const todayStart = new Date(today + "T00:00:00Z");
     const todayEnd = new Date(today + "T23:59:59Z");
     let createdTrends = await prisma.beautyTrend.findMany({
-      where: { createdAt: { gte: todayStart, lte: todayEnd } },
+      where: { createdAt: { gte: todayStart, lte: todayEnd }, source: "sellersprite_keyword_research" },
       orderBy: { trendScore: "desc" },
     });
 
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
         enriched.map((kw) =>
           prisma.beautyTrend.create({
             data: {
-              source: "sellersprite_data",
+              source: "sellersprite_keyword_research",
               market: "US",
               title: String(kw.keywords ?? kw.keyword ?? ""),
               content: buildTrendContent(kw, "$"),

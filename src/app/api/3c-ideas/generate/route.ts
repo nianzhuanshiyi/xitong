@@ -55,13 +55,16 @@ export async function POST() {
 
   try {
     const recentTrends = await prisma.threeCTrend.findMany({
-      where: { createdAt: { gte: new Date(Date.now() - 7 * 86400_000) } },
+      where: {
+        createdAt: { gte: new Date(Date.now() - 7 * 86400_000) },
+        source: "sellersprite_keyword_research",
+      },
       orderBy: { trendScore: "desc" },
       take: 10,
     });
 
     if (recentTrends.length === 0) {
-      return NextResponse.json({ message: "没有最近的趋势数据，请先扫描趋势" }, { status: 400 });
+      return NextResponse.json({ message: "没有真实数据趋势，请先点击「扫描趋势」获取卖家精灵数据" }, { status: 400 });
     }
 
     const trendsForAI = recentTrends.map((t) => ({
