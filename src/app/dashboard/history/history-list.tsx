@@ -58,10 +58,10 @@ type ListItem =
     };
 
 const BAND_CN: Record<string, string> = {
-  strong: "建议进入",
-  moderate: "可以考虑",
-  careful: "谨慎进入",
-  avoid: "不建议进入",
+  strong: "容易切入",
+  moderate: "正常难度",
+  careful: "较高难度",
+  avoid: "高难度",
 };
 
 const BAND_COLORS: Record<string, { badge: string; score: string }> = {
