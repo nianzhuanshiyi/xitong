@@ -35,6 +35,26 @@ function extractNodeIdPath(obj: unknown, depth = 0): string | null {
   return null;
 }
 
+function extractProductLabel(asinDetail: unknown): string {
+  if (!asinDetail || typeof asinDetail !== "object") return "";
+  const obj = asinDetail as Record<string, unknown>;
+  const localePath = obj.nodeLabelPathLocale ?? obj.nodeLabelLocale;
+  if (typeof localePath === "string" && localePath.includes(":")) {
+    const last = localePath.split(":").pop()?.trim();
+    if (last && last.length <= 15) return last;
+  }
+  const enPath = obj.nodeLabelPath;
+  if (typeof enPath === "string" && enPath.includes(":")) {
+    const last = enPath.split(":").pop()?.trim();
+    if (last && last.length <= 30) return last;
+  }
+  const title = obj.title;
+  if (typeof title === "string") {
+    return title.slice(0, 30) + (title.length > 30 ? "…" : "");
+  }
+  return "";
+}
+
 function bandFromTotal(total: number): ScoreBand {
   if (total >= 75) return "strong";
   if (total >= 55) return "moderate";
@@ -806,12 +826,16 @@ conclusion 字段必须包含以下 5 个部分，用序号标注，每部分 1-
     },
   });
 
+  const primaryDetail = byAsin[parsed.asins[0]];
+  const productLabel = extractProductLabel(primaryDetail);
+  const titleSuffix = productLabel ? ` · ${productLabel}` : "";
+
   const report = await prisma.productAnalysisReport.create({
     data: {
       userId,
       marketplace: parsed.marketplace,
       asinsJson: JSON.stringify(parsed.asins),
-      title: `选品分析 · ${parsed.asins.slice(0, 3).join(", ")}${parsed.asins.length > 3 ? "…" : ""}`,
+      title: `选品分析 · ${parsed.asins.slice(0, 3).join(", ")}${parsed.asins.length > 3 ? "…" : ""}${titleSuffix}`,
       score: score.total,
       scoreBand: score.band,
       status: "completed",
