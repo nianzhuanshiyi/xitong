@@ -661,11 +661,11 @@ export async function runProductAnalysis(
 
 你的任务：基于数据评分和市场数据，给出详细的切入分析，帮助团队制定进入策略。
 
-请输出 JSON，包含三个字段：
+请输出 JSON，包含三个字段（注意 conclusion 放在最前面）：
 {
+  "conclusion": "详细分析结论（见下方要求）",
   "adjustment": -5到5之间的整数（正数=数据低估了机会，负数=数据高估了机会）,
-  "verdict": "容易切入" 或 "正常难度" 或 "较高难度" 或 "高难度",
-  "conclusion": "详细分析结论（见下方要求）"
+  "verdict": "容易切入" 或 "正常难度" 或 "较高难度" 或 "高难度"
 }
 
 conclusion 字段必须包含以下 6 个部分，用序号标注，每部分 1-3 句话：
@@ -681,6 +681,8 @@ conclusion 字段必须包含以下 6 个部分，用序号标注，每部分 1-
     user: `数据驱动基础分: ${dataTotal}/100\n各维度详情:\n${dimDetailStr}\n\n数据摘要:\n${truncateJson(contextForAi, 8000)}`,
     maxTokens: 4096,
   });
+
+  console.log("[scoring] adjustJson raw:", JSON.stringify(adjustJson).slice(0, 1000));
 
   const adjustment = adjustJson && typeof adjustJson.adjustment === "number"
     ? Math.max(-5, Math.min(5, Math.round(adjustJson.adjustment)))
