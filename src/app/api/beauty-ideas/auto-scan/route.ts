@@ -3,26 +3,10 @@ import prisma from "@/lib/prisma";
 import { claudeJson } from "@/lib/claude-client";
 import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
 import { scoreIdeaWithKeywordMiner, buildIdeaAnalysis } from "@/lib/idea-scoring";
+import { extractKwItems, enrichWithGoogleTrends, computeTrendScore, buildTrendContent } from "@/lib/idea-trend-helpers";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
-
-function extractKwItems(data: unknown): Record<string, unknown>[] {
-  if (!data || typeof data !== "object") return [];
-  if (Array.isArray(data)) return data as Record<string, unknown>[];
-  const obj = data as Record<string, unknown>;
-  if (Array.isArray(obj.items)) return obj.items as Record<string, unknown>[];
-  if (Array.isArray(obj.data)) return obj.data as Record<string, unknown>[];
-  if (obj.data && typeof obj.data === "object" && !Array.isArray(obj.data)) {
-    const inner = obj.data as Record<string, unknown>;
-    if (Array.isArray(inner.items)) return inner.items as Record<string, unknown>[];
-  }
-  return [];
-}
-
-function safeNum(v: unknown): number | null {
-  return typeof v === "number" && isFinite(v) ? v : null;
-}
 
 /**
  * Internal auto-scan endpoint — called by instrumentation.ts scheduler.
@@ -70,7 +54,8 @@ export async function POST(req: NextRequest) {
     });
 
     if (createdTrends.length === 0) {
-      console.info("[beauty-auto-scan] 用卖家精灵搜索蓝海关键词...");
+      // Step 1: keyword_research 找蓝海关键词
+      console.info("[beauty-auto-scan] Step1: 卖家精灵搜索蓝海关键词...");
       const mcp = createSellerspriteMcpClient();
 
       let kwRes = await mcp.callToolSafe("keyword_research", {
@@ -87,68 +72,48 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Fallback: relax filters if no results
-      if (kwRes.ok) {
-        const items = extractKwItems(kwRes.data);
-        if (items.length === 0) {
-          console.info("[beauty-auto-scan] 0 results, relaxing filters...");
-          kwRes = await mcp.callToolSafe("keyword_research", {
-            request: {
-              marketplace: "US",
-              departments: ["beauty"],
-              minSearches: 500,
-              maxProducts: 500,
-              size: 20,
-              order: { field: "searches", desc: true },
-            },
-          });
-        }
+      if (kwRes.ok && extractKwItems(kwRes.data).length === 0) {
+        console.info("[beauty-auto-scan] 0 results, relaxing filters...");
+        kwRes = await mcp.callToolSafe("keyword_research", {
+          request: { marketplace: "US", departments: ["beauty"], minSearches: 500, maxProducts: 500, size: 20, order: { field: "searches", desc: true } },
+        });
       }
-
-      if (!kwRes.ok) {
-        throw new Error(`卖家精灵 keyword_research 失败: ${kwRes.error}`);
-      }
-
+      if (!kwRes.ok) throw new Error(`keyword_research 失败: ${kwRes.error}`);
       const kwItems = extractKwItems(kwRes.data);
-      if (kwItems.length === 0) {
-        throw new Error("卖家精灵未返回任何关键词数据");
-      }
+      if (kwItems.length === 0) throw new Error("卖家精灵未返回任何关键词数据");
+      console.info(`[beauty-auto-scan] Step1 完成: ${kwItems.length} 条`);
 
-      console.info(`[beauty-auto-scan] 获取到 ${kwItems.length} 条蓝海关键词`);
+      // Step 2: Google Trends 验证每个关键词
+      console.info("[beauty-auto-scan] Step2: Google Trends 验证...");
+      const enriched = await enrichWithGoogleTrends(kwItems, "US", mcp, "[beauty-auto-scan]");
+      console.info(`[beauty-auto-scan] Step2 完成: ${enriched.filter((e) => e._trendDirection === "up").length} 上升, ${enriched.filter((e) => e._trendDirection === "stable").length} 平稳, ${enriched.filter((e) => e._trendDirection === "down").length} 下降`);
 
       createdTrends = await prisma.$transaction(
-        kwItems.map((kw) => {
-          const searches = safeNum(kw.searches) ?? 0;
-          const products = safeNum(kw.products) ?? 0;
-          const avgRatings = safeNum(kw.avgRatings) ?? 0;
-          const sdr = safeNum(kw.supplyDemandRatio) ?? 0;
-          const bid = safeNum(kw.bid) ?? 0;
-          const score = Math.min(100, Math.max(1, Math.round(
-            (searches >= 5000 ? 40 : searches >= 2000 ? 30 : 20) + (sdr >= 5 ? 30 : sdr >= 3 ? 20 : 10) + (products < 200 ? 30 : products < 500 ? 20 : 10)
-          )));
-          return prisma.beautyTrend.create({
+        enriched.map((kw) =>
+          prisma.beautyTrend.create({
             data: {
               source: "sellersprite_data",
               market: "US",
               title: String(kw.keywords ?? kw.keyword ?? ""),
-              content: `月搜索量${searches.toLocaleString()}，商品数${products}，平均评论${Math.round(avgRatings)}条，供需比${sdr.toFixed(1)}，CPC $${bid.toFixed(2)}`,
+              content: buildTrendContent(kw, "$"),
               ingredients: JSON.stringify([]),
               category: "skincare",
-              trendScore: score,
+              trendScore: computeTrendScore(kw),
               sourceUrl: null,
               scannedAt: new Date(),
             },
-          });
-        })
+          })
+        )
       );
       console.info(`[beauty-auto-scan] 写入 ${createdTrends.length} 条趋势`);
     } else {
       console.info(`[beauty-auto-scan] 复用今日已有 ${createdTrends.length} 条趋势`);
     }
 
-    // ── Step 2: Generate ideas from real keyword data ──
-    const IDEA_PROMPT = `你是一位资深美妆产品经理。以下是从亚马逊真实数据中发现的蓝海关键词，每个关键词代表一个有需求但竞争不激烈的市场机会。
-请基于这些真实关键词设计具体的新品方案。注意：产品必须围绕这些真实关键词设计，不要偏离关键词对应的市场需求。
+    // ── Step 3: Claude 基于真实数据设计产品概念 ──
+    const IDEA_PROMPT = `你是一位资深美妆产品经理。以下是经过亚马逊数据验证（低竞争高需求）且通过 Google Trends 趋势确认的蓝海关键词。
+每个关键词包含真实的搜索量、商品数、评论数、供需比、CPC 和 Google 趋势方向。
+请基于这些真实关键词设计具体的新品方案。注意：产品必须围绕这些真实关键词设计，不要偏离关键词对应的市场需求。优先为 Google 趋势上升的关键词设计产品。
 
 每个创意需要包含：
 {

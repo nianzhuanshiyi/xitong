@@ -3,26 +3,10 @@ import prisma from "@/lib/prisma";
 import { claudeJson } from "@/lib/claude-client";
 import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
 import { scoreIdeaWithKeywordMiner, buildIdeaAnalysis } from "@/lib/idea-scoring";
+import { extractKwItems, enrichWithGoogleTrends, computeTrendScore, buildTrendContent } from "@/lib/idea-trend-helpers";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
-
-function extractKwItems(data: unknown): Record<string, unknown>[] {
-  if (!data || typeof data !== "object") return [];
-  if (Array.isArray(data)) return data as Record<string, unknown>[];
-  const obj = data as Record<string, unknown>;
-  if (Array.isArray(obj.items)) return obj.items as Record<string, unknown>[];
-  if (Array.isArray(obj.data)) return obj.data as Record<string, unknown>[];
-  if (obj.data && typeof obj.data === "object" && !Array.isArray(obj.data)) {
-    const inner = obj.data as Record<string, unknown>;
-    if (Array.isArray(inner.items)) return inner.items as Record<string, unknown>[];
-  }
-  return [];
-}
-
-function safeNum(v: unknown): number | null {
-  return typeof v === "number" && isFinite(v) ? v : null;
-}
 
 export async function POST(req: NextRequest) {
   const secret = req.headers.get("x-auto-sync-secret");
@@ -62,85 +46,62 @@ export async function POST(req: NextRequest) {
     });
 
     if (createdTrends.length === 0) {
-      console.info("[europe-auto-scan] 用卖家精灵搜索欧洲蓝海关键词...");
+      console.info("[europe-auto-scan] Step1: 卖家精灵搜索欧洲蓝海关键词...");
       const mcp = createSellerspriteMcpClient();
-      const allKwItems: Array<Record<string, unknown> & { _market: string }> = [];
+      const allEnriched: Array<Record<string, unknown> & { _trendDirection: string; _market: string }> = [];
 
       for (const market of ["DE", "UK", "FR"] as const) {
         let kwRes = await mcp.callToolSafe("keyword_research", {
-          request: {
-            marketplace: market,
-            minSearches: 500,
-            maxProducts: 200,
-            minSupplyDemandRatio: 3,
-            maxRatings: 300,
-            maxAraClickRate: 0.7,
-            size: 10,
-            order: { field: "searches", desc: true },
-          },
+          request: { marketplace: market, minSearches: 500, maxProducts: 200, minSupplyDemandRatio: 3, maxRatings: 300, maxAraClickRate: 0.7, size: 10, order: { field: "searches", desc: true } },
         });
-
         if (kwRes.ok && extractKwItems(kwRes.data).length === 0) {
           kwRes = await mcp.callToolSafe("keyword_research", {
-            request: {
-              marketplace: market,
-              minSearches: 300,
-              maxProducts: 500,
-              size: 10,
-              order: { field: "searches", desc: true },
-            },
+            request: { marketplace: market, minSearches: 300, maxProducts: 500, size: 10, order: { field: "searches", desc: true } },
           });
         }
-
         if (kwRes.ok) {
           const items = extractKwItems(kwRes.data);
-          for (const item of items) {
-            allKwItems.push({ ...item, _market: market });
-          }
-          console.info(`[europe-auto-scan] ${market}: ${items.length} keywords`);
+          console.info(`[europe-auto-scan] ${market} Step1: ${items.length} keywords`);
+          // Step 2: Google Trends per market
+          const enriched = await enrichWithGoogleTrends(items, market, mcp, `[europe-auto-scan:${market}]`);
+          allEnriched.push(...enriched);
         } else {
           console.warn(`[europe-auto-scan] ${market} failed:`, kwRes.error);
         }
       }
 
-      if (allKwItems.length === 0) {
-        throw new Error("卖家精灵未返回任何欧洲关键词数据");
-      }
+      if (allEnriched.length === 0) throw new Error("卖家精灵未返回任何欧洲关键词数据");
+      console.info(`[europe-auto-scan] Step1+2 完成: ${allEnriched.length} 条`);
 
-      console.info(`[europe-auto-scan] 共获取到 ${allKwItems.length} 条蓝海关键词`);
+      // Sort all: up first
+      const order: Record<string, number> = { up: 0, stable: 1, unknown: 2, down: 3 };
+      allEnriched.sort((a, b) => (order[a._trendDirection] ?? 2) - (order[b._trendDirection] ?? 2));
 
       createdTrends = await prisma.$transaction(
-        allKwItems.map((kw) => {
-          const searches = safeNum(kw.searches) ?? 0;
-          const products = safeNum(kw.products) ?? 0;
-          const avgRatings = safeNum(kw.avgRatings) ?? 0;
-          const sdr = safeNum(kw.supplyDemandRatio) ?? 0;
-          const bid = safeNum(kw.bid) ?? 0;
-          const score = Math.min(100, Math.max(1, Math.round(
-            (searches >= 3000 ? 40 : searches >= 1000 ? 30 : 20) + (sdr >= 5 ? 30 : sdr >= 3 ? 20 : 10) + (products < 100 ? 30 : products < 300 ? 20 : 10)
-          )));
-          return prisma.europeTrend.create({
+        allEnriched.map((kw) =>
+          prisma.europeTrend.create({
             data: {
               source: "sellersprite_data",
               market: kw._market,
               title: String(kw.keywords ?? kw.keyword ?? ""),
-              content: `月搜索量${searches.toLocaleString()}，商品数${products}，平均评论${Math.round(avgRatings)}条，供需比${sdr.toFixed(1)}，CPC €${bid.toFixed(2)}`,
+              content: buildTrendContent(kw as Parameters<typeof buildTrendContent>[0], "€"),
               keywords: JSON.stringify([]),
               category: "home",
-              trendScore: score,
+              trendScore: computeTrendScore(kw as Parameters<typeof computeTrendScore>[0], true),
               sourceUrl: null,
               scannedAt: new Date(),
             },
-          });
-        })
+          })
+        )
       );
       console.info(`[europe-auto-scan] 写入 ${createdTrends.length} 条趋势`);
     } else {
       console.info(`[europe-auto-scan] 复用今日已有 ${createdTrends.length} 条趋势`);
     }
 
-    const IDEA_PROMPT = `你是一位资深欧洲跨境电商产品经理。以下是从亚马逊欧洲站真实数据中发现的蓝海关键词，每个关键词代表一个有需求但竞争不激烈的市场机会。
-请基于这些真实关键词设计具体的新品方案。注意：产品必须围绕这些真实关键词设计，不要偏离关键词对应的市场需求。
+    const IDEA_PROMPT = `你是一位资深欧洲跨境电商产品经理。以下是经过亚马逊欧洲站数据验证（低竞争高需求）且通过 Google Trends 趋势确认的蓝海关键词。
+每个关键词包含真实的搜索量、商品数、评论数、供需比、CPC 和 Google 趋势方向。
+请基于这些真实关键词设计具体的新品方案。注意：产品必须围绕这些真实关键词设计，不要偏离关键词对应的市场需求。优先为 Google 趋势上升的关键词设计产品。
 
 每个创意需要包含：
 {
