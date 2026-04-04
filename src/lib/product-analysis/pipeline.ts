@@ -676,6 +676,7 @@ conclusion 字段必须包含以下 5 个部分，用序号标注，每部分 1-
 
 语气要求：像一个资深同事在开会时给建议，直接、具体、不说废话。`,
     user: `数据驱动基础分: ${dataTotal}/100\n各维度详情:\n${dimDetailStr}\n\n数据摘要:\n${truncateJson(contextForAi, 8000)}`,
+    maxTokens: 4096,
   });
 
   const adjustment = adjustJson && typeof adjustJson.adjustment === "number"
@@ -683,6 +684,10 @@ conclusion 字段必须包含以下 5 个部分，用序号标注，每部分 1-
     : 0;
   const verdict = adjustJson?.verdict ?? "";
   const conclusion = adjustJson?.conclusion ?? "";
+
+  if (!conclusion && adjustJson) {
+    console.warn("[scoring] Claude returned adjustJson but conclusion was empty:", JSON.stringify(adjustJson).slice(0, 500));
+  }
 
   const finalTotal = Math.max(0, Math.min(100, dataTotal + adjustment));
   const band = bandFromTotal(finalTotal);
