@@ -238,7 +238,8 @@ async function verifyWithGoogleTrends(
 /* ── Public: scanBlueOceanKeywords ── */
 
 export async function scanBlueOceanKeywords(config: ScanConfig): Promise<BlueOceanKeyword[]> {
-  const log = `[${config.moduleName}-scan]`;
+  const log = `[idea-pipeline:${config.moduleName}]`;
+  console.info(`${log} Starting scan for module: ${config.moduleName}, markets: ${JSON.stringify(Array.isArray(config.marketplace) ? config.marketplace : [config.marketplace])}`);
   const mcp = createSellerspriteMcpClient();
   const markets = Array.isArray(config.marketplace) ? config.marketplace : [config.marketplace];
 

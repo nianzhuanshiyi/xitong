@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
 import { claudeJson } from "@/lib/claude-client";
-import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
+import { THREE_C_CONFIG, scanBlueOceanKeywords, computeKeywordScore, buildTrendContent } from "@/lib/idea-data-pipeline";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -15,16 +15,6 @@ export const maxDuration = 120;
 function getBeijingDate(): string {
   return new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
 }
-
-type TrendItem = {
-  source: string;
-  market: string;
-  title: string;
-  content: string;
-  keywords: string[];
-  category: string;
-  trendScore: number;
-};
 
 type BriefResult = {
   selectedTrendIndex: number;
@@ -113,169 +103,71 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    console.info("[3c-top-pick-brief] 开始生成简报...");
+    console.info("[3c-top-pick-brief] Step1: 卖家精灵搜索蓝海关键词...");
+    const keywords = await scanBlueOceanKeywords(THREE_C_CONFIG);
+    if (keywords.length === 0) throw new Error("未发现符合条件的蓝海关键词");
 
-    const BRIEF_SYSTEM = `你是一位资深3C电子配件行业分析师+产品总监，服务于亚马逊跨境3C卖家。
-公司在深圳有成熟的3C配件供应链，主做亚马逊美国站、欧洲站、日本站线上销售。
+    const trendRecords = await prisma.$transaction(
+      keywords.slice(0, 5).map((kw) =>
+        prisma.threeCTrend.create({
+          data: { source: "sellersprite_keyword_research", market: kw.marketplace, title: kw.keyword, content: buildTrendContent(kw), keywords: JSON.stringify([]), category: "phone_accessories", trendScore: computeKeywordScore(kw), scannedAt: new Date() },
+        })
+      )
+    );
 
-任务：
-1. 扫描当前 Top 5 的3C电子配件趋势
-2. 从中选出 1 个最适合我们做的产品方向
-3. 给出详细的推荐简报
+    const topKw = keywords[0];
+    const kwDataStr = keywords.slice(0, 5).map((kw) =>
+      `关键词: ${kw.keyword} | 月搜索量: ${kw.searches} | 增长率: ${kw.growth.toFixed(0)}% | 商品数: ${kw.products} | 均价: $${kw.avgPrice.toFixed(2)} | CPC: $${kw.bid.toFixed(2)} | Google趋势: ${kw.googleTrendDirection}`
+    ).join("\n");
 
-选择标准：
-- 趋势热度高、竞争可进入、毛利率≥60%
-- 售价 $10-$40，体积小重量轻，模具成本低
-- 深圳供应链可快速出货，适合亚马逊FBA
-- 优先选择新款设备配件（iPhone/iPad/MacBook/Samsung新品配件）
-
-排除红海品类：蓝牙耳机、通用数据线、通用充电器、通用手机壳、钢化膜、移动电源${avoidHint}${avoidProductsHint}
+    console.info("[3c-top-pick-brief] Step3: Claude 基于真实数据设计产品...");
+    const result = await claudeJson<BriefResult>({
+      system: `你是一位资深3C电子产品总监。以下关键词全部来自亚马逊和Google真实数据验证。
+请从中选出1个最适合做的方向，设计一个具体产品方案。
+严格要求：禁止编造不存在的产品或使用未发布设备型号（如iPhone 19等）。${avoidHint}${avoidProductsHint}
 
 返回JSON对象：
-{
-  "trends": [
-    {"source":"social_media","market":"US","title":"趋势标题","content":"50字描述","keywords":["关键词1"],"category":"phone_accessories","trendScore":85},
-    ... 共5条
-  ],
-  "selectedTrendIndex": 0-4,
-  "productName": "中文产品名",
-  "productNameEn": "English Product Name",
-  "recommendation": "2-3句话详细推荐理由，说明为什么选这个方向、市场机会在哪、我们的优势是什么",
-  "featureDetails": [
-    {"name": "功能名", "description": "功能说明（1-2句话）"},
-    {"name": "功能名2", "description": "功能说明"},
-    {"name": "功能名3", "description": "功能说明"}
-  ],
-  "keyFeatures": ["功能1","功能2","功能3"],
-  "priceRange": "$18-25",
-  "estimatedCost": "$4-6",
-  "estimatedMargin": "65%",
-  "competition": "low/medium/high",
-  "targetAudience": "目标消费者画像，如'25-40岁的科技爱好者，注重产品品质和设计感'",
-  "targetMarket": "US",
-  "score": 1-100的推荐信心分,
-  "category": "phone_accessories",
-  "searchKeywords": ["amazon关键词1","关键词2"]
-}`;
-
-    const result = await claudeJson<{
-      trends: TrendItem[];
-    } & BriefResult>({
-      system: BRIEF_SYSTEM,
-      user: `今天是${today}，请完成3C配件趋势扫描+精选推荐。只返回JSON对象。`,
+{ "selectedTrendIndex": 0-4, "productName": "中文名", "productNameEn": "English", "recommendation": "推荐理由200字", "featureDetails": [{"name":"功能","description":"说明"}], "keyFeatures": ["功能1"], "priceRange": "$XX-XX", "estimatedCost": "$X-X", "estimatedMargin": "XX%", "competition": "low/medium/high", "targetAudience": "目标消费者", "targetMarket": "US", "score": 1-100, "category": "phone_accessories", "searchKeywords": ["关键词"] }`,
+      user: `以下是经过双重验证的蓝海关键词：\n${kwDataStr}\n\n请选出1个设计产品方案。只返回JSON。`,
       maxTokens: 4096,
     });
 
-    if (!result) {
-      console.error("[3c-top-pick-brief] claudeJson 返回 null");
-      throw new Error("简报生成失败：Claude API 返回空结果");
-    }
-    if (!result.productName) {
-      console.error("[3c-top-pick-brief] Claude 返回了 JSON 但缺少 productName, keys:", Object.keys(result));
-      throw new Error("简报生成失败：返回数据缺少产品名称");
-    }
+    if (!result || !result.productName) throw new Error("Claude 产品设计失败");
 
-    const trendItems = (result.trends || []).slice(0, 5);
-    if (trendItems.length > 0) {
-      await prisma.$transaction(
-        trendItems.map((t) =>
-          prisma.threeCTrend.create({
-            data: {
-              source: t.source || "social_media",
-              market: t.market || "US",
-              title: t.title,
-              content: t.content,
-              keywords: JSON.stringify(t.keywords || []),
-              category: t.category || "phone_accessories",
-              trendScore: Math.min(100, Math.max(1, t.trendScore || 70)),
-              scannedAt: new Date(),
-            },
-          })
-        )
-      );
-    }
+    const featureMd = (result.featureDetails || []).map((f) => `### ${f.name}\n${f.description}`).join("\n\n");
 
-    let searchVolume: number | null = null;
-    if (result.searchKeywords?.[0]) {
-      try {
-        const mcp = createSellerspriteMcpClient();
-        const kwRes = await mcp.callToolSafe("keyword_research", {
-          keyword: result.searchKeywords[0],
-          marketplace: "us",
-        });
-        if (kwRes.ok && kwRes.data) {
-          const d = typeof kwRes.data === "string" ? JSON.parse(kwRes.data) : kwRes.data;
-          searchVolume = d.monthlySearchVolume ?? d.searchVolume ?? null;
-        }
-      } catch { /* non-blocking */ }
-    }
-
-    const featureMd = (result.featureDetails || [])
-      .map((f) => `### ${f.name}\n${f.description}`)
-      .join("\n\n");
-
-    const selectedTrend = trendItems[result.selectedTrendIndex] ?? trendItems[0];
     const idea = await prisma.threeCProductIdea.create({
       data: {
-        name: result.productName,
-        category: result.category || selectedTrend?.category || "phone_accessories",
-        description: result.recommendation,
-        targetMarket: result.targetMarket || "US",
-        keyFeatures: JSON.stringify(result.keyFeatures || []),
-        sellingPoints: JSON.stringify([]),
-        estimatedPrice: result.priceRange,
-        totalScore: result.score || selectedTrend?.trendScore || 70,
-        trendScore: Math.round(((selectedTrend?.trendScore || 70) / 100) * 25),
-        recommendation: result.score >= 75 ? "go" : "watch",
-        searchVolume,
-        aiAnalysis: result.recommendation,
-        status: "validated",
-        createdBy: userId,
+        trendId: trendRecords[result.selectedTrendIndex]?.id ?? trendRecords[0]?.id ?? null,
+        name: result.productName, category: result.category || "phone_accessories",
+        description: result.recommendation, targetMarket: result.targetMarket || "US",
+        keyFeatures: JSON.stringify(result.keyFeatures || []), sellingPoints: JSON.stringify([]),
+        estimatedPrice: result.priceRange, totalScore: result.score || computeKeywordScore(topKw),
+        trendScore: Math.round(computeKeywordScore(topKw) / 4),
+        recommendation: result.score >= 70 ? "go" : "watch",
+        searchVolume: topKw.searches, aiAnalysis: result.recommendation,
+        status: "validated", createdBy: userId,
       },
     });
 
     await prisma.threeCTopPickReport.update({
       where: { id: report.id },
       data: {
-        ideaId: idea.id,
-        productName: result.productName,
-        productNameEn: result.productNameEn || "",
-        executiveSummary: result.recommendation,
-        estimatedRetailPrice: result.priceRange || null,
-        estimatedCogs: result.estimatedCost || null,
-        estimatedMargin: result.estimatedMargin || null,
+        ideaId: idea.id, productName: result.productName, productNameEn: result.productNameEn || "",
+        executiveSummary: result.recommendation, estimatedRetailPrice: result.priceRange || null,
+        estimatedCogs: result.estimatedCost || null, estimatedMargin: result.estimatedMargin || null,
         keyFeatures: featureMd || "",
-        marketAnalysis: result.targetAudience
-          ? `### 目标市场\n${result.targetMarket || "US"} 市场\n\n### 目标消费者\n${result.targetAudience}`
-          : "",
-        briefFeatures: (result.keyFeatures || []).join(", "),
-        briefCompetition: result.competition || "medium",
-        briefScore: result.score || 70,
-        status: "completed",
-        phase: "brief",
+        marketAnalysis: result.targetAudience ? `### 目标市场\n${result.targetMarket || "US"}\n\n### 目标消费者\n${result.targetAudience}` : "",
+        briefFeatures: (result.keyFeatures || []).join(", "), briefCompetition: result.competition || "medium",
+        briefScore: result.score || 70, status: "completed", phase: "brief",
       },
     });
 
-    await prisma.dailyThreeCReport
-      .upsert({
-        where: { reportDate: today },
-        create: {
-          reportDate: today,
-          trendsFound: trendItems.length,
-          ideasGenerated: 1,
-          highScoreIdeas: result.score >= 70 ? 1 : 0,
-          trendsSummary: trendItems.map((t) => `- ${t.title} (${t.market})`).join("\n"),
-          ideasSummary: `精选：**${result.productName}** — ${result.recommendation}`,
-          status: "completed",
-        },
-        update: {
-          trendsFound: trendItems.length,
-          ideasGenerated: 1,
-          ideasSummary: `精选：**${result.productName}** — ${result.recommendation}`,
-          status: "completed",
-        },
-      })
-      .catch(() => {});
+    await prisma.dailyThreeCReport.upsert({
+      where: { reportDate: today },
+      create: { reportDate: today, trendsFound: keywords.length, ideasGenerated: 1, highScoreIdeas: result.score >= 70 ? 1 : 0, trendsSummary: keywords.slice(0, 5).map((k) => `- ${k.keyword}`).join("\n"), ideasSummary: `精选：**${result.productName}**`, status: "completed" },
+      update: { trendsFound: keywords.length, ideasGenerated: 1, ideasSummary: `精选：**${result.productName}**`, status: "completed" },
+    }).catch(() => {});
 
     const finalReport = await prisma.threeCTopPickReport.findUnique({
       where: { id: report.id },

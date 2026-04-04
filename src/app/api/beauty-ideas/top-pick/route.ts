@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
 import { claudeJson } from "@/lib/claude-client";
-import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
+import {
+  BEAUTY_CONFIG,
+  scanBlueOceanKeywords,
+  computeKeywordScore,
+  buildTrendContent,
+} from "@/lib/idea-data-pipeline";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -16,16 +21,6 @@ export const maxDuration = 120;
 function getBeijingDate(): string {
   return new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
 }
-
-type TrendItem = {
-  source: string;
-  market: string;
-  title: string;
-  content: string;
-  ingredients: string[];
-  category: string;
-  trendScore: number;
-};
 
 type BriefResult = {
   selectedTrendIndex: number;
@@ -116,127 +111,94 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    console.info("[top-pick-brief] 开始生成简报...");
+    console.info("[top-pick-brief] Step1: 卖家精灵搜索蓝海关键词...");
 
-    const BRIEF_SYSTEM = `你是一位资深美妆行业分析师+产品总监，服务于亚马逊跨境美妆卖家。
-公司在美国、中国、韩国都有供应链，主做亚马逊和TikTok Shop线上销售。
+    // Step 1+2: Real data from keyword_research + google_trend
+    const keywords = await scanBlueOceanKeywords(BEAUTY_CONFIG);
+    if (keywords.length === 0) throw new Error("未发现符合条件的蓝海关键词");
+    console.info(`[top-pick-brief] 发现 ${keywords.length} 个蓝海关键词`);
 
-任务：
-1. 扫描当前 Top 5 美妆趋势
-2. 从中选出 1 个最适合我们做的产品方向
-3. 给出详细的推荐简报
+    // Save real trends to DB
+    const trendRecords = await prisma.$transaction(
+      keywords.slice(0, 5).map((kw) =>
+        prisma.beautyTrend.create({
+          data: {
+            source: "sellersprite_keyword_research",
+            market: kw.marketplace,
+            title: kw.keyword,
+            content: buildTrendContent(kw),
+            ingredients: JSON.stringify([]),
+            category: "skincare",
+            trendScore: computeKeywordScore(kw),
+            scannedAt: new Date(),
+          },
+        })
+      )
+    );
 
-选择标准：趋势热度高、竞争可进入、毛利率≥60%、我们供应链能做、适合线上销售。
-避开已饱和品类（普通保湿面霜、基础洁面等）。${avoidHint}${avoidProductsHint}
+    // Step 3: Claude designs ONE product from the top keyword
+    const topKw = keywords[0];
+    const kwDataStr = keywords.slice(0, 5).map((kw) =>
+      `关键词: ${kw.keyword} | 月搜索量: ${kw.searches} | 增长率: ${kw.growth.toFixed(0)}% | 商品数: ${kw.products} | 平均评论: ${Math.round(kw.avgRatings)} | 均价: $${kw.avgPrice.toFixed(2)} | CPC: $${kw.bid.toFixed(2)} | Google趋势: ${kw.googleTrendDirection}`
+    ).join("\n");
+
+    console.info("[top-pick-brief] Step3: Claude 基于真实数据设计产品...");
+    const result = await claudeJson<BriefResult>({
+      system: `你是一位资深美妆产品总监。以下关键词全部来自亚马逊和Google真实数据验证，确认为蓝海机会。
+请从中选出1个最适合做的方向，设计一个具体产品方案。
+
+严格要求：禁止编造不存在的产品概念或技术。产品必须围绕给定关键词设计。${avoidHint}${avoidProductsHint}
 
 返回JSON对象：
 {
-  "trends": [
-    {"source":"social_media","market":"US","title":"趋势标题","content":"50字描述","ingredients":["成分1"],"category":"skincare","trendScore":85},
-    ... 共5条
-  ],
   "selectedTrendIndex": 0-4,
   "productName": "中文产品名",
-  "productNameEn": "English Product Name",
-  "recommendation": "详细的推荐理由（300字左右），必须包含：1. 为什么选择该趋势；2. 目标市场的痛点分析；3. 产品的差异化核心卖点；4. 为什么适合亚马逊和TikTok Shop销售",
-  "ingredientDetails": [
-    {"name": "成分名", "efficacy": "功效说明（1-2句话）"},
-    {"name": "成分名2", "efficacy": "功效说明"},
-    {"name": "成分名3", "efficacy": "功效说明"}
-  ],
-  "keyIngredients": ["成分1","成分2","成分3"],
-  "priceRange": "$18-25",
-  "estimatedCost": "$4-6",
-  "estimatedMargin": "65%",
+  "productNameEn": "English Name",
+  "recommendation": "推荐理由（200字）",
+  "ingredientDetails": [{"name":"成分名","efficacy":"功效"}],
+  "keyIngredients": ["成分1","成分2"],
+  "priceRange": "$XX-XX",
+  "estimatedCost": "$X-X",
+  "estimatedMargin": "XX%",
   "competition": "low/medium/high",
-  "targetAudience": "目标消费者画像，如'25-35岁注重护肤的女性，偏好天然成分'",
+  "targetAudience": "目标消费者",
   "targetMarket": "US",
-  "score": 1-100的推荐信心分,
+  "score": 1-100,
   "category": "skincare",
-  "searchKeywords": ["amazon关键词1","关键词2"]
-}`;
-
-    const result = await claudeJson<{
-      trends: TrendItem[];
-    } & BriefResult>({
-      system: BRIEF_SYSTEM,
-      user: `今天是${today}，请完成趋势扫描+精选推荐。只返回JSON对象。`,
+  "searchKeywords": ["关键词1","关键词2"]
+}`,
+      user: `以下是经过双重验证的蓝海关键词：\n${kwDataStr}\n\n请选出1个设计产品方案。只返回JSON。`,
       maxTokens: 4096,
     });
 
-    if (!result) {
-      console.error("[top-pick-brief] ❌ claudeJson 返回 null（API 调用可能失败或返回空）");
-      throw new Error("简报生成失败：Claude API 返回空结果");
-    }
-    if (!result.productName) {
-      console.error("[top-pick-brief] ❌ Claude 返回了 JSON 但缺少 productName, keys:", Object.keys(result));
-      throw new Error("简报生成失败：返回数据缺少产品名称");
+    if (!result || !result.productName) {
+      throw new Error("Claude 产品设计失败");
     }
 
-    // Save trends
-    const trendItems = (result.trends || []).slice(0, 5);
-    if (trendItems.length > 0) {
-      await prisma.$transaction(
-        trendItems.map((t) =>
-          prisma.beautyTrend.create({
-            data: {
-              source: t.source || "social_media",
-              market: t.market || "US",
-              title: t.title,
-              content: t.content,
-              ingredients: JSON.stringify(t.ingredients || []),
-              category: t.category || "skincare",
-              trendScore: Math.min(100, Math.max(1, t.trendScore || 70)),
-              scannedAt: new Date(),
-            },
-          })
-        )
-      );
-    }
-
-    // Optional: Sellersprite quick check
-    let searchVolume: number | null = null;
-    if (result.searchKeywords?.[0]) {
-      try {
-        const mcp = createSellerspriteMcpClient();
-        const kwRes = await mcp.callToolSafe("keyword_research", {
-          keyword: result.searchKeywords[0],
-          marketplace: "us",
-        });
-        if (kwRes.ok && kwRes.data) {
-          const d = typeof kwRes.data === "string" ? JSON.parse(kwRes.data) : kwRes.data;
-          searchVolume = d.monthlySearchVolume ?? d.searchVolume ?? null;
-        }
-      } catch { /* non-blocking */ }
-    }
-
-    // Build ingredient markdown for brief display
     const ingredientMd = (result.ingredientDetails || [])
       .map((ing) => `### ${ing.name}\n${ing.efficacy}`)
       .join("\n\n");
 
-    // Create ProductIdea for relation
-    const selectedTrend = trendItems[result.selectedTrendIndex] ?? trendItems[0];
     const idea = await prisma.productIdea.create({
       data: {
+        trendId: trendRecords[result.selectedTrendIndex]?.id ?? trendRecords[0]?.id ?? null,
         name: result.productName,
-        category: result.category || selectedTrend?.category || "skincare",
+        category: result.category || "skincare",
         description: result.recommendation,
         targetMarket: result.targetMarket || "US",
         keyIngredients: JSON.stringify(result.keyIngredients || []),
         sellingPoints: JSON.stringify([]),
         estimatedPrice: result.priceRange,
-        totalScore: result.score || selectedTrend?.trendScore || 70,
-        trendScore: Math.round(((selectedTrend?.trendScore || 70) / 100) * 25),
-        recommendation: result.score >= 75 ? "go" : "watch",
-        searchVolume,
+        totalScore: result.score || computeKeywordScore(topKw),
+        trendScore: Math.round(computeKeywordScore(topKw) / 4),
+        recommendation: result.score >= 70 ? "go" : "watch",
+        searchVolume: topKw.searches,
         aiAnalysis: result.recommendation,
         status: "validated",
         createdBy: userId,
       },
     });
 
-    // Save brief report — populate more fields for richer brief display
     await prisma.topPickReport.update({
       where: { id: report.id },
       data: {
@@ -247,9 +209,7 @@ export async function POST(req: NextRequest) {
         estimatedRetailPrice: result.priceRange || null,
         estimatedCogs: result.estimatedCost || null,
         estimatedMargin: result.estimatedMargin || null,
-        // Store ingredient details as markdown even in brief phase
         keyIngredients: ingredientMd || "",
-        // Store target audience in marketAnalysis for brief display
         marketAnalysis: result.targetAudience
           ? `### 目标市场\n${result.targetMarket || "US"} 市场\n\n### 目标消费者\n${result.targetAudience}`
           : "",
@@ -261,25 +221,11 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Also update daily report
     await prisma.dailyBeautyReport
       .upsert({
         where: { reportDate: today },
-        create: {
-          reportDate: today,
-          trendsFound: trendItems.length,
-          ideasGenerated: 1,
-          highScoreIdeas: result.score >= 70 ? 1 : 0,
-          trendsSummary: trendItems.map((t) => `- ${t.title} (${t.market})`).join("\n"),
-          ideasSummary: `精选：**${result.productName}** — ${result.recommendation}`,
-          status: "completed",
-        },
-        update: {
-          trendsFound: trendItems.length,
-          ideasGenerated: 1,
-          ideasSummary: `精选：**${result.productName}** — ${result.recommendation}`,
-          status: "completed",
-        },
+        create: { reportDate: today, trendsFound: keywords.length, ideasGenerated: 1, highScoreIdeas: result.score >= 70 ? 1 : 0, trendsSummary: keywords.slice(0, 5).map((k) => `- ${k.keyword} (${k.marketplace})`).join("\n"), ideasSummary: `精选：**${result.productName}**`, status: "completed" },
+        update: { trendsFound: keywords.length, ideasGenerated: 1, ideasSummary: `精选：**${result.productName}**`, status: "completed" },
       })
       .catch(() => {});
 
