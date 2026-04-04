@@ -103,9 +103,10 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    console.info("[3c-top-pick-brief] Step1: 卖家精灵搜索蓝海关键词...");
+    console.info("[3c-top-pick] Starting scanBlueOceanKeywords with config:", JSON.stringify(THREE_C_CONFIG));
     const keywords = await scanBlueOceanKeywords(THREE_C_CONFIG);
-    if (keywords.length === 0) throw new Error("未发现符合条件的蓝海关键词");
+    console.info(`[3c-top-pick] scanBlueOceanKeywords returned ${keywords.length} keywords`);
+    if (keywords.length === 0) throw new Error("未发现符合条件的蓝海关键词，keyword_research 可能返回空数据");
 
     const trendRecords = await prisma.$transaction(
       keywords.slice(0, 5).map((kw) =>

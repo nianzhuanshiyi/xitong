@@ -172,16 +172,21 @@ async function fetchKeywordsForMarket(
   let items = res.ok ? extractKwItems(res.data) : [];
 
   if (items.length < 5) {
-    console.info(`${log} ${marketplace}: ${items.length} results, relaxing...`);
-    const relaxed = { ...base, minSearchNearlyCr: undefined, minSearches: Math.max(300, (config.minSearches ?? 1000) / 2), maxProducts: 500 };
+    console.info(`${log} ${marketplace}: only ${items.length} results (ok=${res.ok}), relaxing filters...`);
+    if (!res.ok) console.warn(`${log} ${marketplace}: first call error:`, res.error);
+    // Remove growth filter and relax thresholds
+    const { minSearchNearlyCr: _drop, ...withoutGrowth } = base;
+    void _drop;
+    const relaxed = { ...withoutGrowth, minSearches: Math.max(300, (config.minSearches ?? 1000) / 2), maxProducts: 500 };
+    console.info(`${log} ${marketplace}: retrying with relaxed params:`, JSON.stringify(relaxed).slice(0, 300));
     res = await mcp.callToolSafe("keyword_research", { request: relaxed });
-    items = res.ok ? extractKwItems(res.data) : items;
+    const newItems = res.ok ? extractKwItems(res.data) : [];
+    console.info(`${log} ${marketplace}: relaxed query returned ${newItems.length} items (ok=${res.ok})`);
+    if (newItems.length > items.length) items = newItems;
+    if (!res.ok) console.warn(`${log} ${marketplace}: relaxed call error:`, res.error);
   }
 
-  if (!res.ok && items.length === 0) {
-    console.warn(`${log} ${marketplace}: keyword_research failed:`, res.ok ? "no data" : res.error);
-  }
-
+  console.info(`${log} ${marketplace}: keyword_research final: ${items.length} items`);
   return items;
 }
 
@@ -209,8 +214,14 @@ async function verifyWithGoogleTrends(
       const gtRes = await mcp.callToolSafe("google_trend", {
         request: { keyword, marketplace },
       });
-      if (gtRes.ok) direction = parseTrendDirection(gtRes.data);
-    } catch { /* keep unknown */ }
+      if (gtRes.ok) {
+        direction = parseTrendDirection(gtRes.data);
+      } else {
+        console.warn(`${log} google_trend error for "${keyword}":`, gtRes.error);
+      }
+    } catch (e) {
+      console.warn(`${log} google_trend exception for "${keyword}":`, e instanceof Error ? e.message : e);
+    }
 
     if (direction === "declining") {
       console.info(`${log} ${keyword} → declining ✗`);
@@ -262,7 +273,7 @@ export async function scanBlueOceanKeywords(config: ScanConfig): Promise<BlueOce
         avgRatings: num(kw.avgRatings),
         avgPrice: num(kw.avgPrice),
         bid: num(kw.bid),
-        araClickRate: num(kw.araClickRate) ?? num(kw.monopolyClickRate),
+        araClickRate: num(kw.araClickRate) || num(kw.monopolyClickRate),
         supplyDemandRatio: num(kw.supplyDemandRatio),
         growth: num(kw.searchNearlyCr) || num(kw.searches_growth),
         googleTrendDirection: kw._direction,
