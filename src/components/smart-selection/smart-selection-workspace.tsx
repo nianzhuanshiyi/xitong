@@ -423,6 +423,25 @@ export function SmartSelectionWorkspace() {
     }
     setScanning(true);
     setScanProgress(0);
+    setScanStep("保存筛选条件…");
+
+    // Auto-save filters to DB before scanning so scan route reads latest config
+    try {
+      const saveRes = await fetch(`/api/smart-selection/plans/${planId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filtersJson: JSON.stringify(filters) }),
+      });
+      if (!saveRes.ok) {
+        const sj = await saveRes.json().catch(() => ({}));
+        throw new Error((sj as { message?: string }).message ?? "保存筛选条件失败");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "保存失败");
+      setScanning(false);
+      return;
+    }
+
     setScanStep("连接扫描服务…");
     try {
       const res = await fetch("/api/smart-selection/scan/stream", {

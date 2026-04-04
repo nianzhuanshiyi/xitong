@@ -101,7 +101,9 @@ export async function POST(req: Request) {
   if (plan.createdById !== session!.user.id) return new Response("无权限", { status: 403 });
   // active check removed — all plans can scan
 
+  console.log("[scan] filtersJson:", plan.filtersJson?.slice(0, 500));
   const filters = parseScanFilters(plan.filtersJson, plan.marketplace);
+  console.log("[scan] parsed subcategories count:", filters.subcategories.length);
 
   if (filters.subcategories.length === 0) {
     return new Response("请先在方案中配置至少一个扫描类目", { status: 400 });
