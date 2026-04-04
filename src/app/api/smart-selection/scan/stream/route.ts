@@ -99,7 +99,7 @@ export async function POST(req: Request) {
   });
   if (!plan) return new Response("方案不存在", { status: 404 });
   if (plan.createdById !== session!.user.id) return new Response("无权限", { status: 403 });
-  if (!plan.active) return new Response("该方案尚未开放", { status: 403 });
+  // active check removed — all plans can scan
 
   const filters = parseScanFilters(plan.filtersJson, plan.marketplace);
 

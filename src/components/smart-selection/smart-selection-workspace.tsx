@@ -417,8 +417,8 @@ export function SmartSelectionWorkspace() {
   }
 
   async function runScan() {
-    if (!planId || !currentPlan?.active) {
-      toast.error("请先选择已开放的方案");
+    if (!planId) {
+      toast.error("请先选择一个方案");
       return;
     }
     setScanning(true);
@@ -706,11 +706,7 @@ export function SmartSelectionWorkspace() {
             )}
           >
             {p.name}
-            {!p.active ? (
-              <Badge variant="secondary" className="ml-2 text-[10px]">
-                即将开放
-              </Badge>
-            ) : null}
+            {null}
           </button>
         ))}
       </div>
@@ -1200,18 +1196,14 @@ export function SmartSelectionWorkspace() {
                     type="button"
                     variant="secondary"
                     onClick={() => saveFilters()}
-                    disabled={savingFilters || !currentPlan?.active}
+                    disabled={savingFilters}
                   >
                     {savingFilters ? (
                       <Loader2 className="mr-2 size-4 animate-spin" />
                     ) : null}
                     保存筛选条件
                   </Button>
-                  {!currentPlan?.active ? (
-                    <span className="text-sm text-muted-foreground self-center">
-                      该方案即将开放，暂不可保存。
-                    </span>
-                  ) : null}
+                  {null}
                 </div>
               </CardContent>
             ) : null}
@@ -1229,7 +1221,7 @@ export function SmartSelectionWorkspace() {
                 type="button"
                 size="lg"
                 className="w-full sm:w-auto"
-                disabled={scanning || !currentPlan?.active}
+                disabled={scanning}
                 onClick={() => runScan()}
               >
                 {scanning ? (
@@ -1354,7 +1346,7 @@ export function SmartSelectionWorkspace() {
               <Button
                 type="button"
                 variant="secondary"
-                disabled={scanning || !currentPlan?.active}
+                disabled={scanning}
                 onClick={() => runScan()}
               >
                 重新扫描

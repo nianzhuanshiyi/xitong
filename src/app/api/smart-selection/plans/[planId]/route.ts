@@ -82,6 +82,7 @@ export async function PATCH(
         ? { filtersJson: parsed.data.filtersJson }
         : {}),
       ...(parsed.data.name != null ? { name: parsed.data.name } : {}),
+      active: true, // ensure plan is always active after save
     },
   });
   return NextResponse.json(row);
