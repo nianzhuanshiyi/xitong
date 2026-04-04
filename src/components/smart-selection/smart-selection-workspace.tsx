@@ -383,7 +383,15 @@ export function SmartSelectionWorkspace() {
       if (sRes.ok) setStats(sj as Stats);
       else setStats(null);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "加载失败");
+      const msg = e instanceof Error ? e.message : "加载失败";
+      if (msg.includes("不存在") || msg.includes("未找到") || msg.includes("404")) {
+        toast.error("该方案已删除或不存在，请选择其他方案或新建方案");
+        setPlanId(null);
+        setResults([]);
+        setStats(null);
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setLoadingPlan(false);
     }
@@ -392,6 +400,14 @@ export function SmartSelectionWorkspace() {
   useEffect(() => {
     loadPlans();
   }, [loadPlans]);
+
+  // Clear planId if it doesn't exist in the loaded plans list
+  useEffect(() => {
+    if (planId && plansLoaded && plans.length > 0 && !plans.some((p) => p.id === planId)) {
+      setPlanId(null);
+      toast.error("该方案已删除或不存在，请选择其他方案或新建方案");
+    }
+  }, [planId, plans, plansLoaded]);
 
   useEffect(() => {
     if (planId) loadPlanDetail(planId);
