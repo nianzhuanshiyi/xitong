@@ -116,7 +116,7 @@ function calculateDataDrivenScore(ctx: {
   const details: Record<string, string> = {};
 
   // D1: Market Capacity (max 12) — monthly search volume
-  const searchVol = deepNumAny(ctx.trafficKeyword, ["searches", "monthlySearchVolume", "searchVolume", "searchesGrowthRate"]);
+  const searchVol = deepNumAny(ctx.trafficKeyword, ["searches", "monthlySearchVolume", "searchVolume"]);
   let d1 = 6;
   if (searchVol !== null) {
     if (searchVol >= 100000) d1 = 12;
@@ -132,7 +132,7 @@ function calculateDataDrivenScore(ctx: {
 
   // D2: Competition (max 18) — products count, SPR, supply/demand ratio, monopoly click
   const products = deepNumAny(ctx.marketResearch, ["products", "productCount"]);
-  const spr = deepNumAny(ctx.marketResearch, ["spr", "supplyDemandRatio"]);
+  const spr = deepNumAny(ctx.marketResearch, ["spr"]);
   const monopolyClick = deepNumAny(ctx.marketResearch, ["monopolyClickRate", "clickConcentration"]);
   let d2 = 9;
   const d2Parts: string[] = [];
@@ -207,10 +207,11 @@ function calculateDataDrivenScore(ctx: {
   let d6 = 4;
   if (ratings.length > 0) {
     const avgRating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
-    if (avgRating < 3.8) { d6 = 8; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（低，容易超越）`; }
-    else if (avgRating < 4.2) { d6 = 6; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（中等）`; }
-    else if (avgRating < 4.5) { d6 = 3; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（较高）`; }
-    else { d6 = 1; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（极高，难超越）`; }
+    if (avgRating < 4.0) { d6 = 8; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（低，容易超越）`; }
+    else if (avgRating < 4.3) { d6 = 6; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（中等，有机会超越）`; }
+    else if (avgRating < 4.5) { d6 = 4; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（较高，需要产品力过硬）`; }
+    else if (avgRating < 4.7) { d6 = 2; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（高，难超越）`; }
+    else { d6 = 1; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（极高，几乎无法超越）`; }
   } else {
     details.reviewBarrier = "评分数据缺失，使用默认值";
   }
@@ -247,10 +248,10 @@ function calculateDataDrivenScore(ctx: {
 
       // Sub-score A: avg CPC bid (8 points)
       let cpcScore = 4;
-      if (avgBid <= 0.50) cpcScore = 8;
-      else if (avgBid <= 0.80) cpcScore = 6;
-      else if (avgBid <= 1.20) cpcScore = 4;
-      else if (avgBid <= 2.00) cpcScore = 2;
+      if (avgBid <= 0.80) cpcScore = 8;
+      else if (avgBid <= 1.30) cpcScore = 6;
+      else if (avgBid <= 2.00) cpcScore = 4;
+      else if (avgBid <= 3.00) cpcScore = 2;
       else cpcScore = 0;
       adParts.push(`平均CPC $${avgBid.toFixed(2)}`);
 
@@ -258,10 +259,10 @@ function calculateDataDrivenScore(ctx: {
       let ratioScore = 4;
       if (ctx.sellingPrice > 0) {
         const cpcRatio = avgBid / ctx.sellingPrice;
-        if (cpcRatio <= 0.03) ratioScore = 8;
-        else if (cpcRatio <= 0.05) ratioScore = 6;
-        else if (cpcRatio <= 0.08) ratioScore = 4;
-        else if (cpcRatio <= 0.12) ratioScore = 2;
+        if (cpcRatio <= 0.04) ratioScore = 8;
+        else if (cpcRatio <= 0.07) ratioScore = 6;
+        else if (cpcRatio <= 0.10) ratioScore = 4;
+        else if (cpcRatio <= 0.15) ratioScore = 2;
         else ratioScore = 0;
         adParts.push(`CPC占售价比${(cpcRatio * 100).toFixed(1)}%`);
       }
@@ -625,7 +626,8 @@ export async function runProductAnalysis(
   // Claude ±5 adjustment
   type AdjustJson = {
     adjustment?: number;
-    rationale?: string;
+    verdict?: string;
+    conclusion?: string;
   };
 
   const dimDetailStr = Object.entries(dimDetails)
@@ -633,15 +635,34 @@ export async function runProductAnalysis(
     .join("\n");
 
   const adjustJson = await claudeJson<AdjustJson>({
-    system:
-      "你是亚马逊选品决策助手。请全部使用中文回答，不要使用英文（专有名词如 ASIN、BSR、FBA、SPR 除外）。数据驱动评分系统已给出基础分，你需要根据数据摘要中可能遗漏的定性因素（如品牌壁垒、政策风险、季节性等）给出微调。只输出 JSON：{adjustment: -5到5之间的整数, rationale: string}。rationale 必须使用中文。adjustment 正数表示数据低估了机会，负数表示数据高估了机会。",
+    system: `你是一位经验丰富的亚马逊选品顾问。请全部使用中文回答（专有名词如 ASIN、BSR、FBA、SPR、CPC、PPC 除外）。
+
+你的任务：基于数据评分和市场数据，给出一个详细的选品结论，帮助团队判断「做一款类似产品进入这个市场，能不能活下来」。
+
+请输出 JSON，包含三个字段：
+{
+  "adjustment": -5到5之间的整数（正数=数据低估了机会，负数=数据高估了机会）,
+  "verdict": "建议进入" 或 "谨慎进入" 或 "不建议进入",
+  "conclusion": "详细分析结论（见下方要求）"
+}
+
+conclusion 字段必须包含以下 5 个部分，用序号标注，每部分 1-2 句话：
+
+1. 【市场判断】这个市场的需求是否真实且足够大？增长还是萎缩？
+2. 【竞争现状】头部玩家是谁？新品进去能不能拿到流量和转化？评论壁垒能否追上？
+3. 【利润可行性】按当前售价和成本结构，广告投入期能否撑住？稳定后利润是否健康？
+4. 【最大风险】进入这个市场最可能失败的原因是什么？（只说最关键的1个）
+5. 【行动建议】如果决定进入，第一步应该怎么做？（具体到关键词策略、定价、差异化方向等）
+
+语气要求：像一个资深同事在开会时给建议，直接、具体、不说废话。`,
     user: `数据驱动基础分: ${dataTotal}/100\n各维度详情:\n${dimDetailStr}\n\n数据摘要:\n${truncateJson(contextForAi, 8000)}`,
   });
 
   const adjustment = adjustJson && typeof adjustJson.adjustment === "number"
     ? Math.max(-5, Math.min(5, Math.round(adjustJson.adjustment)))
     : 0;
-  const adjustRationale = adjustJson?.rationale ?? "";
+  const verdict = adjustJson?.verdict ?? "";
+  const conclusion = adjustJson?.conclusion ?? "";
 
   const finalTotal = Math.max(0, Math.min(100, dataTotal + adjustment));
   const band = bandFromTotal(finalTotal);
@@ -650,7 +671,7 @@ export async function runProductAnalysis(
     band,
     label: bandLabel(band),
     dimensions: dataDimensions,
-    rationale: `数据驱动基础分 ${dataTotal}${adjustment >= 0 ? "+" : ""}${adjustment} = ${finalTotal}。${adjustRationale}`,
+    rationale: `【${verdict || bandLabel(band)}】综合评分 ${finalTotal}/100（基础分${dataTotal}${adjustment >= 0 ? "+" : ""}${adjustment}）\n\n${conclusion}`,
   };
 
   p("claude_report", "生成完整报告", 93);
