@@ -361,7 +361,12 @@ export function SmartSelectionWorkspace() {
         fetch(`/api/smart-selection/plans/${id}/stats`),
       ]);
       const pj = await pRes.json().catch(() => ({}));
-      if (!pRes.ok) throw new Error(pj.message ?? "加载方案失败");
+      if (!pRes.ok) {
+        if (pRes.status === 404 || pRes.status === 403) {
+          throw new Error("方案不存在");
+        }
+        throw new Error((pj as { message?: string }).message ?? "加载方案失败");
+      }
       const plan = pj as {
         filtersJson: string;
         slug: string;
