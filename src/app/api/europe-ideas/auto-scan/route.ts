@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { claudeJson } from "@/lib/claude-client";
-import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
 import { scoreIdeaWithKeywordMiner, buildIdeaAnalysis } from "@/lib/idea-scoring";
-import { extractKwItems, enrichWithGoogleTrends, computeTrendScore, buildTrendContent } from "@/lib/idea-trend-helpers";
+import {
+  EUROPE_CONFIG,
+  scanBlueOceanKeywords,
+  generateIdeasFromKeywords,
+  computeKeywordScore,
+  buildTrendContent,
+  type BlueOceanKeyword,
+} from "@/lib/idea-data-pipeline";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -15,29 +20,15 @@ export async function POST(req: NextRequest) {
   }
 
   const today = new Date().toISOString().slice(0, 10);
-
-  const existing = await prisma.dailyEuropeReport.findUnique({
-    where: { reportDate: today },
-  });
+  const existing = await prisma.dailyEuropeReport.findUnique({ where: { reportDate: today } });
   if (existing && existing.status === "completed") {
     return NextResponse.json({ message: "今日已完成扫描", skipped: true });
   }
 
-  const report = existing
-    ? existing
-    : await prisma.dailyEuropeReport.create({
-        data: { reportDate: today, status: "generating" },
-      });
-
-  if (existing) {
-    await prisma.dailyEuropeReport.update({
-      where: { id: report.id },
-      data: { status: "generating" },
-    });
-  }
+  const report = existing ?? await prisma.dailyEuropeReport.create({ data: { reportDate: today, status: "generating" } });
+  if (existing) await prisma.dailyEuropeReport.update({ where: { id: report.id }, data: { status: "generating" } });
 
   try {
-    // ── Step 1: 用卖家精灵找真实蓝海关键词（DE/UK/FR 三站） ──
     const todayStart = new Date(today + "T00:00:00Z");
     const todayEnd = new Date(today + "T23:59:59Z");
     let createdTrends = await prisma.europeTrend.findMany({
@@ -45,220 +36,76 @@ export async function POST(req: NextRequest) {
       orderBy: { trendScore: "desc" },
     });
 
+    let keywords: BlueOceanKeyword[];
+
     if (createdTrends.length === 0) {
-      console.info("[europe-auto-scan] Step1: 卖家精灵搜索欧洲蓝海关键词...");
-      const mcp = createSellerspriteMcpClient();
-      const allEnriched: Array<Record<string, unknown> & { _trendDirection: string; _market: string }> = [];
-
-      for (const market of ["DE", "UK", "FR"] as const) {
-        let kwRes = await mcp.callToolSafe("keyword_research", {
-          request: { marketplace: market, minSearches: 500, maxProducts: 200, minSupplyDemandRatio: 3, maxRatings: 300, maxAraClickRate: 0.7, minSearchNearlyCr: 10, size: 10, order: { field: "searches_growth", desc: true } },
-        });
-        if (kwRes.ok && extractKwItems(kwRes.data).length < 3) {
-          kwRes = await mcp.callToolSafe("keyword_research", {
-            request: { marketplace: market, minSearches: 300, maxProducts: 500, size: 10, order: { field: "searches_growth", desc: true } },
-          });
-        }
-        if (kwRes.ok) {
-          const items = extractKwItems(kwRes.data);
-          console.info(`[europe-auto-scan] ${market} Step1: ${items.length} keywords`);
-          // Step 2: Google Trends per market
-          const enriched = await enrichWithGoogleTrends(items, market, mcp, `[europe-auto-scan:${market}]`);
-          allEnriched.push(...enriched);
-        } else {
-          console.warn(`[europe-auto-scan] ${market} failed:`, kwRes.error);
-        }
-      }
-
-      if (allEnriched.length === 0) throw new Error("卖家精灵未返回任何欧洲关键词数据");
-      console.info(`[europe-auto-scan] Step1+2 完成: ${allEnriched.length} 条`);
-
-      // Sort all: up first
-      const order: Record<string, number> = { up: 0, stable: 1, unknown: 2, down: 3 };
-      allEnriched.sort((a, b) => (order[a._trendDirection] ?? 2) - (order[b._trendDirection] ?? 2));
+      console.info("[europe-auto-scan] Scanning...");
+      keywords = await scanBlueOceanKeywords(EUROPE_CONFIG);
+      if (keywords.length === 0) throw new Error("未发现蓝海关键词");
 
       createdTrends = await prisma.$transaction(
-        allEnriched.map((kw) =>
+        keywords.map((kw) =>
           prisma.europeTrend.create({
-            data: {
-              source: "sellersprite_keyword_research",
-              market: kw._market,
-              title: String(kw.keywords ?? kw.keyword ?? ""),
-              content: buildTrendContent(kw as Parameters<typeof buildTrendContent>[0], "€"),
-              keywords: JSON.stringify([]),
-              category: "home",
-              trendScore: computeTrendScore(kw as Parameters<typeof computeTrendScore>[0], true),
-              sourceUrl: null,
-              scannedAt: new Date(),
-            },
+            data: { source: "sellersprite_keyword_research", market: kw.marketplace, title: kw.keyword, content: buildTrendContent(kw), keywords: JSON.stringify([]), category: "home", trendScore: computeKeywordScore(kw), sourceUrl: null, scannedAt: new Date() },
           })
         )
       );
-      console.info(`[europe-auto-scan] 写入 ${createdTrends.length} 条趋势`);
     } else {
-      console.info(`[europe-auto-scan] 复用今日已有 ${createdTrends.length} 条趋势`);
+      console.info(`[europe-auto-scan] Reusing ${createdTrends.length} today's trends`);
+      keywords = createdTrends.map((t) => {
+        const s = parseContent(t.content);
+        return { keyword: t.title, searches: s.searches, products: s.products, avgRatings: s.avgRatings, avgPrice: 0, bid: s.bid, araClickRate: 0, supplyDemandRatio: s.sdr, growth: s.growth, googleTrendDirection: s.dir, marketplace: t.market };
+      });
     }
 
-    const IDEA_PROMPT = `你是一位资深欧洲跨境电商产品经理。以下关键词全部来自亚马逊欧洲站和Google真实数据验证，确认为"需求增长中+竞争低"的蓝海机会。
-每个关键词包含：月搜索量、增长率、商品数、平均评论数、CPC竞价、Google趋势方向。
-请基于每个关键词的真实市场数据设计具体产品方案。严禁编造不存在的产品概念或技术。优先为Google趋势上升的关键词设计产品。
+    console.info("[europe-auto-scan] Generating ideas...");
+    const ideas = await generateIdeasFromKeywords(keywords, "europe");
+    let ideasCreated = 0, highScore = 0;
 
-每个创意需要包含：
-{
-  "trendId": "关联的趋势ID",
-  "name": "产品名称（中英文）",
-  "category": "beauty/3c_accessories/home/pet/sports/outdoor/office/fashion_accessories",
-  "description": "产品描述（150-300字）",
-  "targetMarket": "DE",
-  "keyFeatures": ["核心功能1", "功能2"],
-  "sellingPoints": ["卖点1", "卖点2", "卖点3"],
-  "estimatedPrice": "€15-25",
-  "estimatedCost": "€3-6",
-  "searchKeywords": ["amazon搜索关键词1", "关键词2"]
-}
-
-要求：售价≥15欧元，<500g适合FBA，排除食品/保健品/医疗器械/儿童玩具/电池类/化学品/大件家具。
-请返回JSON数组。`;
-
-    type IdeaItem = {
-      trendId: string;
-      name: string;
-      category: string;
-      description: string;
-      targetMarket: string;
-      keyFeatures: string[];
-      sellingPoints: string[];
-      estimatedPrice: string;
-      estimatedCost: string;
-      searchKeywords: string[];
-    };
-
-    const trendsForAI = createdTrends.map((t) => ({
-      id: t.id,
-      title: t.title,
-      content: t.content,
-      market: t.market,
-      keywords: t.keywords,
-      category: t.category,
-      trendScore: t.trendScore,
-    }));
-
-    console.info("[europe-auto-scan] 开始生成创意...");
-    const ideas = await claudeJson<IdeaItem[]>({
-      system: IDEA_PROMPT,
-      user: `以下是最新扫描到的欧洲蓝海趋势，请为每条趋势生成1-2个新品创意：\n\n${JSON.stringify(trendsForAI, null, 2)}\n\n只返回JSON数组，不要包含任何其他文字说明。`,
-      maxTokens: 16384,
-    });
-
-    let ideasCreated = 0;
-    let highScore = 0;
-
-    if (ideas && Array.isArray(ideas)) {
-      const admin = await prisma.user.findFirst({
-        where: { role: "ADMIN" },
-        select: { id: true },
-      });
+    if (ideas.length > 0) {
+      const admin = await prisma.user.findFirst({ where: { role: "ADMIN" }, select: { id: true } });
       const creatorId = admin?.id ?? "system";
 
       for (const idea of ideas) {
-        const trendRow = createdTrends.find((t) => t.id === idea.trendId);
-        const targetMarket = idea.targetMarket || trendRow?.market || "DE";
-
-        const scores = await scoreIdeaWithKeywordMiner(
-          idea.searchKeywords?.[0] ?? "",
-          targetMarket,
-          "[europe-auto-scan]",
-        );
-
+        const tm = idea.targetMarket || keywords.find((k) => k.keyword === idea.keyword)?.marketplace || "DE";
+        const scores = await scoreIdeaWithKeywordMiner(idea.searchKeywords?.[0] ?? "", tm, "[europe-auto-scan]");
+        const trendRow = createdTrends.find((t) => t.title === idea.keyword);
         await prisma.europeProductIdea.create({
           data: {
-            trendId: trendRow?.id ?? null,
-            name: idea.name,
-            category: idea.category || "home",
-            description: idea.description,
-            targetMarket,
-            keyFeatures: JSON.stringify(idea.keyFeatures || []),
+            trendId: trendRow?.id ?? null, name: idea.name, category: idea.category || "home",
+            description: idea.description, targetMarket: tm,
+            keyFeatures: JSON.stringify(idea.keyIngredients || []),
             sellingPoints: JSON.stringify(idea.sellingPoints || []),
-            estimatedPrice: idea.estimatedPrice,
-            estimatedCost: idea.estimatedCost,
-            marketData: scores.marketDataJson,
-            searchVolume: scores.searchVolume,
-            competitionLevel: scores.competitionLevel,
-            trendScore: scores.trendScore,
-            marketScore: scores.marketScore,
-            competitionScore: scores.competitionScore,
-            profitScore: scores.profitScore,
-            totalScore: scores.totalScore,
+            estimatedPrice: idea.estimatedPrice, estimatedCost: idea.estimatedCost,
+            marketData: scores.marketDataJson, searchVolume: scores.searchVolume,
+            competitionLevel: scores.competitionLevel, trendScore: scores.trendScore,
+            marketScore: scores.marketScore, competitionScore: scores.competitionScore,
+            profitScore: scores.profitScore, totalScore: scores.totalScore,
             recommendation: scores.recommendation,
             aiAnalysis: buildIdeaAnalysis(idea.name, idea.description, scores),
-            status: "draft",
-            createdBy: creatorId,
+            status: "draft", createdBy: creatorId,
           },
         });
-
         ideasCreated++;
         if (scores.totalScore >= 70) highScore++;
       }
     }
 
-    const trendsSummary = createdTrends
-      .map(
-        (t) =>
-          `- **${t.title}** (${t.market}, 热度${t.trendScore}) — ${t.content.slice(0, 80)}…`
-      )
-      .join("\n");
+    const trendsSummary = createdTrends.map((t) => `- **${t.title}** (${t.market}, 分数${t.trendScore})`).join("\n");
+    const highScoreIdeas = await prisma.europeProductIdea.findMany({ where: { totalScore: { gte: 70 }, createdAt: { gte: todayStart } }, orderBy: { totalScore: "desc" }, take: 5 });
+    const ideasSummary = highScoreIdeas.length > 0 ? highScoreIdeas.map((i) => `- **${i.name}** — 总分 ${i.totalScore}`).join("\n") : "今日无高分创意（≥70分）";
 
-    const highScoreIdeas = await prisma.europeProductIdea.findMany({
-      where: {
-        totalScore: { gte: 70 },
-        createdAt: { gte: new Date(today + "T00:00:00Z") },
-      },
-      orderBy: { totalScore: "desc" },
-      take: 5,
-    });
+    await prisma.dailyEuropeReport.update({ where: { id: report.id }, data: { trendsFound: createdTrends.length, ideasGenerated: ideasCreated, highScoreIdeas: highScore, trendsSummary, ideasSummary, status: "completed" } });
 
-    const ideasSummary = highScoreIdeas.length > 0
-      ? highScoreIdeas
-          .map(
-            (i) =>
-              `- **${i.name}** — 总分 ${i.totalScore}（趋势${i.trendScore}/市场${i.marketScore}/竞争${i.competitionScore}/利润${i.profitScore}）`
-          )
-          .join("\n")
-      : "今日无高分创意（≥70分）";
-
-    await prisma.dailyEuropeReport.update({
-      where: { id: report.id },
-      data: {
-        trendsFound: createdTrends.length,
-        ideasGenerated: ideasCreated,
-        highScoreIdeas: highScore,
-        trendsSummary,
-        ideasSummary,
-        status: "completed",
-      },
-    });
-
-    console.info(
-      `[europe-auto-scan] ${today} 完成: ${createdTrends.length} 趋势, ${ideasCreated} 创意, ${highScore} 高分`
-    );
-
-    return NextResponse.json({
-      ok: true,
-      date: today,
-      trendsFound: createdTrends.length,
-      ideasGenerated: ideasCreated,
-      highScoreIdeas: highScore,
-    });
+    return NextResponse.json({ ok: true, date: today, trendsFound: createdTrends.length, ideasGenerated: ideasCreated, highScoreIdeas: highScore });
   } catch (e) {
     console.error("[europe-auto-scan]", e);
-    await prisma.dailyEuropeReport.update({
-      where: { id: report.id },
-      data: { status: "failed" },
-    });
-    return NextResponse.json(
-      { message: e instanceof Error ? e.message : "自动扫描失败" },
-      { status: 500 }
-    );
+    await prisma.dailyEuropeReport.update({ where: { id: report.id }, data: { status: "failed" } });
+    return NextResponse.json({ message: e instanceof Error ? e.message : "自动扫描失败" }, { status: 500 });
   }
 }
 
+function parseContent(c: string) {
+  const n = (p: RegExp) => { const m = c.match(p); return m ? parseFloat(m[1].replace(/,/g, "")) : 0; };
+  return { searches: n(/月搜索量([\d,]+)/), growth: n(/增长率([\d.]+)%/), products: n(/商品数(\d+)/), avgRatings: n(/平均评论(\d+)/), sdr: n(/供需比([\d.]+)/), bid: n(/CPC\s*[€$]([\d.]+)/), dir: (c.includes("上升") ? "rising" : c.includes("平稳") ? "stable" : "unknown") as BlueOceanKeyword["googleTrendDirection"] };
+}

@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
-import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
-import { extractKwItems, enrichWithGoogleTrends, computeTrendScore, buildTrendContent } from "@/lib/idea-trend-helpers";
+import { EUROPE_CONFIG, scanBlueOceanKeywords, computeKeywordScore, buildTrendContent } from "@/lib/idea-data-pipeline";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -12,46 +11,25 @@ export async function POST() {
   if (error) return error;
 
   try {
-    console.info("[europe-scan] Step1: keyword_research 搜索欧洲蓝海关键词...");
-    const mcp = createSellerspriteMcpClient();
-    const allEnriched: Parameters<typeof computeTrendScore>[0][] = [];
+    // Clean up old AI-fabricated trends
+    await prisma.europeTrend.deleteMany({ where: { source: { not: "sellersprite_keyword_research" } } });
 
-    for (const market of ["DE", "UK", "FR"] as const) {
-      let kwRes = await mcp.callToolSafe("keyword_research", {
-        request: { marketplace: market, minSearches: 500, maxProducts: 200, minSupplyDemandRatio: 3, maxRatings: 300, maxAraClickRate: 0.7, minSearchNearlyCr: 10, size: 10, order: { field: "searches_growth", desc: true } },
-      });
-      if (kwRes.ok && extractKwItems(kwRes.data).length < 3) {
-        kwRes = await mcp.callToolSafe("keyword_research", {
-          request: { marketplace: market, minSearches: 300, maxProducts: 500, size: 10, order: { field: "searches_growth", desc: true } },
-        });
-      }
-      if (kwRes.ok) {
-        const items = extractKwItems(kwRes.data);
-        console.info(`[europe-scan] ${market}: ${items.length} keywords`);
-        const enriched = await enrichWithGoogleTrends(items, market, mcp, `[europe-scan:${market}]`);
-        allEnriched.push(...enriched);
-      } else {
-        console.warn(`[europe-scan] ${market} failed:`, kwRes.error);
-      }
+    const keywords = await scanBlueOceanKeywords(EUROPE_CONFIG);
+    if (keywords.length === 0) {
+      return NextResponse.json({ message: "未发现符合条件的蓝海关键词，请稍后重试" }, { status: 400 });
     }
 
-    if (allEnriched.length === 0) throw new Error("卖家精灵未返回任何欧洲关键词数据");
-
-    // Sort: rising first
-    const order: Record<string, number> = { rising: 0, stable: 1, unknown: 2, declining: 3 };
-    allEnriched.sort((a, b) => (order[a._trendDirection] ?? 2) - (order[b._trendDirection] ?? 2));
-
     const created = await prisma.$transaction(
-      allEnriched.map((kw) =>
+      keywords.map((kw) =>
         prisma.europeTrend.create({
           data: {
             source: "sellersprite_keyword_research",
-            market: kw._market,
-            title: String(kw.keywords ?? kw.keyword ?? ""),
-            content: buildTrendContent(kw, "€"),
+            market: kw.marketplace,
+            title: kw.keyword,
+            content: buildTrendContent(kw),
             keywords: JSON.stringify([]),
             category: "home",
-            trendScore: computeTrendScore(kw, true),
+            trendScore: computeKeywordScore(kw),
             sourceUrl: null,
             scannedAt: new Date(),
           },
@@ -66,9 +44,6 @@ export async function POST() {
     });
   } catch (e) {
     console.error("[europe-scan]", e);
-    return NextResponse.json(
-      { message: e instanceof Error ? e.message : "扫描失败" },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: e instanceof Error ? e.message : "扫描失败" }, { status: 500 });
   }
 }
