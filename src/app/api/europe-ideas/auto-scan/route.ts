@@ -1,10 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { claudeJson } from "@/lib/claude-client";
+import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
 import { scoreIdeaWithKeywordMiner, buildIdeaAnalysis } from "@/lib/idea-scoring";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+function extractKwItems(data: unknown): Record<string, unknown>[] {
+  if (!data || typeof data !== "object") return [];
+  if (Array.isArray(data)) return data as Record<string, unknown>[];
+  const obj = data as Record<string, unknown>;
+  if (Array.isArray(obj.items)) return obj.items as Record<string, unknown>[];
+  if (Array.isArray(obj.data)) return obj.data as Record<string, unknown>[];
+  if (obj.data && typeof obj.data === "object" && !Array.isArray(obj.data)) {
+    const inner = obj.data as Record<string, unknown>;
+    if (Array.isArray(inner.items)) return inner.items as Record<string, unknown>[];
+  }
+  return [];
+}
+
+function safeNum(v: unknown): number | null {
+  return typeof v === "number" && isFinite(v) ? v : null;
+}
 
 export async function POST(req: NextRequest) {
   const secret = req.headers.get("x-auto-sync-secret");
@@ -35,43 +53,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const SCAN_PROMPT = `你是一位资深欧洲跨境电商选品分析师，服务于一家亚马逊欧洲站卖家。
-我们在中国有成熟的供应链，产品主要在亚马逊欧洲站（DE/UK/FR/IT/ES）线上销售。
-
-你的任务是扫描欧洲市场最新的蓝海产品趋势，包括：
-- Amazon 欧洲各站 New Releases、Movers & Shakers、Best Sellers
-- Google Trends 欧洲区域
-- TikTok/Instagram 欧洲热门产品
-
-选品方向：美妆个护、3C配件、家居、宠物、运动户外、办公用品、时尚配饰
-排除：食品、保健品、医疗器械、儿童玩具、电池类、化学品、大件家具
-标准：售价≥15欧元，BSR 30-80蓝海区间，<500g，中国供应链优势
-
-请返回JSON数组，每个元素包含：
-{
-  "source": "google_trends" | "social_media" | "news" | "industry_report" | "amazon_bestseller",
-  "market": "DE" | "UK" | "FR" | "IT" | "ES",
-  "title": "趋势标题",
-  "content": "趋势详细描述（100-200字）",
-  "keywords": ["关键词1", "关键词2"],
-  "category": "beauty" | "3c_accessories" | "home" | "pet" | "sports" | "outdoor" | "office" | "fashion_accessories",
-  "trendScore": 1-100的热度分数,
-  "sourceUrl": "来源链接或null"
-}
-
-请返回8-12条最值得关注的趋势。`;
-
-    type TrendItem = {
-      source: string;
-      market: string;
-      title: string;
-      content: string;
-      keywords: string[];
-      category: string;
-      trendScore: number;
-      sourceUrl?: string | null;
-    };
-
+    // ── Step 1: 用卖家精灵找真实蓝海关键词（DE/UK/FR 三站） ──
     const todayStart = new Date(today + "T00:00:00Z");
     const todayEnd = new Date(today + "T23:59:59Z");
     let createdTrends = await prisma.europeTrend.findMany({
@@ -80,41 +62,85 @@ export async function POST(req: NextRequest) {
     });
 
     if (createdTrends.length === 0) {
-      console.info("[europe-auto-scan] 开始扫描趋势...");
-      const trends = await claudeJson<TrendItem[]>({
-        system: SCAN_PROMPT,
-        user: `请扫描当前最新的欧洲蓝海产品趋势（${today}），覆盖DE、UK、FR、IT、ES五个市场。只返回JSON数组，不要包含任何其他文字说明。`,
-        maxTokens: 16384,
-      });
+      console.info("[europe-auto-scan] 用卖家精灵搜索欧洲蓝海关键词...");
+      const mcp = createSellerspriteMcpClient();
+      const allKwItems: Array<Record<string, unknown> & { _market: string }> = [];
 
-      if (!trends || !Array.isArray(trends)) {
-        throw new Error("AI 趋势扫描返回格式错误");
+      for (const market of ["DE", "UK", "FR"] as const) {
+        let kwRes = await mcp.callToolSafe("keyword_research", {
+          request: {
+            marketplace: market,
+            minSearches: 500,
+            maxProducts: 200,
+            minSupplyDemandRatio: 3,
+            maxRatings: 300,
+            maxAraClickRate: 0.7,
+            size: 10,
+            order: { field: "searches", desc: true },
+          },
+        });
+
+        if (kwRes.ok && extractKwItems(kwRes.data).length === 0) {
+          kwRes = await mcp.callToolSafe("keyword_research", {
+            request: {
+              marketplace: market,
+              minSearches: 300,
+              maxProducts: 500,
+              size: 10,
+              order: { field: "searches", desc: true },
+            },
+          });
+        }
+
+        if (kwRes.ok) {
+          const items = extractKwItems(kwRes.data);
+          for (const item of items) {
+            allKwItems.push({ ...item, _market: market });
+          }
+          console.info(`[europe-auto-scan] ${market}: ${items.length} keywords`);
+        } else {
+          console.warn(`[europe-auto-scan] ${market} failed:`, kwRes.error);
+        }
       }
 
+      if (allKwItems.length === 0) {
+        throw new Error("卖家精灵未返回任何欧洲关键词数据");
+      }
+
+      console.info(`[europe-auto-scan] 共获取到 ${allKwItems.length} 条蓝海关键词`);
+
       createdTrends = await prisma.$transaction(
-        trends.map((t) =>
-          prisma.europeTrend.create({
+        allKwItems.map((kw) => {
+          const searches = safeNum(kw.searches) ?? 0;
+          const products = safeNum(kw.products) ?? 0;
+          const avgRatings = safeNum(kw.avgRatings) ?? 0;
+          const sdr = safeNum(kw.supplyDemandRatio) ?? 0;
+          const bid = safeNum(kw.bid) ?? 0;
+          const score = Math.min(100, Math.max(1, Math.round(
+            (searches >= 3000 ? 40 : searches >= 1000 ? 30 : 20) + (sdr >= 5 ? 30 : sdr >= 3 ? 20 : 10) + (products < 100 ? 30 : products < 300 ? 20 : 10)
+          )));
+          return prisma.europeTrend.create({
             data: {
-              source: t.source || "social_media",
-              market: t.market || "DE",
-              title: t.title,
-              content: t.content,
-              keywords: JSON.stringify(t.keywords || []),
-              category: t.category || "home",
-              trendScore: Math.min(100, Math.max(1, t.trendScore || 50)),
-              sourceUrl: t.sourceUrl || null,
+              source: "sellersprite_data",
+              market: kw._market,
+              title: String(kw.keywords ?? kw.keyword ?? ""),
+              content: `月搜索量${searches.toLocaleString()}，商品数${products}，平均评论${Math.round(avgRatings)}条，供需比${sdr.toFixed(1)}，CPC €${bid.toFixed(2)}`,
+              keywords: JSON.stringify([]),
+              category: "home",
+              trendScore: score,
+              sourceUrl: null,
               scannedAt: new Date(),
             },
-          })
-        )
+          });
+        })
       );
-      console.info(`[europe-auto-scan] 扫描到 ${createdTrends.length} 条趋势`);
+      console.info(`[europe-auto-scan] 写入 ${createdTrends.length} 条趋势`);
     } else {
       console.info(`[europe-auto-scan] 复用今日已有 ${createdTrends.length} 条趋势`);
     }
 
-    const IDEA_PROMPT = `你是一位资深欧洲跨境电商产品经理，服务于亚马逊欧洲站卖家。
-根据提供的趋势信息，为每条趋势生成1-2个具体的新品创意。
+    const IDEA_PROMPT = `你是一位资深欧洲跨境电商产品经理。以下是从亚马逊欧洲站真实数据中发现的蓝海关键词，每个关键词代表一个有需求但竞争不激烈的市场机会。
+请基于这些真实关键词设计具体的新品方案。注意：产品必须围绕这些真实关键词设计，不要偏离关键词对应的市场需求。
 
 每个创意需要包含：
 {

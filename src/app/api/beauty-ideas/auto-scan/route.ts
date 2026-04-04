@@ -1,10 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { claudeJson } from "@/lib/claude-client";
+import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
 import { scoreIdeaWithKeywordMiner, buildIdeaAnalysis } from "@/lib/idea-scoring";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+function extractKwItems(data: unknown): Record<string, unknown>[] {
+  if (!data || typeof data !== "object") return [];
+  if (Array.isArray(data)) return data as Record<string, unknown>[];
+  const obj = data as Record<string, unknown>;
+  if (Array.isArray(obj.items)) return obj.items as Record<string, unknown>[];
+  if (Array.isArray(obj.data)) return obj.data as Record<string, unknown>[];
+  if (obj.data && typeof obj.data === "object" && !Array.isArray(obj.data)) {
+    const inner = obj.data as Record<string, unknown>;
+    if (Array.isArray(inner.items)) return inner.items as Record<string, unknown>[];
+  }
+  return [];
+}
+
+function safeNum(v: unknown): number | null {
+  return typeof v === "number" && isFinite(v) ? v : null;
+}
 
 /**
  * Internal auto-scan endpoint — called by instrumentation.ts scheduler.
@@ -43,47 +61,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // ── Step 1: Scan trends ──
-    const SCAN_PROMPT = `你是一位资深美妆行业分析师，服务于一家亚马逊跨境美妆卖家。
-我们在美国、中国、韩国都有供应链资源，产品主要在亚马逊和TikTok Shop线上销售。
-
-你的任务是扫描最新的美妆趋势，包括：
-- 美国市场：FDA新批准成分、Sephora/Ulta热卖新品、TikTok美妆趋势、Amazon Beauty热销榜
-- 韩国市场：K-beauty新成分、Olive Young热销、韩国美妆博主推荐、创新配方技术
-- 中国市场：天猫/抖音美妆爆品、新锐品牌、新原料趋势、功效护肤新方向
-
-注意：
-- 关注成分安全性（FDA合规）和市场需求
-- 关注可以线上销售的产品，避免需要线下体验的品类
-- 避免已经过度饱和的品类（如普通保湿面霜、基础洁面等）
-- 重点关注有差异化空间的新兴趋势
-
-请返回JSON数组，每个元素包含：
-{
-  "source": "google_trends" | "social_media" | "news" | "industry_report",
-  "market": "US" | "KR" | "CN",
-  "title": "趋势标题",
-  "content": "趋势详细描述（100-200字）",
-  "ingredients": ["相关成分1", "成分2"],
-  "category": "skincare" | "makeup" | "haircare" | "bodycare" | "fragrance",
-  "trendScore": 1-100的热度分数,
-  "sourceUrl": "来源链接或null"
-}
-
-请返回8-12条最值得关注的趋势。`;
-
-    type TrendItem = {
-      source: string;
-      market: string;
-      title: string;
-      content: string;
-      ingredients: string[];
-      category: string;
-      trendScore: number;
-      sourceUrl?: string | null;
-    };
-
-    // Reuse today's existing trends if already scanned
+    // ── Step 1: 用卖家精灵找真实蓝海关键词（替代AI编趋势） ──
     const todayStart = new Date(today + "T00:00:00Z");
     const todayEnd = new Date(today + "T23:59:59Z");
     let createdTrends = await prisma.beautyTrend.findMany({
@@ -92,42 +70,85 @@ export async function POST(req: NextRequest) {
     });
 
     if (createdTrends.length === 0) {
-      console.info("[beauty-auto-scan] 开始扫描趋势...");
-      const trends = await claudeJson<TrendItem[]>({
-        system: SCAN_PROMPT,
-        user: `请扫描当前最新的美妆市场趋势（${today}），覆盖美国、韩国、中国三个市场。只返回JSON数组，不要包含任何其他文字说明。`,
-        maxTokens: 16384,
+      console.info("[beauty-auto-scan] 用卖家精灵搜索蓝海关键词...");
+      const mcp = createSellerspriteMcpClient();
+
+      let kwRes = await mcp.callToolSafe("keyword_research", {
+        request: {
+          marketplace: "US",
+          departments: ["beauty"],
+          minSearches: 1000,
+          maxProducts: 300,
+          minSupplyDemandRatio: 3,
+          maxRatings: 500,
+          maxAraClickRate: 0.7,
+          size: 20,
+          order: { field: "searches", desc: true },
+        },
       });
 
-      if (!trends || !Array.isArray(trends)) {
-        throw new Error("AI 趋势扫描返回格式错误");
+      // Fallback: relax filters if no results
+      if (kwRes.ok) {
+        const items = extractKwItems(kwRes.data);
+        if (items.length === 0) {
+          console.info("[beauty-auto-scan] 0 results, relaxing filters...");
+          kwRes = await mcp.callToolSafe("keyword_research", {
+            request: {
+              marketplace: "US",
+              departments: ["beauty"],
+              minSearches: 500,
+              maxProducts: 500,
+              size: 20,
+              order: { field: "searches", desc: true },
+            },
+          });
+        }
       }
 
+      if (!kwRes.ok) {
+        throw new Error(`卖家精灵 keyword_research 失败: ${kwRes.error}`);
+      }
+
+      const kwItems = extractKwItems(kwRes.data);
+      if (kwItems.length === 0) {
+        throw new Error("卖家精灵未返回任何关键词数据");
+      }
+
+      console.info(`[beauty-auto-scan] 获取到 ${kwItems.length} 条蓝海关键词`);
+
       createdTrends = await prisma.$transaction(
-        trends.map((t) =>
-          prisma.beautyTrend.create({
+        kwItems.map((kw) => {
+          const searches = safeNum(kw.searches) ?? 0;
+          const products = safeNum(kw.products) ?? 0;
+          const avgRatings = safeNum(kw.avgRatings) ?? 0;
+          const sdr = safeNum(kw.supplyDemandRatio) ?? 0;
+          const bid = safeNum(kw.bid) ?? 0;
+          const score = Math.min(100, Math.max(1, Math.round(
+            (searches >= 5000 ? 40 : searches >= 2000 ? 30 : 20) + (sdr >= 5 ? 30 : sdr >= 3 ? 20 : 10) + (products < 200 ? 30 : products < 500 ? 20 : 10)
+          )));
+          return prisma.beautyTrend.create({
             data: {
-              source: t.source || "social_media",
-              market: t.market || "US",
-              title: t.title,
-              content: t.content,
-              ingredients: JSON.stringify(t.ingredients || []),
-              category: t.category || "skincare",
-              trendScore: Math.min(100, Math.max(1, t.trendScore || 50)),
-              sourceUrl: t.sourceUrl || null,
+              source: "sellersprite_data",
+              market: "US",
+              title: String(kw.keywords ?? kw.keyword ?? ""),
+              content: `月搜索量${searches.toLocaleString()}，商品数${products}，平均评论${Math.round(avgRatings)}条，供需比${sdr.toFixed(1)}，CPC $${bid.toFixed(2)}`,
+              ingredients: JSON.stringify([]),
+              category: "skincare",
+              trendScore: score,
+              sourceUrl: null,
               scannedAt: new Date(),
             },
-          })
-        )
+          });
+        })
       );
-      console.info(`[beauty-auto-scan] 扫描到 ${createdTrends.length} 条趋势`);
+      console.info(`[beauty-auto-scan] 写入 ${createdTrends.length} 条趋势`);
     } else {
       console.info(`[beauty-auto-scan] 复用今日已有 ${createdTrends.length} 条趋势`);
     }
 
-    // ── Step 2: Generate ideas ──
-    const IDEA_PROMPT = `你是一位资深美妆产品经理，服务于亚马逊跨境美妆卖家。
-根据提供的趋势信息，为每条趋势生成1-2个具体的新品创意。
+    // ── Step 2: Generate ideas from real keyword data ──
+    const IDEA_PROMPT = `你是一位资深美妆产品经理。以下是从亚马逊真实数据中发现的蓝海关键词，每个关键词代表一个有需求但竞争不激烈的市场机会。
+请基于这些真实关键词设计具体的新品方案。注意：产品必须围绕这些真实关键词设计，不要偏离关键词对应的市场需求。
 
 每个创意需要包含：
 {

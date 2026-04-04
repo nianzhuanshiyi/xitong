@@ -2,10 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { ThreeCTrend } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { claudeJson } from "@/lib/claude-client";
+import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
 import { scoreIdeaWithKeywordMiner, buildIdeaAnalysis } from "@/lib/idea-scoring";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+function extractKwItems(data: unknown): Record<string, unknown>[] {
+  if (!data || typeof data !== "object") return [];
+  if (Array.isArray(data)) return data as Record<string, unknown>[];
+  const obj = data as Record<string, unknown>;
+  if (Array.isArray(obj.items)) return obj.items as Record<string, unknown>[];
+  if (Array.isArray(obj.data)) return obj.data as Record<string, unknown>[];
+  if (obj.data && typeof obj.data === "object" && !Array.isArray(obj.data)) {
+    const inner = obj.data as Record<string, unknown>;
+    if (Array.isArray(inner.items)) return inner.items as Record<string, unknown>[];
+  }
+  return [];
+}
+
+function safeNum(v: unknown): number | null {
+  return typeof v === "number" && isFinite(v) ? v : null;
+}
 
 /**
  * Internal auto-scan endpoint — called by instrumentation.ts scheduler.
@@ -40,43 +58,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const SCAN_PROMPT = `你是一位资深3C电子配件行业分析师，服务于一家亚马逊跨境3C卖家。
-我们在深圳有成熟的3C配件供应链，产品主要在亚马逊美国站、欧洲站、日本站线上销售。
-
-你的任务是扫描最新的3C电子配件趋势，包括：
-- 美国市场：CES新品配件、Amazon Electronics热销榜、TikTok科技趋势
-- 欧洲市场：Type-C标准机遇、环保法规新品类
-- 日本市场：高品质精致配件、Amazon.co.jp热销
-
-选品方向：手机/平板/笔电配件、智能家居小配件、桌面/办公配件、车载电子、新型充电方案
-排除红海：蓝牙耳机、通用数据线、通用充电器、通用手机壳、钢化膜、移动电源
-标准：售价$10-$40，体积小重量轻，模具<$5000，深圳供应链
-
-请返回JSON数组，每个元素包含：
-{
-  "source": "google_trends" | "social_media" | "news" | "industry_report",
-  "market": "US" | "EU" | "JP",
-  "title": "趋势标题",
-  "content": "趋势详细描述（100-200字）",
-  "keywords": ["关键词1", "关键词2"],
-  "category": "phone_accessories" | "computer_peripherals" | "smart_home" | "audio" | "wearable" | "charging" | "storage",
-  "trendScore": 1-100的热度分数,
-  "sourceUrl": "来源链接或null"
-}
-
-请返回8-12条最值得关注的趋势。`;
-
-    type TrendItem = {
-      source: string;
-      market: string;
-      title: string;
-      content: string;
-      keywords: string[];
-      category: string;
-      trendScore: number;
-      sourceUrl?: string | null;
-    };
-
+    // ── Step 1: 用卖家精灵找真实蓝海关键词（替代AI编趋势） ──
     const todayStart = new Date(today + "T00:00:00Z");
     const todayEnd = new Date(today + "T23:59:59Z");
     let createdTrends = await prisma.threeCTrend.findMany({
@@ -85,42 +67,81 @@ export async function POST(req: NextRequest) {
     });
 
     if (createdTrends.length === 0) {
-      console.info("[3c-auto-scan] 开始扫描趋势...");
-      const trends = await claudeJson<TrendItem[]>({
-        system: SCAN_PROMPT,
-        user: `请扫描当前最新的3C电子配件市场趋势（${today}），覆盖美国、欧洲、日本三个市场。只返回JSON数组，不要包含任何其他文字说明。`,
-        maxTokens: 16384,
+      console.info("[3c-auto-scan] 用卖家精灵搜索蓝海关键词...");
+      const mcp = createSellerspriteMcpClient();
+
+      let kwRes = await mcp.callToolSafe("keyword_research", {
+        request: {
+          marketplace: "US",
+          departments: ["pc", "wireless", "electronics"],
+          minSearches: 1000,
+          maxProducts: 300,
+          minSupplyDemandRatio: 3,
+          maxRatings: 500,
+          maxAraClickRate: 0.7,
+          size: 20,
+          order: { field: "searches", desc: true },
+        },
       });
 
-      if (!trends || !Array.isArray(trends)) {
-        throw new Error("AI 趋势扫描返回格式错误");
+      if (kwRes.ok && extractKwItems(kwRes.data).length === 0) {
+        console.info("[3c-auto-scan] 0 results, relaxing filters...");
+        kwRes = await mcp.callToolSafe("keyword_research", {
+          request: {
+            marketplace: "US",
+            departments: ["pc", "wireless", "electronics"],
+            minSearches: 500,
+            maxProducts: 500,
+            size: 20,
+            order: { field: "searches", desc: true },
+          },
+        });
       }
 
+      if (!kwRes.ok) {
+        throw new Error(`卖家精灵 keyword_research 失败: ${kwRes.error}`);
+      }
+
+      const kwItems = extractKwItems(kwRes.data);
+      if (kwItems.length === 0) {
+        throw new Error("卖家精灵未返回任何关键词数据");
+      }
+
+      console.info(`[3c-auto-scan] 获取到 ${kwItems.length} 条蓝海关键词`);
+
       createdTrends = await prisma.$transaction(
-        trends.map((t) =>
-          prisma.threeCTrend.create({
+        kwItems.map((kw) => {
+          const searches = safeNum(kw.searches) ?? 0;
+          const products = safeNum(kw.products) ?? 0;
+          const avgRatings = safeNum(kw.avgRatings) ?? 0;
+          const sdr = safeNum(kw.supplyDemandRatio) ?? 0;
+          const bid = safeNum(kw.bid) ?? 0;
+          const score = Math.min(100, Math.max(1, Math.round(
+            (searches >= 5000 ? 40 : searches >= 2000 ? 30 : 20) + (sdr >= 5 ? 30 : sdr >= 3 ? 20 : 10) + (products < 200 ? 30 : products < 500 ? 20 : 10)
+          )));
+          return prisma.threeCTrend.create({
             data: {
-              source: t.source || "social_media",
-              market: t.market || "US",
-              title: t.title,
-              content: t.content,
-              keywords: JSON.stringify(t.keywords || []),
-              category: t.category || "phone_accessories",
-              trendScore: Math.min(100, Math.max(1, t.trendScore || 50)),
-              sourceUrl: t.sourceUrl || null,
+              source: "sellersprite_data",
+              market: "US",
+              title: String(kw.keywords ?? kw.keyword ?? ""),
+              content: `月搜索量${searches.toLocaleString()}，商品数${products}，平均评论${Math.round(avgRatings)}条，供需比${sdr.toFixed(1)}，CPC $${bid.toFixed(2)}`,
+              keywords: JSON.stringify([]),
+              category: "phone_accessories",
+              trendScore: score,
+              sourceUrl: null,
               scannedAt: new Date(),
             },
-          })
-        )
+          });
+        })
       );
-      console.info(`[3c-auto-scan] 扫描到 ${createdTrends.length} 条趋势`);
+      console.info(`[3c-auto-scan] 写入 ${createdTrends.length} 条趋势`);
     } else {
       console.info(`[3c-auto-scan] 复用今日已有 ${createdTrends.length} 条趋势`);
     }
 
-    // ── Step 2: Generate ideas ──
-    const IDEA_PROMPT = `你是一位资深3C电子产品经理，服务于亚马逊跨境3C卖家。
-根据提供的趋势信息，为每条趋势生成1-2个具体的新品创意。
+    // ── Step 2: Generate ideas from real keyword data ──
+    const IDEA_PROMPT = `你是一位资深3C电子产品经理。以下是从亚马逊真实数据中发现的蓝海关键词，每个关键词代表一个有需求但竞争不激烈的市场机会。
+请基于这些真实关键词设计具体的新品方案。注意：产品必须围绕这些真实关键词设计，不要偏离关键词对应的市场需求。
 
 每个创意需要包含：
 {
