@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, FlaskConical, LineChart, Mail, Sparkles, Warehouse, ClipboardList } from "lucide-react";
+import { ArrowUpRight, LineChart, Mail, Sparkles, Warehouse, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const modules = [
@@ -34,16 +34,9 @@ const modules = [
 export function DashboardHome({
   unreadMail,
   openTodos,
-  beautyReport,
 }: {
   unreadMail: number;
   openTodos: number;
-  beautyReport: {
-    trendsFound: number;
-    ideasGenerated: number;
-    highScoreIdeas: number;
-    status: string;
-  } | null;
 }) {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -110,35 +103,21 @@ export function DashboardHome({
           <ArrowUpRight className="size-5 shrink-0 text-slate-300 transition group-hover:text-amber-600" />
         </Link>
         <Link
-          href="/dashboard/beauty-ideas"
+          href="/dashboard/smart-selection"
           className={cn(
             "group relative flex items-center gap-4 overflow-hidden rounded-xl border border-slate-200/90 bg-white p-5 shadow-card transition-all",
             "hover:-translate-y-0.5 hover:shadow-card-hover hover:ring-1 hover:ring-purple-200/80"
           )}
         >
           <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-600 ring-1 ring-purple-100">
-            <FlaskConical className="size-6" strokeWidth={2} />
+            <Sparkles className="size-6" strokeWidth={2} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-slate-500">今日美妆趋势</p>
-            {beautyReport && beautyReport.status === "completed" ? (
-              <>
-                <p className="font-heading text-2xl font-semibold text-slate-900">
-                  {beautyReport.highScoreIdeas}
-                  <span className="ml-1 text-sm font-normal text-slate-500">高分创意</span>
-                </p>
-                <p className="text-xs text-purple-600/90">
-                  {beautyReport.trendsFound} 趋势 · {beautyReport.ideasGenerated} 创意 →
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="font-heading text-sm font-medium text-slate-400">
-                  今日尚未扫描
-                </p>
-                <p className="text-xs text-purple-600/90">进入美妆创意 →</p>
-              </>
-            )}
+            <p className="text-xs font-medium text-slate-500">智能选品</p>
+            <p className="font-heading text-sm font-medium text-slate-700">
+              按类目扫描蓝海新品
+            </p>
+            <p className="text-xs text-purple-600/90">进入智能选品 →</p>
           </div>
           <ArrowUpRight className="size-5 shrink-0 text-slate-300 transition group-hover:text-purple-500" />
         </Link>

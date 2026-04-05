@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
+  Lightbulb,
   Loader2,
   Microscope,
   Pause,
@@ -325,6 +326,8 @@ export function SmartSelectionWorkspace() {
   const [newPlanOpen, setNewPlanOpen] = useState(false);
   const [newPlanName, setNewPlanName] = useState("");
   const [creatingPlan, setCreatingPlan] = useState(false);
+  const [extractingId, setExtractingId] = useState<string | null>(null);
+  const [expandedIdea, setExpandedIdea] = useState<string | null>(null);
   const [plansLoaded, setPlansLoaded] = useState(false);
 
   const currentPlan = useMemo(
@@ -594,6 +597,31 @@ export function SmartSelectionWorkspace() {
       loadPlanDetail(planId);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "操作失败");
+    }
+  }
+
+  async function extractIdea(row: ResultRow) {
+    if (!planId || extractingId) return;
+    setExtractingId(row.id);
+    try {
+      const res = await fetch(`/api/smart-selection/plans/${planId}/extract-idea`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resultId: row.id }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((j as { message?: string }).message ?? "提取创意失败");
+      toast.success("创意提取完成");
+      // Update the result in local state with the analysis
+      setResults((prev) => prev.map((r) =>
+        r.id === row.id ? { ...r, aiSummary: (j as { analysis?: string }).analysis ?? r.aiSummary } : r
+      ));
+      setExpandedIdea(row.id);
+      if (planId) loadPlanDetail(planId);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "提取创意失败");
+    } finally {
+      setExtractingId(null);
     }
   }
 
@@ -1405,14 +1433,22 @@ export function SmartSelectionWorkspace() {
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2 border-t border-slate-100 p-3">
+                          <Button
+                            type="button" size="sm" variant="default" className="gap-1"
+                            disabled={extractingId === row.id}
+                            onClick={() => extractIdea(row)}
+                          >
+                            {extractingId === row.id ? <Loader2 className="size-3.5 animate-spin" /> : <Lightbulb className="size-3.5" />}
+                            提取创意
+                          </Button>
                           <Link
                             href={`/dashboard/product-analysis?prefill=${encodeURIComponent(row.asin)}&marketplace=${encodeURIComponent(row.marketplace || currentPlan?.marketplace || "US")}&forceRefresh=1`}
-                            className={cn(buttonVariants({ variant: "default", size: "sm" }), "gap-1")}
+                            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1")}
                           >
                             <Microscope className="size-3.5" />
                             深度分析
                           </Link>
-                          <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => postCandidate(row)}>
+                          <Button type="button" size="sm" variant="ghost" className="gap-1" onClick={() => postCandidate(row)}>
                             <Pause className="size-3.5" />
                             暂缓
                           </Button>
@@ -1421,6 +1457,24 @@ export function SmartSelectionWorkspace() {
                             不感兴趣
                           </Button>
                         </div>
+                        {/* Analysis result display */}
+                        {row.aiSummary && (
+                          <div className="border-t border-slate-100">
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-indigo-600 hover:bg-indigo-50/50"
+                              onClick={() => setExpandedIdea(expandedIdea === row.id ? null : row.id)}
+                            >
+                              <Lightbulb className="size-3.5" />
+                              {expandedIdea === row.id ? "收起创意分析" : "查看创意分析"}
+                            </button>
+                            {expandedIdea === row.id && (
+                              <div className="px-4 pb-4 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                                {row.aiSummary}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   );
