@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, FlaskConical, LineChart, Mail, Sparkles, Warehouse, ClipboardList } from "lucide-react";
+import { ArrowUpRight, LineChart, Mail, Sparkles, Warehouse, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const modules = [

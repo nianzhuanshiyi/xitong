@@ -9,8 +9,6 @@ export async function getMailRelatedDashboardStats(userId?: string) {
     const s = mockStats();
     return { unread: s.unread, openTodos: s.openTodos, beautyReport: null };
   }
-  const today = new Date().toISOString().slice(0, 10);
-
   // Build user-scoped email account filter
   let emailAccountFilter: { in: string[] } | undefined;
   if (userId) {
