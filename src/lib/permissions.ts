@@ -4,9 +4,9 @@ import { NextResponse } from "next/server";
 
 /** All module IDs used across the system */
 export const ALL_MODULES = [
-  "beauty-ideas",
   "3c-ideas",
   "europe-ideas",
+  "beauty-ideas",
   "email",
   "ai-assistant",
   "product-dev",
@@ -22,9 +22,9 @@ export type ModuleId = (typeof ALL_MODULES)[number];
 
 /** Map dashboard paths to module IDs */
 const PATH_TO_MODULE: Record<string, ModuleId> = {
-  "/dashboard/beauty-ideas": "beauty-ideas",
   "/dashboard/3c-ideas": "3c-ideas",
   "/dashboard/europe-ideas": "europe-ideas",
+  "/dashboard/beauty-ideas": "beauty-ideas",
   "/dashboard/mail": "email",
   "/dashboard/ai-assistant": "ai-assistant",
   "/dashboard/product-dev": "product-dev",
@@ -39,9 +39,9 @@ const PATH_TO_MODULE: Record<string, ModuleId> = {
 
 /** Map API paths to module IDs */
 const API_TO_MODULE: Record<string, ModuleId> = {
-  "/api/beauty-ideas": "beauty-ideas",
   "/api/3c-ideas": "3c-ideas",
   "/api/europe-ideas": "europe-ideas",
+  "/api/beauty-ideas": "beauty-ideas",
   "/api/mail": "email",
   "/api/ai-assistant": "ai-assistant",
   "/api/product-dev": "product-dev",

@@ -106,15 +106,6 @@ export async function register() {
     }, delay);
   }
 
-  // ── Beauty: daily at 09:00 Beijing (01:00 UTC) ──
-  scheduleDailyTopPick({
-    name: "beauty-auto-scan",
-    url: `${baseUrl}/api/beauty-ideas/top-pick`,
-    utcHour: 1,
-    utcMinute: 0,
-    envDisableKey: "DISABLE_BEAUTY_SCAN",
-  });
-
   // ── 3C新品: daily at 09:30 Beijing (01:30 UTC) ──
   scheduleDailyTopPick({
     name: "3c-auto-scan",

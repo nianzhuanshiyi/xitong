@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ChevronDown,
+  ChevronRight,
   Clock,
   Crown,
   FlaskConical,
@@ -18,29 +19,32 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { ModuleGuide } from "@/components/shared/module-guide";
 
-/* ── Types ────────────────────────────────────────────────────── */
+/* ── Types ───────────────────────────────────────────────────── */
 
-type TopPick = {
+type LatestPlan = {
   id: string;
   reportDate: string;
   productName: string;
   productNameEn: string;
   executiveSummary: string;
-  estimatedMargin: string | null;
+  selectedKeyword: string;
+  searchVolume: number | null;
+  supplyDemandRatio: number | null;
+  clickConcentration: number | null;
+  totalScore: number;
+  recommendation: string;
+  competitionLevel: string;
   estimatedRetailPrice: string | null;
   estimatedCogs: string | null;
+  estimatedMargin: string | null;
   estimatedProfit: string | null;
+  keyFeatures: string;
+  qualifiedKeywords: string;
+  keywordsData: string;
+  competitorProducts: string;
   status: string;
-  phase: string;
-  briefIngredients: string;
-  briefCompetition: string;
-  briefScore: number;
+  dismissed: boolean;
   createdAt: string;
-  idea?: {
-    totalScore: number;
-    recommendation: string;
-    searchVolume: number | null;
-  } | null;
 };
 
 type HistoryItem = {
@@ -49,25 +53,25 @@ type HistoryItem = {
   productName: string;
   productNameEn: string;
   executiveSummary: string;
-  estimatedMargin: string | null;
+  selectedKeyword: string;
+  searchVolume: number | null;
+  totalScore: number;
+  recommendation: string;
+  competitionLevel: string;
   estimatedRetailPrice: string | null;
-  status: string;
-  phase: string;
-  briefScore: number;
-  briefCompetition: string;
-  briefIngredients: string;
+  estimatedMargin: string | null;
+  dismissed: boolean;
   createdAt: string;
-  idea?: { totalScore: number; recommendation: string } | null;
 };
 
-type TrendItem = {
-  id: string;
-  title: string;
-  market: string;
-  category: string;
-  trendScore: number;
-  content: string;
-  scannedAt: string;
+type KeywordResult = {
+  keyword: string;
+  searches: number | null;
+  products: number | null;
+  sdr: number | null;
+  monopolyClickRate: number | null;
+  passed: boolean;
+  failReasons: string[];
 };
 
 const REC_CONFIG: Record<string, { label: string; color: string }> = {
@@ -81,9 +85,10 @@ const COMPETITION_LABEL: Record<string, { label: string; color: string }> = {
   low: { label: "低竞争", color: "bg-emerald-100 text-emerald-700" },
   medium: { label: "中等竞争", color: "bg-amber-100 text-amber-700" },
   high: { label: "高竞争", color: "bg-red-100 text-red-700" },
+  extreme: { label: "极度竞争", color: "bg-red-200 text-red-800" },
 };
 
-/* ── Score Ring ────────────────────────────────────────────────── */
+/* ── Score Ring ──────────────────────────────────────────────── */
 
 function ScoreRing({ score, size = 56 }: { score: number; size?: number }) {
   const r = (size - 6) / 2;
@@ -106,72 +111,124 @@ function ScoreRing({ score, size = 56 }: { score: number; size?: number }) {
   );
 }
 
-/* ── Main Dashboard ───────────────────────────────────────────── */
+/* ── Keyword Screening Panel ─────────────────────────────────── */
+
+function KeywordScreeningPanel({ plan }: { plan: LatestPlan }) {
+  const [expanded, setExpanded] = useState(false);
+
+  let keywords: KeywordResult[] = [];
+  try { keywords = JSON.parse(plan.keywordsData || "[]"); } catch { keywords = []; }
+
+  if (keywords.length === 0) return null;
+
+  const passed = keywords.filter((k) => k.passed);
+  const failed = keywords.filter((k) => !k.passed);
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50 rounded-xl"
+      >
+        <div className="flex items-center gap-2">
+          <Search className="size-4 text-violet-500" />
+          <span className="text-sm font-semibold text-slate-700">品类筛选详情</span>
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+            {passed.length} 通过
+          </span>
+          <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-600">
+            {failed.length} 未通过
+          </span>
+        </div>
+        {expanded ? <ChevronDown className="size-4 text-slate-400" /> : <ChevronRight className="size-4 text-slate-400" />}
+      </button>
+
+      {expanded && (
+        <div className="border-t border-slate-100 px-4 pb-4 pt-3">
+          <div className="mb-2 grid grid-cols-5 gap-2 text-[11px] font-semibold text-slate-400 px-1">
+            <span>关键词</span>
+            <span className="text-center">月搜索量</span>
+            <span className="text-center">供需比</span>
+            <span className="text-center">点击集中度</span>
+            <span className="text-center">状态</span>
+          </div>
+          <div className="space-y-1.5">
+            {keywords.map((kw, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "grid grid-cols-5 gap-2 items-center rounded-lg px-1 py-2 text-xs",
+                  kw.passed ? "bg-emerald-50/50" : "bg-red-50/30"
+                )}
+              >
+                <span className="font-medium text-slate-700 truncate">{kw.keyword}</span>
+                <span className={cn("text-center", kw.searches !== null && kw.searches >= 5000 ? "text-emerald-700 font-semibold" : "text-red-600")}>
+                  {kw.searches !== null ? kw.searches.toLocaleString() : "—"}
+                </span>
+                <span className={cn("text-center", kw.sdr !== null && kw.sdr >= 0.5 ? "text-emerald-700 font-semibold" : "text-red-600")}>
+                  {kw.sdr !== null ? kw.sdr.toFixed(2) : "—"}
+                </span>
+                <span className={cn("text-center", kw.monopolyClickRate !== null && kw.monopolyClickRate <= 0.4 ? "text-emerald-700 font-semibold" : kw.monopolyClickRate !== null ? "text-red-600" : "text-slate-400")}>
+                  {kw.monopolyClickRate !== null ? `${(kw.monopolyClickRate * 100).toFixed(0)}%` : "—"}
+                </span>
+                <span className={cn("text-center text-[10px] font-semibold rounded-full px-2 py-0.5", kw.passed ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700")}>
+                  {kw.passed ? "✓ 通过" : "✗ 未通过"}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 text-[11px] text-slate-400 space-y-0.5">
+            <p>筛选标准：月搜索量 ≥ 5,000 · 供需比 ≥ 0.5 · 点击集中度 ≤ 40%</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Main Dashboard ──────────────────────────────────────────── */
 
 export function BeautyIdeasDashboard() {
-  const [topPick, setTopPick] = useState<TopPick | null>(null);
+  const [latestPlan, setLatestPlan] = useState<LatestPlan | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [trends, setTrends] = useState<TrendItem[]>([]);
   const [generating, setGenerating] = useState(false);
-  const [deepLoading, setDeepLoading] = useState(false);
   const [dismissing, setDismissing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [trendsExpanded, setTrendsExpanded] = useState(false);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
 
-  const loadTopPick = useCallback(async () => {
+  const loadLatest = useCallback(async () => {
     try {
-      const r = await fetch("/api/beauty-ideas/top-pick");
+      const r = await fetch("/api/beauty-ideas/generate");
       const j = await r.json();
-      if (j.report) {
-        // Show report if completed (brief or deep), or generating
-        if (j.report.status === "completed" && !j.report.dismissed) {
-          setTopPick(j.report);
-        } else {
-          setTopPick(null);
-        }
-      } else {
-        setTopPick(null);
-      }
+      setLatestPlan(j.plan ?? null);
     } catch { /* ignore */ }
   }, []);
 
   const loadHistory = useCallback(async () => {
     try {
-      const r = await fetch("/api/beauty-ideas/top-pick/history");
+      const r = await fetch("/api/beauty-ideas/history");
       const j = await r.json();
-      setHistory(j.reports ?? []);
-    } catch { /* ignore */ }
-  }, []);
-
-  const loadTrends = useCallback(async () => {
-    try {
-      const r = await fetch("/api/beauty-ideas/trends");
-      const j = await r.json();
-      const all = j.trends ?? [];
-      const weekAgo = Date.now() - 7 * 86400_000;
-      setTrends(
-        all.filter((t: TrendItem) => new Date(t.scannedAt).getTime() > weekAgo)
-      );
+      setHistory(j.plans ?? []);
     } catch { /* ignore */ }
   }, []);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    await Promise.all([loadTopPick(), loadHistory(), loadTrends()]);
+    await Promise.all([loadLatest(), loadHistory()]);
     setLoading(false);
-  }, [loadTopPick, loadHistory, loadTrends]);
+  }, [loadLatest, loadHistory]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      toast.info("AI 正在扫描趋势、精选产品…", { duration: 60000 });
-      const r = await fetch("/api/beauty-ideas/top-pick", { method: "POST" });
+      toast.info("AI 正在扫描美妆品类趋势、卖家精灵筛选中…", { duration: 120000 });
+      const r = await fetch("/api/beauty-ideas/generate", { method: "POST" });
       const j = await r.json();
       if (!r.ok) { toast.error(j.message ?? "生成失败"); return; }
-      toast.success(`新方案已生成：${j.report?.productName ?? ""}`);
-      if (j.report) setTopPick(j.report);
+      toast.success(`新方案已生成：${j.plan?.productName ?? ""}`);
+      if (j.plan) setLatestPlan(j.plan);
       await loadHistory();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "生成失败");
@@ -181,42 +238,18 @@ export function BeautyIdeasDashboard() {
     }
   };
 
-  const handleDeepAnalysis = async () => {
-    if (!topPick) return;
-    setDeepLoading(true);
-    try {
-      toast.info("AI 正在生成深度分析…", { duration: 60000 });
-      const r = await fetch(`/api/beauty-ideas/top-pick/${topPick.id}/deep`, {
-        method: "POST",
-      });
-      const j = await r.json();
-      if (!r.ok) { toast.error(j.message ?? "深度分析失败"); return; }
-      if (j.skipped) {
-        toast.info("深度分析已完成");
-      } else {
-        toast.success("深度分析已生成");
-      }
-      // Navigate to detail page
-      window.location.href = `/dashboard/beauty-ideas/top-pick/${topPick.id}`;
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "深度分析失败");
-    } finally {
-      setDeepLoading(false);
-    }
-  };
-
   const handleDismiss = async () => {
-    if (!topPick) return;
+    if (!latestPlan) return;
     setDismissing(true);
     try {
-      const r = await fetch("/api/beauty-ideas/top-pick", {
+      const r = await fetch(`/api/beauty-ideas/plans/${latestPlan.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: topPick.id, action: "dismiss" }),
+        body: JSON.stringify({ action: "dismiss" }),
       });
       if (!r.ok) { toast.error("操作失败"); return; }
-      toast.success("已跳过，下次将避开类似品类");
-      setTopPick(null);
+      toast.success("已跳过此方案");
+      setLatestPlan(null);
       await loadAll();
     } catch {
       toast.error("操作失败");
@@ -233,54 +266,38 @@ export function BeautyIdeasDashboard() {
     );
   }
 
-  const rec = topPick?.idea
-    ? REC_CONFIG[topPick.idea.recommendation] ?? REC_CONFIG.watch
-    : null;
-  const comp = topPick?.briefCompetition
-    ? COMPETITION_LABEL[topPick.briefCompetition] ?? null
-    : null;
-  const isBrief = topPick?.phase === "brief";
-  // Check if report is old format (has completed status but no brief data)
-  const isOldFormat = topPick && topPick.status === "completed" && topPick.briefScore === 0;
+  const rec = latestPlan ? (REC_CONFIG[latestPlan.recommendation] ?? REC_CONFIG.watch) : null;
+  const comp = latestPlan ? (COMPETITION_LABEL[latestPlan.competitionLevel] ?? null) : null;
 
   return (
     <div className="space-y-6">
       <ModuleGuide moduleKey="beauty-ideas">
-        <p className="font-medium text-foreground mb-1">AI 美妆趋势扫描</p>
+        <p className="font-medium text-foreground mb-1">AI 美妆新品创意 · 卖家精灵数据驱动</p>
         <ul className="list-disc pl-4 space-y-0.5">
-          <li>系统每日自动扫描全球美妆趋势、社媒热点和 Amazon 新品数据</li>
-          <li>AI 从成分创新、包装设计、目标人群、价格带 4 个维度评估新品机会</li>
-          <li>Today&apos;s Pick 展示当日最高分产品创意，含详细可行性分析</li>
-          <li>点击任意创意卡片查看完整报告：竞品分析、供应链建议、上架策略</li>
-          <li>支持按评分、日期、状态筛选，快速找到值得跟进的创意</li>
+          <li>三步工作流：品类筛选（卖家精灵）→ 竞品筛选 → AI 生成最优新品方案</li>
+          <li>品类筛选标准：月搜≥5,000 · 供需比≥0.5 · 均价$15-40 · 点击集中度≤40%</li>
+          <li>竞品筛选标准：月销≥300 · 月收入≥$5,000 · 评论50-2,000</li>
+          <li>AI 综合数据生成 1 个最优新品方案，含竞品分析、差异化策略、财务预估</li>
         </ul>
       </ModuleGuide>
-      {/* ── Today's Pick (Hero) ──────────────────────────────── */}
-      {topPick && !isOldFormat ? (
-        <div className="relative overflow-hidden rounded-2xl border-2 border-amber-200/80 bg-gradient-to-br from-amber-50 via-orange-50/50 to-yellow-50/30 p-5 shadow-sm sm:p-6">
-          <div className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-amber-200/20 blur-3xl" aria-hidden />
+
+      {/* ── Latest Plan (Hero) ──────────────────────────────── */}
+      {latestPlan ? (
+        <div className="relative overflow-hidden rounded-2xl border-2 border-rose-200/80 bg-gradient-to-br from-rose-50 via-pink-50/50 to-fuchsia-50/30 p-5 shadow-sm sm:p-6">
+          <div className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-rose-200/20 blur-3xl" aria-hidden />
           <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start">
             <div className="flex flex-col items-center gap-2">
-              <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg">
-                <Crown className="size-7" />
+              <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-rose-400 to-pink-500 text-white shadow-lg">
+                <FlaskConical className="size-7" />
               </div>
-              <ScoreRing score={topPick.briefScore || topPick.idea?.totalScore || 0} size={52} />
+              <ScoreRing score={latestPlan.totalScore} size={52} />
             </div>
+
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-amber-600">
-                  今日精选 · {topPick.reportDate}
+                <p className="text-xs font-bold uppercase tracking-wider text-rose-600">
+                  最新方案 · {latestPlan.reportDate}
                 </p>
-                {isBrief && (
-                  <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
-                    简报
-                  </span>
-                )}
-                {!isBrief && (
-                  <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">
-                    深度分析
-                  </span>
-                )}
                 {rec && (
                   <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", rec.color)}>
                     {rec.label}
@@ -291,89 +308,53 @@ export function BeautyIdeasDashboard() {
                     {comp.label}
                   </span>
                 )}
-                {topPick.estimatedMargin && (
+                {latestPlan.estimatedMargin && (
                   <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                    利润率 {topPick.estimatedMargin}
+                    利润率 {latestPlan.estimatedMargin}
                   </span>
                 )}
-                {topPick.idea?.searchVolume && (
+                {latestPlan.searchVolume && (
                   <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
-                    月搜 {topPick.idea.searchVolume.toLocaleString()}
+                    月搜 {latestPlan.searchVolume.toLocaleString()}
+                  </span>
+                )}
+                {latestPlan.selectedKeyword && (
+                  <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700">
+                    {latestPlan.selectedKeyword}
                   </span>
                 )}
               </div>
+
               <h2 className="mt-1.5 font-heading text-lg font-bold text-slate-900 sm:text-xl">
-                {topPick.productName}
+                {latestPlan.productName}
               </h2>
-              {topPick.productNameEn && (
-                <p className="text-xs text-slate-500">{topPick.productNameEn}</p>
+              {latestPlan.productNameEn && (
+                <p className="text-xs text-slate-500">{latestPlan.productNameEn}</p>
               )}
               <p className="mt-2 text-sm leading-relaxed text-slate-600 line-clamp-3">
-                {topPick.executiveSummary}
+                {latestPlan.executiveSummary}
               </p>
-              {/* Brief-specific info */}
-              {isBrief && topPick.briefIngredients && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {topPick.briefIngredients.split(",").map((ing, i) => (
-                    <span key={i} className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200">
-                      {ing.trim()}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {/* Brief price/margin summary */}
-              {isBrief && topPick.estimatedRetailPrice && (
-                <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
-                  <span>预估售价 {topPick.estimatedRetailPrice}</span>
-                  {topPick.estimatedCogs && <span>成本 {topPick.estimatedCogs}</span>}
-                  {topPick.estimatedMargin && <span>利润率 {topPick.estimatedMargin}</span>}
-                </div>
-              )}
-              {/* Quick financial stats (deep phase) */}
-              {!isBrief && topPick.estimatedRetailPrice && (
-                <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
-                  <span>售价 {topPick.estimatedRetailPrice}</span>
-                  {topPick.estimatedProfit && <span>单品利润 {topPick.estimatedProfit}</span>}
-                </div>
-              )}
+
+              <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
+                {latestPlan.estimatedRetailPrice && (
+                  <span>预估售价 {latestPlan.estimatedRetailPrice}</span>
+                )}
+                {latestPlan.estimatedCogs && <span>成本 {latestPlan.estimatedCogs}</span>}
+                {latestPlan.supplyDemandRatio !== null && (
+                  <span>供需比 {latestPlan.supplyDemandRatio.toFixed(2)}</span>
+                )}
+                {latestPlan.clickConcentration !== null && (
+                  <span>点击集中度 {(latestPlan.clickConcentration * 100).toFixed(0)}%</span>
+                )}
+              </div>
             </div>
+
             <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-              {isBrief ? (
-                <>
-                  <Button
-                    onClick={handleDeepAnalysis}
-                    disabled={deepLoading}
-                    className="gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow hover:from-amber-600 hover:to-orange-600"
-                  >
-                    {deepLoading ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Search className="size-4" />
-                    )}
-                    {deepLoading ? "分析中…" : "深度分析"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDismiss}
-                    disabled={dismissing}
-                    className="gap-1 text-xs text-slate-500"
-                  >
-                    {dismissing ? (
-                      <Loader2 className="size-3 animate-spin" />
-                    ) : (
-                      <ThumbsDown className="size-3" />
-                    )}
-                    不感兴趣
-                  </Button>
-                </>
-              ) : (
-                <Link href={`/dashboard/beauty-ideas/top-pick/${topPick.id}`}>
-                  <Button className="gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow hover:from-amber-600 hover:to-orange-600">
-                    查看完整方案
-                  </Button>
-                </Link>
-              )}
+              <Link href={`/dashboard/beauty-ideas/${latestPlan.id}`}>
+                <Button className="gap-1.5 bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow hover:from-rose-600 hover:to-pink-600">
+                  查看完整方案
+                </Button>
+              </Link>
               <Button
                 variant="outline"
                 size="sm"
@@ -384,200 +365,191 @@ export function BeautyIdeasDashboard() {
                 {generating ? <Loader2 className="size-3 animate-spin" /> : <Crown className="size-3" />}
                 生成新方案
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDismiss}
+                disabled={dismissing}
+                className="gap-1 text-xs text-slate-500"
+              >
+                {dismissing ? <Loader2 className="size-3 animate-spin" /> : <ThumbsDown className="size-3" />}
+                不感兴趣
+              </Button>
             </div>
+          </div>
+
+          {/* Keyword screening summary */}
+          <div className="mt-4">
+            <KeywordScreeningPanel plan={latestPlan} />
           </div>
         </div>
       ) : (
-        /* Empty state / Generate button */
-        <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-amber-300/60 bg-gradient-to-br from-amber-50/50 to-orange-50/30 p-8 text-center">
-          <div className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-amber-200/15 blur-3xl" aria-hidden />
+        <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-rose-300/60 bg-gradient-to-br from-rose-50/50 to-pink-50/30 p-8 text-center">
+          <div className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-rose-200/15 blur-3xl" aria-hidden />
           {generating ? (
             <>
-              <Loader2 className="mx-auto size-12 animate-spin text-amber-500" />
+              <Loader2 className="mx-auto size-12 animate-spin text-rose-500" />
               <h3 className="mt-4 font-heading text-lg font-semibold text-slate-700">
                 AI 正在分析中…
               </h3>
               <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
-                正在扫描 Top 5 美妆趋势，精选最佳产品方向
+                正在调用卖家精灵筛选品类 → 竞品扫描 → AI 生成最优新品方案
               </p>
-              <div className="mx-auto mt-4 h-1.5 w-48 overflow-hidden rounded-full bg-amber-100">
-                <div className="h-full animate-pulse rounded-full bg-gradient-to-r from-amber-400 to-orange-500" style={{ width: "60%" }} />
+              <div className="mx-auto mt-4 h-1.5 w-48 overflow-hidden rounded-full bg-rose-100">
+                <div className="h-full animate-pulse rounded-full bg-gradient-to-r from-rose-400 to-pink-500" style={{ width: "60%" }} />
               </div>
             </>
           ) : (
             <>
-              <Crown className="mx-auto size-12 text-amber-400/60" />
+              <FlaskConical className="mx-auto size-12 text-rose-300" />
               <h3 className="mt-4 font-heading text-lg font-semibold text-slate-700">
-                一键生成新品方案
+                暂无美妆新品方案
               </h3>
               <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
-                AI 自动扫描 Top 5 趋势，精选 1 个最佳方向，生成简报卡片
-                <br />
-                <span className="text-xs text-slate-400">
-                  感兴趣再点&quot;深度分析&quot;生成完整落地方案，节省 token
-                </span>
+                点击生成，AI 将调用卖家精灵数据筛选美妆品类，找到 1 个最优新品方向
               </p>
               <Button
                 onClick={handleGenerate}
                 disabled={generating}
-                size="lg"
-                className="mt-5 gap-2 bg-gradient-to-r from-amber-500 to-orange-500 px-8 text-white shadow-lg hover:from-amber-600 hover:to-orange-600"
+                className="mt-5 gap-2 bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow hover:from-rose-600 hover:to-pink-600"
               >
-                <Crown className="size-5" />
-                生成新品方案
+                <FlaskConical className="size-4" />
+                生成美妆新品方案
               </Button>
             </>
           )}
         </div>
       )}
 
-      {/* ── History Archive ──────────────────────────────────── */}
-      <div>
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
-          <Clock className="size-4 text-slate-400" />
-          历史方案存档
-          {history.length > 0 && (
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-              {history.length}
-            </span>
-          )}
-        </h3>
-        {history.length === 0 ? (
-          <Card>
-            <CardContent className="py-8 text-center text-sm text-slate-400">
-              <FlaskConical className="mx-auto mb-2 size-8 text-slate-300" />
-              暂无历史方案，生成第一个方案后将显示在这里
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="overflow-hidden rounded-lg border border-slate-200">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50/80">
-                <tr>
-                  <th className="px-4 py-2.5 text-left font-medium text-slate-500">日期</th>
-                  <th className="px-4 py-2.5 text-left font-medium text-slate-500">方案标题</th>
-                  <th className="hidden px-4 py-2.5 text-center font-medium text-slate-500 sm:table-cell">评分</th>
-                  <th className="hidden px-4 py-2.5 text-center font-medium text-slate-500 sm:table-cell">推荐</th>
-                  <th className="hidden px-4 py-2.5 text-center font-medium text-slate-500 md:table-cell">阶段</th>
-                  <th className="hidden px-4 py-2.5 text-right font-medium text-slate-500 md:table-cell">利润率</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {history.map((h) => {
-                  const hRec = h.idea
-                    ? REC_CONFIG[h.idea.recommendation] ?? REC_CONFIG.watch
-                    : null;
-                  const score = h.briefScore || h.idea?.totalScore || 0;
+      {/* ── History ─────────────────────────────────────────── */}
+      {history.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Clock className="size-4 text-slate-400" />
+                历史方案
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                  {history.length}
+                </span>
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setHistoryExpanded(!historyExpanded)}
+                className="text-xs text-slate-500"
+              >
+                {historyExpanded ? "收起" : "展开"}
+                <ChevronDown className={cn("ml-1 size-3 transition-transform", historyExpanded && "rotate-180")} />
+              </Button>
+            </div>
+          </CardHeader>
+
+          {historyExpanded && (
+            <CardContent>
+              <div className="space-y-2">
+                {history.map((item) => {
+                  const r = REC_CONFIG[item.recommendation] ?? REC_CONFIG.watch;
                   return (
-                    <tr
-                      key={h.id}
-                      className="cursor-pointer transition hover:bg-slate-50/80"
-                      onClick={() => { window.location.href = `/dashboard/beauty-ideas/top-pick/${h.id}`; }}
-                    >
-                      <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">
-                        {h.reportDate}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-slate-900 line-clamp-1">
-                            {h.productName}
-                          </p>
+                    <Link key={item.id} href={`/dashboard/beauty-ideas/${item.id}`}>
+                      <div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-white px-4 py-3 hover:bg-rose-50/40 hover:border-rose-200/60 transition-colors">
+                        <ScoreRing score={item.totalScore} size={40} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-semibold text-slate-800">
+                              {item.productName}
+                            </p>
+                            <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold", r.color)}>
+                              {r.label}
+                            </span>
+                            {item.dismissed && (
+                              <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-400">
+                                已跳过
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex gap-3 text-[11px] text-slate-400 mt-0.5">
+                            {item.selectedKeyword && <span>{item.selectedKeyword}</span>}
+                            {item.searchVolume && <span>月搜 {item.searchVolume.toLocaleString()}</span>}
+                            {item.estimatedRetailPrice && <span>{item.estimatedRetailPrice}</span>}
+                            {item.estimatedMargin && <span>利润率 {item.estimatedMargin}</span>}
+                          </div>
                         </div>
-                        <p className="mt-0.5 text-xs text-slate-400 line-clamp-2">
-                          {h.executiveSummary}
-                        </p>
-                      </td>
-                      <td className="hidden px-4 py-3 text-center sm:table-cell">
-                        <span className={cn(
-                          "inline-flex size-8 items-center justify-center rounded-full text-xs font-bold",
-                          score >= 75 ? "bg-emerald-50 text-emerald-700" :
-                          score >= 55 ? "bg-blue-50 text-blue-700" :
-                          score >= 35 ? "bg-amber-50 text-amber-700" :
-                          "bg-red-50 text-red-600"
-                        )}>
-                          {score}
-                        </span>
-                      </td>
-                      <td className="hidden px-4 py-3 text-center sm:table-cell">
-                        {hRec && (
-                          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", hRec.color)}>
-                            {hRec.label}
-                          </span>
-                        )}
-                      </td>
-                      <td className="hidden px-4 py-3 text-center md:table-cell">
-                        <span className={cn(
-                          "rounded px-1.5 py-0.5 text-[10px] font-medium",
-                          h.phase === "deep"
-                            ? "bg-indigo-50 text-indigo-600"
-                            : "bg-violet-50 text-violet-600"
-                        )}>
-                          {h.phase === "deep" ? "深度" : "简报"}
-                        </span>
-                      </td>
-                      <td className="hidden whitespace-nowrap px-4 py-3 text-right text-xs font-medium text-emerald-600 md:table-cell">
-                        {h.estimatedMargin || "-"}
-                      </td>
-                    </tr>
+                        <div className="shrink-0 text-[11px] text-slate-400">{item.reportDate}</div>
+                        <ChevronRight className="size-4 text-slate-300" />
+                      </div>
+                    </Link>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* ── Recent Trends (collapsible) ──────────────────────── */}
-      {trends.length > 0 && (
-        <div>
-          <button
-            onClick={() => setTrendsExpanded(!trendsExpanded)}
-            className="mb-3 flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-          >
-            <TrendingUp className="size-4 text-slate-400" />
-            <ChevronDown className={cn("size-4 transition-transform", trendsExpanded && "rotate-180")} />
-            最近趋势（{trends.length}）
-            <span className="ml-auto">
-              <Link
-                href="/dashboard/beauty-ideas/trends"
-                className="text-xs text-indigo-600 hover:underline"
-                onClick={(e) => e.stopPropagation()}
-              >
-                查看全部
-              </Link>
-            </span>
-          </button>
-          {trendsExpanded && (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {trends.slice(0, 9).map((t) => (
-                <Card key={t.id} className="transition hover:shadow-sm">
-                  <CardHeader className="pb-1 pt-3 px-4">
-                    <CardTitle className="flex items-center gap-2 text-sm">
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
-                        {t.market}
-                      </span>
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
-                        {t.category}
-                      </span>
-                      <span className="ml-auto text-xs font-bold text-amber-600">
-                        {t.trendScore}
-                      </span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-3 pt-1">
-                    <h4 className="font-medium text-slate-900 text-sm line-clamp-1">
-                      {t.title}
-                    </h4>
-                    <p className="mt-1 text-xs text-slate-500 line-clamp-2">
-                      {t.content}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+              </div>
+            </CardContent>
           )}
-        </div>
+        </Card>
       )}
+
+      {/* ── Criteria Reference ──────────────────────────────── */}
+      <Card className="border-slate-200">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm text-slate-600">
+            <TrendingUp className="size-4" />
+            筛选标准参考
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <p className="mb-2 text-xs font-bold text-slate-700">第1步：品类筛选（卖家精灵）</p>
+              <ul className="space-y-1 text-xs text-slate-500">
+                <li className="flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-rose-400 shrink-0" />
+                  月搜索量 ≥ 5,000
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-rose-400 shrink-0" />
+                  供需比 ≥ 0.5（搜索量/商品数）
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-rose-400 shrink-0" />
+                  均价 $15–$40
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-rose-400 shrink-0" />
+                  点击集中度 ≤ 40%
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-rose-400 shrink-0" />
+                  购买率 ≥ 1%
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-rose-400 shrink-0" />
+                  搜索增长率 ≥ 0%
+                </li>
+              </ul>
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-bold text-slate-700">第2步：竞品筛选（具体 ASIN）</p>
+              <ul className="space-y-1 text-xs text-slate-500">
+                <li className="flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-pink-400 shrink-0" />
+                  价格 $15–$40
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-pink-400 shrink-0" />
+                  月销量 ≥ 300（市场已验证）
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-pink-400 shrink-0" />
+                  月销售额 ≥ $5,000
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-pink-400 shrink-0" />
+                  评论数 50–2,000
+                </li>
+              </ul>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

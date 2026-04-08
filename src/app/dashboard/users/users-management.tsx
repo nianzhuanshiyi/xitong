@@ -27,7 +27,6 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 
 const MODULE_LIST = [
-  { id: "beauty-ideas", label: "美妆新品创意" },
   { id: "3c-ideas", label: "3C新品创意" },
   { id: "europe-ideas", label: "欧洲蓝海选品" },
   { id: "email", label: "邮件中心" },

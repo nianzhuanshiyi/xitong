@@ -22,7 +22,7 @@ export async function getMailRelatedDashboardStats(userId?: string) {
     emailAccountFilter = accountIds.length > 0 ? { in: accountIds } : undefined;
   }
 
-  const [unread, openTodos, todayReport] = await Promise.all([
+  const [unread, openTodos] = await Promise.all([
     emailAccountFilter
       ? prisma.email.count({
           where: {
@@ -39,18 +39,9 @@ export async function getMailRelatedDashboardStats(userId?: string) {
         ...(userId ? { userId } : {}),
       },
     }),
-    prisma.dailyBeautyReport.findUnique({ where: { reportDate: today } }).catch(() => null),
   ]);
   return {
     unread,
     openTodos,
-    beautyReport: todayReport
-      ? {
-          trendsFound: todayReport.trendsFound,
-          ideasGenerated: todayReport.ideasGenerated,
-          highScoreIdeas: todayReport.highScoreIdeas,
-          status: todayReport.status,
-        }
-      : null,
   };
 }

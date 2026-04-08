@@ -7,7 +7,7 @@ async function checkUser() {
   const user = await prisma.user.findUnique({
     where: { email: "admin@example.com" }
   });
-  
+    
   if (user) {
     console.log("User found:", user.email);
     console.log("Hashed password in DB:", user.password);

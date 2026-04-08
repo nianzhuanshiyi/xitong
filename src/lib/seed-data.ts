@@ -142,7 +142,7 @@ export async function runSeedData(prisma: PrismaClient): Promise<void> {
   });
 
   const allModules = JSON.stringify([
-    "beauty-ideas","3c-ideas","europe-ideas","email",
+    "3c-ideas","europe-ideas","email",
     "ai-assistant","product-dev","selection-analysis",
     "listing","ai-images","suppliers","todos",
   ]);

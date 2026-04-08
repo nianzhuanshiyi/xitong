@@ -76,13 +76,6 @@ export const dashboardNav: DashboardNavItem[] = [
     moduleId: "selection-analysis",
   },
   {
-    href: "/dashboard/beauty-ideas",
-    label: "美妆新品创意",
-    title: "美妆新品创意",
-    Icon: FlaskConical,
-    moduleId: "beauty-ideas",
-  },
-  {
     href: "/dashboard/3c-ideas",
     label: "3C新品创意",
     title: "3C新品创意",
@@ -95,6 +88,13 @@ export const dashboardNav: DashboardNavItem[] = [
     title: "欧洲蓝海选品",
     Icon: Globe,
     moduleId: "europe-ideas",
+  },
+  {
+    href: "/dashboard/beauty-ideas",
+    label: "美妆新品创意",
+    title: "美妆新品创意",
+    Icon: FlaskConical,
+    moduleId: "beauty-ideas",
   },
   {
     href: "/dashboard/au-dev",
