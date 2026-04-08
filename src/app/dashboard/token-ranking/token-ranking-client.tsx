@@ -1,7 +1,5 @@
 "use client";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -167,12 +165,12 @@ export function TokenRankingClient() {
               <XAxis
                 dataKey="date"
                 tick={{ fontSize: 10 }}
-                tickFormatter={(v: any) => String(v).slice(5)}
+                tickFormatter={(v: string | number) => String(v).slice(5)}
               />
-              <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: any) => fmtTokens(Number(v) || 0)} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: string | number) => fmtTokens(Number(v) || 0)} />
               <Tooltip
-                formatter={(value: any) => [fmtTokens(Number(value) || 0), "Tokens"]}
-                labelFormatter={(label: any) => `日期: ${label}`}
+                formatter={(value: string | number) => [fmtTokens(Number(value) || 0), "Tokens"]}
+                labelFormatter={(label: string | number) => `日期: ${label}`}
               />
               <Line type="monotone" dataKey="tokens" stroke="#6366f1" strokeWidth={2} dot={false} />
             </LineChart>
@@ -197,8 +195,8 @@ export function TokenRankingClient() {
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: any) => fmtTokens(Number(v) || 0)} />
-                <Tooltip formatter={(value: any) => [fmtTokens(Number(value) || 0), "Tokens"]} />
+                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: string | number) => fmtTokens(Number(v) || 0)} />
+                <Tooltip formatter={(value: string | number) => [fmtTokens(Number(value) || 0), "Tokens"]} />
                 <Bar dataKey="tokens" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>

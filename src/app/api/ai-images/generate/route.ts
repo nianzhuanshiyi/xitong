@@ -7,7 +7,8 @@ import {
   buildFullPrompt,
   generateGeminiProductImage,
 } from "@/lib/ai-images/gemini-generate";
-import { geminiStyleZ, styleToAiImageType } from "@/lib/ai-images/gemini-styles";
+import { AiImageType } from "@prisma/client";
+import { geminiStyleZ, styleToAiImageType, type GeminiImageStyle } from "@/lib/ai-images/gemini-styles";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -22,14 +23,14 @@ const bodySchema = z.object({
   promptEn: z.string().optional(),
   promptZh: z.string().optional(),
   imageType: z.string().optional(),
-  form: z.any().optional(),
+  form: z.record(z.string(), z.unknown()).optional(),
 });
 
 export async function POST(req: Request) {
   const { session, error } = await requireModuleAccess("ai-images");
   if (error) return error;
 
-  let json: any;
+  let json: unknown;
   try {
     json = await req.json();
   } catch {
@@ -48,10 +49,11 @@ export async function POST(req: Request) {
 
   // Resolve productDescription and style from different formats
   if (!productDescription && form?.productDescription) {
-    productDescription = form.productDescription;
+    productDescription = form.productDescription as string;
   }
   if (!style && form?.imageType) {
-    style = form.imageType.toLowerCase();
+    const it = form.imageType as string;
+    style = it.toLowerCase() as GeminiImageStyle;
   }
   if (!style) style = "main_image";
 
@@ -94,7 +96,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const imageType = styleToAiImageType(style as any);
+  const imageType = styleToAiImageType(style as string);
   const paramsJson = JSON.stringify({
     source: "gemini-2.5-flash-image",
     style,
@@ -106,7 +108,7 @@ export async function POST(req: Request) {
   const row = await prisma.generatedImage.create({
     data: {
       projectId,
-      imageType: (bodyImageType as any) || imageType,
+      imageType: (bodyImageType as AiImageType) || imageType,
       prompt: productDescription || promptZh || "",
       fullPrompt: finalPrompt,
       promptEn: promptEn || finalPrompt,

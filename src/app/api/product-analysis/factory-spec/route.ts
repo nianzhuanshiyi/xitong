@@ -17,7 +17,7 @@ const bodySchema = z.object({
     warnings: z.array(z.string()).optional(),
   }),
   ai: z.object({
-    painPoints: z.array(z.any()).default([]),
+    painPoints: z.array(z.unknown()).default([]),
     reviewSummary: z.string().default(""),
     differentiators: z.array(z.string()).default([]),
   }),
