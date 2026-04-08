@@ -54,17 +54,17 @@ function NavLinks({
   const pathname = usePathname();
   const items = useFilteredNav();
 
-  return (
-    <>
-      {items.map(({ href, label, Icon, mailBadge }) => {
-        const active =
-          href === "/dashboard"
-            ? pathname === "/dashboard"
-            : pathname.startsWith(href);
-        const showMailDot = mailBadge && mailUnread > 0;
-        const badgeText = mailUnread > 99 ? "99+" : String(mailUnread);
+  if (variant === "icons") {
+    return (
+      <>
+        {items.map(({ href, label, Icon, mailBadge }) => {
+          const active =
+            href === "/dashboard"
+              ? pathname === "/dashboard"
+              : pathname.startsWith(href);
+          const showMailDot = mailBadge && mailUnread > 0;
+          const badgeText = mailUnread > 99 ? "99+" : String(mailUnread);
 
-        if (variant === "icons") {
           return (
             <Link
               key={href}
@@ -86,39 +86,67 @@ function NavLinks({
               ) : null}
             </Link>
           );
-        }
+        })}
+      </>
+    );
+  }
 
-        return (
-          <Link
-            key={href}
-            href={href}
-            onClick={onNavigate}
-            className={cn(
-              "group/nav flex items-center gap-3 rounded-xl border-l-[3px] py-2.5 pl-2.5 pr-3 text-sm font-medium transition-all duration-200",
-              variant === "mobile" && "border-l-0 py-3 pl-4 pr-4 text-base",
-              active
-                ? "border-l-[#c4b5fd] bg-gradient-to-r from-white/[0.18] to-white/[0.06] text-white shadow-sm ring-1 ring-white/10"
-                : "border-l-transparent text-slate-300 hover:border-l-white/20 hover:bg-white/[0.08] hover:text-white"
-            )}
-          >
-            <span className="relative shrink-0">
-              <Icon
+  const categories = [
+    { name: "常用工具", items: items.filter((i) => i.category === "常用工具") },
+    { name: "选品", items: items.filter((i) => i.category === "选品") },
+    { name: "管理", items: items.filter((i) => i.category === "管理") },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {categories.map((cat) => (
+        <div key={cat.name} className="space-y-1.5">
+          {cat.items.length > 0 && variant !== "icons" && (
+            <h3 className="px-3 text-[10px] font-bold uppercase tracking-widest text-indigo-300/50">
+              {cat.name === "管理" ? "用户管理和管理员" : cat.name}
+            </h3>
+          )}
+          {cat.items.map(({ href, label, Icon, mailBadge }) => {
+            const active =
+              href === "/dashboard"
+                ? pathname === "/dashboard"
+                : pathname.startsWith(href);
+            const showMailDot = mailBadge && mailUnread > 0;
+            const badgeText = mailUnread > 99 ? "99+" : String(mailUnread);
+
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={onNavigate}
                 className={cn(
-                  "size-[18px] transition-transform duration-200 group-hover/nav:scale-110",
-                  active ? "text-indigo-100" : "text-slate-400 group-hover/nav:text-white"
+                  "group/nav flex items-center gap-3 rounded-xl border-l-[3px] py-2.5 pl-2.5 pr-3 text-sm font-medium transition-all duration-200",
+                  variant === "mobile" && "border-l-0 py-3 pl-4 pr-4 text-base",
+                  active
+                    ? "border-l-[#c4b5fd] bg-gradient-to-r from-white/[0.18] to-white/[0.06] text-white shadow-sm ring-1 ring-white/10"
+                    : "border-l-transparent text-slate-300 hover:border-l-white/20 hover:bg-white/[0.08] hover:text-white"
                 )}
-              />
-              {showMailDot ? (
-                <span className="absolute -right-1.5 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red-500 px-0.5 text-[8px] font-bold leading-none text-white">
-                  {badgeText}
+              >
+                <span className="relative shrink-0">
+                  <Icon
+                    className={cn(
+                      "size-[18px] transition-transform duration-200 group-hover/nav:scale-110",
+                      active ? "text-indigo-100" : "text-slate-400 group-hover/nav:text-white"
+                    )}
+                  />
+                  {showMailDot ? (
+                    <span className="absolute -right-1.5 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red-500 px-0.5 text-[8px] font-bold leading-none text-white">
+                      {badgeText}
+                    </span>
+                  ) : null}
                 </span>
-              ) : null}
-            </span>
-            <span className="min-w-0 flex-1 truncate">{label}</span>
-          </Link>
-        );
-      })}
-    </>
+                <span className="min-w-0 flex-1 truncate">{label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      ))}
+    </div>
   );
 }
 
