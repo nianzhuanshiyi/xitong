@@ -100,13 +100,16 @@ export async function register() {
     console.info(
       `[${opts.name}] 下次扫描: ${new Date(Date.now() + delay).toISOString()} (${Math.round(delay / 3600_000)}h后)`
     );
+    /*
     setTimeout(() => {
       void tick();
       setInterval(() => void tick(), 24 * 60 * 60 * 1000);
     }, delay);
+    */
   }
 
   // ── 3C新品: daily at 09:30 Beijing (01:30 UTC) ──
+  /*
   scheduleDailyTopPick({
     name: "3c-auto-scan",
     url: `${baseUrl}/api/3c-ideas/top-pick`,
@@ -114,8 +117,10 @@ export async function register() {
     utcMinute: 30,
     envDisableKey: "DISABLE_3C_SCAN",
   });
+  */
 
   // ── 欧洲蓝海: daily at 10:00 Beijing (02:00 UTC) ──
+  /*
   scheduleDailyTopPick({
     name: "europe-auto-scan",
     url: `${baseUrl}/api/europe-ideas/top-pick`,
@@ -123,4 +128,5 @@ export async function register() {
     utcMinute: 0,
     envDisableKey: "DISABLE_EUROPE_SCAN",
   });
+  */
 }
