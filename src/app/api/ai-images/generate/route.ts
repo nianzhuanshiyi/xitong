@@ -14,16 +14,22 @@ export const maxDuration = 120;
 
 const bodySchema = z.object({
   projectId: z.string(),
-  productDescription: z.string().min(1).max(8000),
-  style: geminiStyleZ,
+  productDescription: z.string().min(1).max(8000).optional(),
+  style: geminiStyleZ.optional(),
   extraNotes: z.string().max(2000).optional().default(""),
+
+  // Support for older/different workspace format
+  promptEn: z.string().optional(),
+  promptZh: z.string().optional(),
+  imageType: z.string().optional(),
+  form: z.any().optional(),
 });
 
 export async function POST(req: Request) {
   const { session, error } = await requireModuleAccess("ai-images");
   if (error) return error;
 
-  let json: unknown;
+  let json: any;
   try {
     json = await req.json();
   } catch {
@@ -37,7 +43,21 @@ export async function POST(req: Request) {
     );
   }
 
-  const { projectId, productDescription, style, extraNotes } = parsed.data;
+  const { projectId, extraNotes, promptEn, promptZh, imageType: bodyImageType, form } = parsed.data;
+  let { productDescription, style } = parsed.data;
+
+  // Resolve productDescription and style from different formats
+  if (!productDescription && form?.productDescription) {
+    productDescription = form.productDescription;
+  }
+  if (!style && form?.imageType) {
+    style = form.imageType.toLowerCase();
+  }
+  if (!style) style = "main_image";
+
+  if (!productDescription && !promptEn) {
+    return NextResponse.json({ message: "缺失产品描述或 Prompt" }, { status: 400 });
+  }
 
   const project = await prisma.imageProject.findFirst({
     where: { id: projectId, userId: session!.user.id },
@@ -47,51 +67,54 @@ export async function POST(req: Request) {
   }
 
   const apiKey = getGoogleAiApiKey();
-  const fullPrompt = buildFullPrompt(style, productDescription, extraNotes);
+
+  // If promptEn is provided directly, use it. Otherwise build it.
+  const finalPrompt = promptEn || buildFullPrompt(style as string, productDescription as string, extraNotes);
 
   if (!apiKey) {
     return NextResponse.json(
       {
         ok: false,
         message: "未配置 GOOGLE_AI_API_KEY（或 GEMINI_API_KEY）。",
-        fullPrompt,
+        fullPrompt: finalPrompt,
       },
       { status: 503 }
     );
   }
 
-  const gen = await generateGeminiProductImage(apiKey, fullPrompt);
+  const gen = await generateGeminiProductImage(apiKey, finalPrompt);
   if (!gen.ok) {
     return NextResponse.json(
       {
         ok: false,
         message: gen.message,
-        fullPrompt,
+        fullPrompt: finalPrompt,
       },
       { status: 502 }
     );
   }
 
-  const imageType = styleToAiImageType(style);
+  const imageType = styleToAiImageType(style as any);
   const paramsJson = JSON.stringify({
     source: "gemini-2.5-flash-image",
     style,
     extraNotes: extraNotes || null,
     mimeType: gen.mimeType,
+    formUsed: !!form,
   });
 
   const row = await prisma.generatedImage.create({
     data: {
       projectId,
-      imageType,
-      prompt: productDescription,
-      fullPrompt,
-      promptEn: fullPrompt,
-      promptZh: "",
+      imageType: (bodyImageType as any) || imageType,
+      prompt: productDescription || promptZh || "",
+      fullPrompt: finalPrompt,
+      promptEn: promptEn || finalPrompt,
+      promptZh: promptZh || "",
       paramsJson,
       imageUrl: "",
       imageData: gen.base64,
-      style,
+      style: (style as string),
       status: "completed",
       width: 1024,
       height: 1024,

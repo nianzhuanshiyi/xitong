@@ -52,10 +52,32 @@ type GeneratedRow = {
   promptEn: string;
   promptZh: string;
   filePath: string;
+  imageData?: string | null;
+  paramsJson?: string;
   isFavorite: boolean;
   sortPosition: number | null;
   createdAt: string;
 };
+
+function mimeFromRow(img: GeneratedRow): string {
+  try {
+    const p = JSON.parse(img.paramsJson || "{}") as { mimeType?: string };
+    if (p.mimeType && typeof p.mimeType === "string") return p.mimeType;
+  } catch {
+    /* ignore */
+  }
+  return "image/png";
+}
+
+function imageSrc(img: GeneratedRow): string {
+  if (img.imageData) {
+    if (img.imageData.startsWith("data:")) return img.imageData;
+    return `data:${mimeFromRow(img)};base64,${img.imageData}`;
+  }
+  const fp = img.filePath?.trim();
+  if (fp) return `/${fp.replace(/^\/+/, "")}`;
+  return "";
+}
 
 const TYPE_CARDS: {
   id: AiImageTypeId;
@@ -393,7 +415,8 @@ export function AiImagesWorkspace() {
         const id = bundleOrder[i]!;
         const img = images.find((x) => x.id === id);
         if (!img) continue;
-        const url = `/${img.filePath.replace(/^\/+/, "")}`;
+        const url = imageSrc(img);
+        if (!url) continue;
         const res = await fetch(url);
         if (!res.ok) continue;
         const blob = await res.blob();
@@ -1052,12 +1075,12 @@ export function AiImagesWorkspace() {
                             type="button"
                             className="relative block w-full"
                             onClick={() =>
-                              setLightbox(`/${img.filePath.replace(/^\/+/, "")}`)
+                              setLightbox(imageSrc(img))
                             }
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={`/${img.filePath.replace(/^\/+/, "")}`}
+                              src={imageSrc(img)}
                               alt=""
                               className="aspect-square w-full object-cover"
                               loading="lazy"
@@ -1075,7 +1098,7 @@ export function AiImagesWorkspace() {
                               <Heart className="size-4" />
                             </Button>
                             <a
-                              href={`/${img.filePath.replace(/^\/+/, "")}`}
+                              href={imageSrc(img)}
                               download
                               title="下载"
                               className={cn(
@@ -1215,7 +1238,7 @@ export function AiImagesWorkspace() {
                           </span>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={`/${img.filePath.replace(/^\/+/, "")}`}
+                            src={imageSrc(img)}
                             alt=""
                             className="size-10 rounded object-cover"
                             loading="lazy"
@@ -1247,24 +1270,25 @@ export function AiImagesWorkspace() {
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {list.map((img) => (
-                            <button
-                              key={img.id}
-                              type="button"
-                              className="relative h-20 w-20 overflow-hidden rounded-md border"
-                              onClick={() =>
-                                setLightbox(
-                                  `/${img.filePath.replace(/^\/+/, "")}`
-                                )
-                              }
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={`/${img.filePath.replace(/^\/+/, "")}`}
-                                alt=""
-                                className="size-full object-cover"
-                                loading="lazy"
-                              />
-                            </button>
+                              <button
+                                key={img.id}
+                                type="button"
+                                className="relative h-20 w-20 overflow-hidden rounded-md border"
+                                onClick={() =>
+                                  setLightbox(
+                                    imageSrc(img)
+                                  )
+                                }
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={imageSrc(img)}
+                                  alt=""
+                                  className="size-full object-cover"
+                                  loading="lazy"
+                                />
+                              </button>
+
                           ))}
                         </div>
                       </div>

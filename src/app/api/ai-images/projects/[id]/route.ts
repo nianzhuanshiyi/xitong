@@ -37,8 +37,12 @@ export async function GET(_req: Request, ctx: Ctx) {
   }
   const bundlePlan = parseBundlePlanJson(row.bundlePlanJson);
   const refs = JSON.parse(row.referencePathsJson || "[]") as string[];
+
+  // Convert to plain object to ensure all fields (like imageData) are serialized correctly
+  const data = JSON.parse(JSON.stringify(row));
+
   return NextResponse.json({
-    ...row,
+    ...data,
     bundlePlan,
     referenceUrls: refs.map((r) => `/${r.replace(/^\/+/, "")}`),
   });

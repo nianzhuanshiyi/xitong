@@ -70,6 +70,7 @@ function mimeFromRow(img: GeneratedRow): string {
 
 function imageSrc(img: GeneratedRow): string {
   if (img.imageData) {
+    if (img.imageData.startsWith("data:")) return img.imageData;
     return `data:${mimeFromRow(img)};base64,${img.imageData}`;
   }
   const fp = img.filePath?.trim();
