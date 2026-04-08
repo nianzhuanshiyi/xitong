@@ -52,6 +52,7 @@ export async function register() {
   }, 30_000);
 
   // Helper: schedule a daily API call at a fixed UTC hour+minute
+  /*
   function scheduleDailyTopPick(opts: {
     name: string;
     url: string;
@@ -100,13 +101,12 @@ export async function register() {
     console.info(
       `[${opts.name}] 下次扫描: ${new Date(Date.now() + delay).toISOString()} (${Math.round(delay / 3600_000)}h后)`
     );
-    /*
-    setTimeout(() => {
-      void tick();
-      setInterval(() => void tick(), 24 * 60 * 60 * 1000);
-    }, delay);
-    */
+    // setTimeout(() => {
+    //   void tick();
+    //   setInterval(() => void tick(), 24 * 60 * 60 * 1000);
+    // }, delay);
   }
+  */
 
   // ── 3C新品: daily at 09:30 Beijing (01:30 UTC) ──
   /*

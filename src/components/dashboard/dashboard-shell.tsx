@@ -101,7 +101,7 @@ function NavLinks({
     <div className="space-y-6">
       {categories.map((cat) => (
         <div key={cat.name} className="space-y-1.5">
-          {cat.items.length > 0 && variant !== "icons" && (
+          {cat.items.length > 0 && (
             <h3 className="px-3 text-[10px] font-bold uppercase tracking-widest text-indigo-300/50">
               {cat.name === "管理" ? "用户管理和管理员" : cat.name}
             </h3>
