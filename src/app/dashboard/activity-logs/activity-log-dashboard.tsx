@@ -13,9 +13,8 @@ import {
 
 const MODULE_LABELS: Record<string, string> = {
   "au-dev": "澳洲开发",
-  analysis: "选品分析",
-  "3c-ideas": "3C新品",
-  "europe-ideas": "欧洲蓝海",
+  analysis: "竞品分析",
+  "beauty-ideas": "美妆新品",
   listing: "Listing撰写",
   "ai-assistant": "AI助手",
   "ai-image": "AI图片",

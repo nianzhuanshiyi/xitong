@@ -6,9 +6,9 @@ import { cn } from "@/lib/utils";
 
 const modules = [
   {
-    title: "选品分析",
+    title: "竞品分析",
     description: "卖家精灵 MCP 数据对接（待接入）",
-    body: "在「选品分析」中查看 ASIN、关键词与市场数据，支撑上架决策。",
+    body: "在「竞品分析」中查看 ASIN、关键词与市场数据，支撑上架决策。",
     icon: LineChart,
     bar: "from-indigo-500 via-violet-500 to-purple-500",
     href: "/dashboard/product-analysis",
@@ -54,7 +54,7 @@ export function DashboardHome({
             欢迎回来
           </p>
           <h2 className="mt-2 font-heading text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-            跨境电商选品分析工作台
+            跨境电商竞品分析工作台
           </h2>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-[15px]">
             左侧可进入各功能模块。后续将接入卖家精灵 MCP 与 Claude API，把数据与 AI

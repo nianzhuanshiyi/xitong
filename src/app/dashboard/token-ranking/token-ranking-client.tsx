@@ -53,10 +53,10 @@ type DailyData = {
 
 const MODULE_LABELS: Record<string, string> = {
   "ai-assistant": "AI 助手",
-  "3c-ideas": "3C 创意",
-  "europe-ideas": "欧洲选品",
   "mail": "邮件翻译",
   "ai-images": "AI 图片",
+  "beauty-ideas": "美妆创意",
+  "selection-analysis": "竞品分析",
 };
 
 function fmtTokens(n: number) {

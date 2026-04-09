@@ -162,7 +162,7 @@ function SidebarBrand({ compact }: { compact?: boolean }) {
       {!compact && (
         <div className="min-w-0">
           <div className="font-heading truncate text-sm font-semibold tracking-tight text-white">
-            选品分析 SaaS
+            竞品分析 SaaS
           </div>
           <p className="truncate text-xs text-indigo-200/85">跨境电商 · 亚马逊</p>
         </div>

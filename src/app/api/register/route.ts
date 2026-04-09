@@ -60,9 +60,9 @@ export async function POST(req: Request) {
       email.toLowerCase() === "ceo@zavyrabeauty.com" || userCount === 0;
 
     const allModules = JSON.stringify([
-      "3c-ideas","europe-ideas","email",
+      "email",
       "ai-assistant","product-dev","selection-analysis",
-      "listing","ai-images","suppliers","todos",
+      "listing","ai-images","suppliers","todos","beauty-ideas","au-dev"
     ]);
 
     // 4. 创建用户

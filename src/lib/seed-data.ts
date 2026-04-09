@@ -142,9 +142,9 @@ export async function runSeedData(prisma: PrismaClient): Promise<void> {
   });
 
   const allModules = JSON.stringify([
-    "3c-ideas","europe-ideas","email",
+    "email",
     "ai-assistant","product-dev","selection-analysis",
-    "listing","ai-images","suppliers","todos",
+    "listing","ai-images","suppliers","todos","beauty-ideas","au-dev"
   ]);
 
   const staffHash = await bcrypt.hash("staff123", 10);

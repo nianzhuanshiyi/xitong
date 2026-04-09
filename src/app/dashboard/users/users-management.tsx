@@ -27,16 +27,16 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 
 const MODULE_LIST = [
-  { id: "3c-ideas", label: "3C新品创意" },
-  { id: "europe-ideas", label: "欧洲蓝海选品" },
   { id: "email", label: "邮件中心" },
   { id: "ai-assistant", label: "AI 助手" },
   { id: "product-dev", label: "产品开发" },
-  { id: "selection-analysis", label: "选品分析" },
+  { id: "selection-analysis", label: "竞品分析" },
   { id: "listing", label: "Listing 撰写" },
   { id: "ai-images", label: "AI 图片" },
   { id: "suppliers", label: "供应商资源库" },
   { id: "todos", label: "待办中心" },
+  { id: "beauty-ideas", label: "美妆新品创意" },
+  { id: "au-dev", label: "澳洲开发" },
 ] as const;
 
 const AI_MODELS = [
