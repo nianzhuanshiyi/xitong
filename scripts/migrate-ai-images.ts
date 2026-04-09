@@ -10,7 +10,10 @@ async function migrate() {
   const images = await prisma.generatedImage.findMany({
     where: {
       filePath: "",
-      imageData: { not: null, not: "" }
+      AND: [
+        { imageData: { not: null } },
+        { imageData: { not: "" } }
+      ]
     }
   });
 
