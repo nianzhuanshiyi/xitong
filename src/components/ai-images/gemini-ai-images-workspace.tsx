@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, Download, ImageIcon } from "lucide-react";
+import { Loader2, Plus, Trash2, Download, ImageIcon, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   GEMINI_STYLE_OPTIONS,
   type GeminiImageStyle,
@@ -423,64 +430,18 @@ export function GeminiAiImagesWorkspace() {
           <>
             <Card className="shrink-0 border shadow-sm">
               <CardHeader className="pb-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <CardTitle className="text-lg">项目信息</CardTitle>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive"
-                      onClick={() => void deleteProject(detail.id)}
-                    >
-                      <Trash2 className="mr-1 h-4 w-4" />
-                      删除项目
-                    </Button>
-                    <Button
-                      size="sm"
-                      disabled={savingMeta}
-                      onClick={() => void saveProjectMeta()}
-                    >
-                      {savingMeta && (
-                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                      )}
-                      保存信息
-                    </Button>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">生成图片</CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => void deleteProject(detail.id)}
+                  >
+                    <Trash2 className="mr-1 h-4 w-4" />
+                    删除项目
+                  </Button>
                 </div>
-              </CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="proj-name">名称</Label>
-                  <Input
-                    id="proj-name"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="proj-asin">ASIN（可选）</Label>
-                  <Input
-                    id="proj-asin"
-                    placeholder="如 B0XXXXXXXX"
-                    value={editAsin}
-                    onChange={(e) => setEditAsin(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="proj-desc">产品描述（项目级）</Label>
-                  <textarea
-                    id="proj-desc"
-                    className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[72px] w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                    value={editDesc}
-                    onChange={(e) => setEditDesc(e.target.value)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="shrink-0 border shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">生成图片</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-1.5">
@@ -493,41 +454,44 @@ export function GeminiAiImagesWorkspace() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label>图片风格</Label>
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {GEMINI_STYLE_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setStyle(opt.value)}
-                        className={cn(
-                          "rounded-lg border p-3 text-left text-sm transition-all shadow-sm hover:bg-muted/50",
-                          style === opt.value
-                            ? "border-primary ring-2 ring-primary/30"
-                            : "border-border"
-                        )}
-                      >
-                        <div className="font-medium">{opt.label}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {opt.hint}
-                        </div>
-                      </button>
-                    ))}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>图片风格</Label>
+                    <Select
+                      value={style}
+                      onValueChange={(v) => setStyle(v as GeminiImageStyle)}
+                    >
+                      <SelectTrigger className="w-full shadow-sm">
+                        <SelectValue placeholder="选择风格" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {GEMINI_STYLE_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            <div className="flex flex-col">
+                              <span className="font-medium text-sm">{opt.label}</span>
+                              <span className="text-[10px] text-muted-foreground line-clamp-1">
+                                {opt.hint}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>补充说明（可选）</Label>
+                    <Input
+                      placeholder="例如：要有温暖的灯光、偏日系风格…"
+                      value={extraNotes}
+                      onChange={(e) => setExtraNotes(e.target.value)}
+                      className="shadow-sm"
+                    />
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label>补充说明（可选）</Label>
-                  <Input
-                    placeholder="例如：要有温暖的灯光、偏日系风格…"
-                    value={extraNotes}
-                    onChange={(e) => setExtraNotes(e.target.value)}
-                  />
-                </div>
-
                 <Button
-                  className="w-full sm:w-auto"
+                  className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 font-medium text-white shadow-md hover:from-indigo-700 hover:to-violet-700 sm:w-auto"
                   disabled={generating || loadingDetail}
                   onClick={() => void onGenerate()}
                 >
@@ -537,7 +501,10 @@ export function GeminiAiImagesWorkspace() {
                       生成中…
                     </>
                   ) : (
-                    "生成图片"
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      生成图片
+                    </>
                   )}
                 </Button>
               </CardContent>
