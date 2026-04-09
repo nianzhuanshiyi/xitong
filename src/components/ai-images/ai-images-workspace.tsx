@@ -409,10 +409,12 @@ export function AiImagesWorkspace() {
     await loadProject(projectId);
   }
 
-    async function exportZip() {
+  async function exportZip() {
+    try {
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
-      for (const id of bundleOrder) {
+      for (let i = 0; i < bundleOrder.length; i++) {
+        const id = bundleOrder[i];
         const img = images.find((x) => x.id === id);
         if (!img) continue;
         const url = imageSrc(img, brokenImages);
@@ -434,6 +436,7 @@ export function AiImagesWorkspace() {
       toast.error("打包失败");
     }
   }
+
 
   async function postProcess(
     img: GeneratedRow,

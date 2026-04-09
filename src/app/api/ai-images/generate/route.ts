@@ -11,7 +11,6 @@ import {
 } from "@/lib/ai-images/gemini-generate";
 import { AiImageType } from "@prisma/client";
 import { geminiStyleZ, styleToAiImageType, type GeminiImageStyle } from "@/lib/ai-images/gemini-styles";
-import { ensureProjectDirs } from "@/lib/ai-images/paths";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
