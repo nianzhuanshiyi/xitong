@@ -104,11 +104,6 @@ export function GeminiAiImagesWorkspace() {
   const [newDesc, setNewDesc] = useState("");
   const [creating, setCreating] = useState(false);
 
-  const [editName, setEditName] = useState("");
-  const [editAsin, setEditAsin] = useState("");
-  const [editDesc, setEditDesc] = useState("");
-  const [savingMeta, setSavingMeta] = useState(false);
-
   const [productDescription, setProductDescription] = useState("");
   const [style, setStyle] = useState<GeminiImageStyle>("main_image");
   const [extraNotes, setExtraNotes] = useState("");
@@ -153,9 +148,6 @@ export function GeminiAiImagesWorkspace() {
         description: row.description,
         generatedImages: row.generatedImages,
       });
-      setEditName(row.name);
-      setEditAsin(row.asin ?? "");
-      setEditDesc(row.description ?? "");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "加载失败");
     } finally {
@@ -238,40 +230,6 @@ export function GeminiAiImagesWorkspace() {
       await loadProjects();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "删除失败");
-    }
-  }
-
-  async function saveProjectMeta() {
-    if (!selectedId) return;
-    setSavingMeta(true);
-    try {
-      const r = await fetch(`/api/ai-images/projects/${selectedId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: editName.trim(),
-          asin: editAsin.trim() || null,
-          description: editDesc.trim(),
-        }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.message || "保存失败");
-      toast.success("项目信息已保存");
-      setDetail((d) =>
-        d
-          ? {
-              ...d,
-              name: j.name,
-              asin: j.asin,
-              description: j.description ?? "",
-            }
-          : d
-      );
-      await loadProjects();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "保存失败");
-    } finally {
-      setSavingMeta(false);
     }
   }
 

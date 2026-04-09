@@ -134,7 +134,7 @@ export async function POST(req: Request) {
       userId: session!.user.id,
       module: "ai-image",
       action: "generate",
-      detail: JSON.stringify({ prompt: fullPrompt?.slice(0, 50) }),
+      detail: JSON.stringify({ prompt: finalPrompt?.slice(0, 50) }),
     },
   }).catch(() => {});
 
