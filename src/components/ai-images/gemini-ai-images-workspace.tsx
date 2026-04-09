@@ -75,10 +75,12 @@ function mimeFromRow(img: GeneratedRow): string {
   return "image/png";
 }
 
-function imageSrc(img: GeneratedRow): string {
-  // 优先使用物理文件路径，加载速度更快且支持浏览器缓存
+function imageSrc(img: GeneratedRow, brokenPaths: Record<string, boolean> = {}): string {
+  // 优先使用物理文件路径，通过专用的 serve API 加载以确保 Content-Type 正确且绕过 Next.js 静态目录限制
   const fp = img.filePath?.trim();
-  if (fp) return `/${fp.replace(/^\/+/, "")}`;
+  if (fp && !brokenPaths[fp]) {
+    return `/api/ai-images/serve?path=${encodeURIComponent(fp)}`;
+  }
 
   // 备选方案：使用数据库中的 Base64 数据
   if (img.imageData) {
@@ -111,6 +113,7 @@ export function GeminiAiImagesWorkspace() {
   const [style, setStyle] = useState<GeminiImageStyle>("main_image");
   const [extraNotes, setExtraNotes] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
 
   const lastDetailProjectId = useRef<string | null>(null);
 
@@ -308,7 +311,7 @@ export function GeminiAiImagesWorkspace() {
 
     const fp = img.filePath?.trim();
     if (fp) {
-      const res = await fetch(`/${fp.replace(/^\/+/, "")}`);
+      const res = await fetch(`/api/ai-images/serve?path=${encodeURIComponent(fp)}`);
       if (!res.ok) {
         toast.error("下载失败");
         return;
@@ -493,7 +496,7 @@ export function GeminiAiImagesWorkspace() {
                   ) : (
                     <div className="grid grid-cols-2 gap-3 p-2 md:grid-cols-3">
                       {detail.generatedImages.map((img) => {
-                        const src = imageSrc(img);
+                        const src = imageSrc(img, brokenImages);
                         return (
                           <div
                             key={img.id}
@@ -505,6 +508,14 @@ export function GeminiAiImagesWorkspace() {
                                 src={src}
                                 alt={img.style}
                                 className="aspect-square w-full object-cover"
+                                onError={() => {
+                                  if (img.filePath) {
+                                    setBrokenImages((prev) => ({
+                                      ...prev,
+                                      [img.filePath]: true,
+                                    }));
+                                  }
+                                }}
                               />
                             ) : (
                               <div className="flex aspect-square items-center justify-center bg-muted text-xs text-muted-foreground">

@@ -104,17 +104,25 @@ export async function POST(req: Request) {
   // 优化：将图片存储到本地文件系统以提升加载速度
   let filePath = "";
   try {
-    ensureProjectDirs(projectId);
-    const fileName = `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.png`;
     const relativeDir = path.join("uploads", "ai-images", projectId, "gen");
     const fullDir = path.join(process.cwd(), "public", relativeDir);
+    
+    // 确保目录存在
+    await fs.mkdir(fullDir, { recursive: true });
+    
+    const fileName = `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.png`;
     const fullPath = path.join(fullDir, fileName);
     
     await fs.writeFile(fullPath, Buffer.from(gen.base64, "base64"));
-    filePath = path.join(relativeDir, fileName).replace(/\\/g, "/");
+    
+    // 验证文件是否写入成功
+    const stats = await fs.stat(fullPath);
+    if (stats.size > 0) {
+      filePath = path.join(relativeDir, fileName).replace(/\\/g, "/");
+    }
   } catch (err) {
     console.error("Failed to save AI image to disk:", err);
-    // 即使保存文件失败，我们也保留数据库中的 imageData 作为备选
+    // 即使保存文件失败，我们也保留数据库中的 imageData 作为备选，filePath 保持为空
   }
 
   const paramsJson = JSON.stringify({
@@ -169,6 +177,7 @@ export async function POST(req: Request) {
       prompt: row.prompt,
       fullPrompt: row.fullPrompt,
       imageData: row.imageData,
+      filePath: row.filePath,
       createdAt: row.createdAt,
     },
   });

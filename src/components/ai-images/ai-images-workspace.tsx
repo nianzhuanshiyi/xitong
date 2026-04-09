@@ -69,10 +69,12 @@ function mimeFromRow(img: GeneratedRow): string {
   return "image/png";
 }
 
-function imageSrc(img: GeneratedRow): string {
-  // 优先使用物理文件路径，加载速度更快且支持浏览器缓存
+function imageSrc(img: GeneratedRow, brokenPaths: Record<string, boolean> = {}): string {
+  // 优先使用物理文件路径，通过专用的 serve API 加载以确保 Content-Type 正确
   const fp = img.filePath?.trim();
-  if (fp) return `/${fp.replace(/^\/+/, "")}`;
+  if (fp && !brokenPaths[fp]) {
+    return `/api/ai-images/serve?path=${encodeURIComponent(fp)}`;
+  }
 
   // 备选方案：使用数据库中的 Base64 数据
   if (img.imageData) {
@@ -169,6 +171,7 @@ export function AiImagesWorkspace() {
   const [loadingProject, setLoadingProject] = useState(false);
   const [promptLoading, setPromptLoading] = useState(false);
   const [genLoading, setGenLoading] = useState(false);
+  const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
   const [newOpen, setNewOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newCategory, setNewCategory] = useState("");
@@ -406,21 +409,16 @@ export function AiImagesWorkspace() {
     await loadProject(projectId);
   }
 
-  async function exportZip() {
-    if (bundleOrder.length === 0) {
-      toast.error("请先在套装中排好至少一张图");
-      return;
-    }
-    try {
+    async function exportZip() {
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
-      for (let i = 0; i < bundleOrder.length; i++) {
-        const id = bundleOrder[i]!;
+      for (const id of bundleOrder) {
         const img = images.find((x) => x.id === id);
         if (!img) continue;
-        const url = imageSrc(img);
+        const url = imageSrc(img, brokenImages);
         if (!url) continue;
         const res = await fetch(url);
+
         if (!res.ok) continue;
         const blob = await res.blob();
         zip.file(`amazon-slot-${i + 1}.png`, blob);
@@ -1078,15 +1076,23 @@ export function AiImagesWorkspace() {
                             type="button"
                             className="relative block w-full"
                             onClick={() =>
-                              setLightbox(imageSrc(img))
+                              setLightbox(imageSrc(img, brokenImages))
                             }
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={imageSrc(img)}
+                              src={imageSrc(img, brokenImages)}
                               alt=""
                               className="aspect-square w-full object-cover"
                               loading="lazy"
+                              onError={() => {
+                                if (img.filePath) {
+                                  setBrokenImages((prev) => ({
+                                    ...prev,
+                                    [img.filePath]: true,
+                                  }));
+                                }
+                              }}
                             />
                           </button>
                           <div className="flex flex-wrap gap-1 p-2">
@@ -1101,7 +1107,7 @@ export function AiImagesWorkspace() {
                               <Heart className="size-4" />
                             </Button>
                             <a
-                              href={imageSrc(img)}
+                              href={imageSrc(img, brokenImages)}
                               download
                               title="下载"
                               className={cn(
@@ -1241,10 +1247,18 @@ export function AiImagesWorkspace() {
                           </span>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={imageSrc(img)}
+                            src={imageSrc(img, brokenImages)}
                             alt=""
                             className="size-10 rounded object-cover"
                             loading="lazy"
+                            onError={() => {
+                              if (img.filePath) {
+                                setBrokenImages((prev) => ({
+                                  ...prev,
+                                  [img.filePath]: true,
+                                }));
+                              }
+                            }}
                           />
                           <button
                             type="button"
@@ -1279,16 +1293,24 @@ export function AiImagesWorkspace() {
                                 className="relative h-20 w-20 overflow-hidden rounded-md border"
                                 onClick={() =>
                                   setLightbox(
-                                    imageSrc(img)
+                                    imageSrc(img, brokenImages)
                                   )
                                 }
                               >
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
-                                  src={imageSrc(img)}
+                                  src={imageSrc(img, brokenImages)}
                                   alt=""
                                   className="size-full object-cover"
                                   loading="lazy"
+                                  onError={() => {
+                                    if (img.filePath) {
+                                      setBrokenImages((prev) => ({
+                                        ...prev,
+                                        [img.filePath]: true,
+                                      }));
+                                    }
+                                  }}
                                 />
                               </button>
 

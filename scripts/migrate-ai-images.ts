@@ -37,12 +37,15 @@ async function migrate() {
       
       const filePath = path.join(relativeDir, fileName).replace(/\\/g, "/");
       
-      await prisma.generatedImage.update({
-        where: { id: img.id },
-        data: { filePath }
-      });
-      
-      console.log(`Migrated image ${img.id} to ${filePath}`);
+      // Verify file exists
+      const stats = await fs.stat(fullPath);
+      if (stats.size > 0) {
+        await prisma.generatedImage.update({
+          where: { id: img.id },
+          data: { filePath }
+        });
+        console.log(`Migrated image ${img.id} to ${filePath}`);
+      }
     } catch (err) {
       console.error(`Failed to migrate image ${img.id}:`, err);
     }
