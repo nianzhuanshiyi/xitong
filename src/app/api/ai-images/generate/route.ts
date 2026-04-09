@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import fs from "node:fs/promises";
+import path from "node:path";
 import prisma from "@/lib/prisma";
 import { requireModuleAccess } from "@/lib/permissions";
 import { getGoogleAiApiKey } from "@/lib/integration-keys";
@@ -9,6 +11,7 @@ import {
 } from "@/lib/ai-images/gemini-generate";
 import { AiImageType } from "@prisma/client";
 import { geminiStyleZ, styleToAiImageType, type GeminiImageStyle } from "@/lib/ai-images/gemini-styles";
+import { ensureProjectDirs, projectUploadDir } from "@/lib/ai-images/paths";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -97,6 +100,23 @@ export async function POST(req: Request) {
   }
 
   const imageType = styleToAiImageType(style as string);
+  
+  // 优化：将图片存储到本地文件系统以提升加载速度
+  let filePath = "";
+  try {
+    ensureProjectDirs(projectId);
+    const fileName = `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.png`;
+    const relativeDir = path.join("uploads", "ai-images", projectId, "gen");
+    const fullDir = path.join(process.cwd(), "public", relativeDir);
+    const fullPath = path.join(fullDir, fileName);
+    
+    await fs.writeFile(fullPath, Buffer.from(gen.base64, "base64"));
+    filePath = path.join(relativeDir, fileName).replace(/\\/g, "/");
+  } catch (err) {
+    console.error("Failed to save AI image to disk:", err);
+    // 即使保存文件失败，我们也保留数据库中的 imageData 作为备选
+  }
+
   const paramsJson = JSON.stringify({
     source: "gemini-2.5-flash-image",
     style,
@@ -115,12 +135,12 @@ export async function POST(req: Request) {
       promptZh: promptZh || "",
       paramsJson,
       imageUrl: "",
-      imageData: gen.base64,
+      imageData: gen.base64, // 保留备份
       style: (style as string),
       status: "completed",
       width: 1024,
       height: 1024,
-      filePath: "",
+      filePath,
     },
   });
 

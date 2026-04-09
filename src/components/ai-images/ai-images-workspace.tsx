@@ -70,12 +70,15 @@ function mimeFromRow(img: GeneratedRow): string {
 }
 
 function imageSrc(img: GeneratedRow): string {
+  // 优先使用物理文件路径，加载速度更快且支持浏览器缓存
+  const fp = img.filePath?.trim();
+  if (fp) return `/${fp.replace(/^\/+/, "")}`;
+
+  // 备选方案：使用数据库中的 Base64 数据
   if (img.imageData) {
     if (img.imageData.startsWith("data:")) return img.imageData;
     return `data:${mimeFromRow(img)};base64,${img.imageData}`;
   }
-  const fp = img.filePath?.trim();
-  if (fp) return `/${fp.replace(/^\/+/, "")}`;
   return "";
 }
 
