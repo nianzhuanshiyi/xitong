@@ -47,11 +47,9 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 const MODULE_OPTIONS = [
-  { value: "analysis", label: "选品分析" },
+  { value: "analysis", label: "竞品分析" },
   { value: "au-dev", label: "澳洲开发" },
   { value: "beauty-ideas", label: "美妆新品" },
-  { value: "3c-ideas", label: "3C新品" },
-  { value: "europe-ideas", label: "欧洲蓝海" },
   { value: "listing", label: "Listing撰写" },
   { value: "ai-image", label: "AI图片" },
   { value: "ai-assistant", label: "AI助手" },

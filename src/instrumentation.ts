@@ -50,6 +50,4 @@ export async function register() {
     void tick();
     setInterval(() => void tick(), SYNC_INTERVAL_MS);
   }, 30_000);
-
-  // Beauty / 3C / Europe auto-scan removed — replaced by smart-selection module
 }

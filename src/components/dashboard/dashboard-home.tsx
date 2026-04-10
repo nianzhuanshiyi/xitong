@@ -6,9 +6,9 @@ import { cn } from "@/lib/utils";
 
 const modules = [
   {
-    title: "选品分析",
+    title: "竞品分析",
     description: "卖家精灵 MCP 数据对接（待接入）",
-    body: "在「选品分析」中查看 ASIN、关键词与市场数据，支撑上架决策。",
+    body: "在「竞品分析」中查看 ASIN、关键词与市场数据，支撑上架决策。",
     icon: LineChart,
     bar: "from-indigo-500 via-violet-500 to-purple-500",
     href: "/dashboard/product-analysis",
@@ -54,7 +54,7 @@ export function DashboardHome({
             欢迎回来
           </p>
           <h2 className="mt-2 font-heading text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-            跨境电商选品分析工作台
+            跨境电商竞品分析工作台
           </h2>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-[15px]">
             左侧可进入各功能模块。后续将接入卖家精灵 MCP 与 Claude API，把数据与 AI
@@ -101,25 +101,6 @@ export function DashboardHome({
             <p className="text-xs text-amber-700/90">进入待办中心 →</p>
           </div>
           <ArrowUpRight className="size-5 shrink-0 text-slate-300 transition group-hover:text-amber-600" />
-        </Link>
-        <Link
-          href="/dashboard/smart-selection"
-          className={cn(
-            "group relative flex items-center gap-4 overflow-hidden rounded-xl border border-slate-200/90 bg-white p-5 shadow-card transition-all",
-            "hover:-translate-y-0.5 hover:shadow-card-hover hover:ring-1 hover:ring-purple-200/80"
-          )}
-        >
-          <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-600 ring-1 ring-purple-100">
-            <Sparkles className="size-6" strokeWidth={2} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-slate-500">智能选品</p>
-            <p className="font-heading text-sm font-medium text-slate-700">
-              按类目扫描蓝海新品
-            </p>
-            <p className="text-xs text-purple-600/90">进入智能选品 →</p>
-          </div>
-          <ArrowUpRight className="size-5 shrink-0 text-slate-300 transition group-hover:text-purple-500" />
         </Link>
       </div>
 

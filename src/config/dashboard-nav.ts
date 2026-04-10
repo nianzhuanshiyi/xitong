@@ -7,6 +7,7 @@ import {
   ClipboardList,
   LineChart,
   Sparkles,
+  FlaskConical,
   FileText,
   ImageIcon,
   Package,
@@ -31,18 +32,12 @@ export type DashboardNavItem = {
   moduleId?: string;
   /** 仅管理员可见 */
   adminOnly?: boolean;
+  /** 分类 */
+  category?: "常用工具" | "选品" | "管理";
 };
 
 export const dashboardNav: DashboardNavItem[] = [
-  { href: "/dashboard", label: "仪表盘", title: "仪表盘", Icon: LayoutDashboard },
-  { href: "/dashboard/users", label: "用户管理", title: "用户管理", Icon: Users, adminOnly: true },
-  {
-    href: "/dashboard/suppliers",
-    label: "供应商资源库",
-    title: "供应商资源库",
-    Icon: Warehouse,
-    moduleId: "suppliers",
-  },
+  { href: "/dashboard", label: "仪表盘", title: "仪表盘", Icon: LayoutDashboard, category: "常用工具" },
   {
     href: "/dashboard/mail",
     label: "📧 邮件中心",
@@ -50,6 +45,7 @@ export const dashboardNav: DashboardNavItem[] = [
     Icon: Mail,
     mailBadge: true,
     moduleId: "email",
+    category: "常用工具",
   },
   {
     href: "/dashboard/todos",
@@ -57,26 +53,7 @@ export const dashboardNav: DashboardNavItem[] = [
     title: "待办中心",
     Icon: ClipboardList,
     moduleId: "todos",
-  },
-  {
-    href: "/dashboard/product-analysis",
-    label: "选品分析",
-    title: "选品分析",
-    Icon: LineChart,
-    moduleId: "selection-analysis",
-  },
-  {
-    href: "/dashboard/smart-selection",
-    label: "智能选品",
-    title: "智能选品",
-    Icon: Sparkles,
-    moduleId: "selection-analysis",
-  },
-  {
-    href: "/dashboard/au-dev",
-    label: "澳洲开发",
-    title: "澳洲产品开发",
-    Icon: Rocket,
+    category: "常用工具",
   },
   {
     href: "/dashboard/listing",
@@ -84,14 +61,57 @@ export const dashboardNav: DashboardNavItem[] = [
     title: "Listing 撰写",
     Icon: FileText,
     moduleId: "listing",
+    category: "常用工具",
   },
-  { href: "/dashboard/ai-images", label: "AI 图片", title: "AI 图片", Icon: ImageIcon, moduleId: "ai-images" },
+  { href: "/dashboard/ai-images", label: "AI 图片", title: "AI 图片", Icon: ImageIcon, moduleId: "ai-images", category: "常用工具" },
   {
     href: "/dashboard/ai-assistant",
     label: "AI 助手",
     title: "AI 助手",
     Icon: Bot,
     moduleId: "ai-assistant",
+    category: "常用工具",
+  },
+  
+  {
+    href: "/dashboard/feedback",
+    label: "需求反馈",
+    title: "需求反馈",
+    Icon: MessageSquarePlus,
+    category: "常用工具",
+  },
+
+  {
+    href: "/dashboard/product-analysis",
+    label: "竞品分析",
+    title: "竞品分析",
+    Icon: LineChart,
+    moduleId: "selection-analysis",
+    category: "选品",
+  },
+  { href: "/dashboard/history", label: "历史记录", title: "历史记录", Icon: History, category: "选品" },
+  {
+    href: "/dashboard/smart-selection",
+    label: "智能选品",
+    title: "智能选品",
+    Icon: Sparkles,
+    moduleId: "selection-analysis",
+    category: "选品",
+  },
+  {
+    href: "/dashboard/beauty-ideas",
+    label: "美妆新品创意",
+    title: "美妆新品创意",
+    Icon: FlaskConical,
+    moduleId: "beauty-ideas",
+    category: "选品",
+  },
+  {
+    href: "/dashboard/au-dev",
+    label: "澳洲开发",
+    title: "澳洲产品开发",
+    Icon: Rocket,
+    category: "选品",
   },
   {
     href: "/dashboard/product-dev",
@@ -99,21 +119,26 @@ export const dashboardNav: DashboardNavItem[] = [
     title: "产品开发",
     Icon: Package,
     moduleId: "product-dev",
+    category: "选品",
   },
   {
-    href: "/dashboard/feedback",
-    label: "需求反馈",
-    title: "需求反馈",
-    Icon: MessageSquarePlus,
+    href: "/dashboard/suppliers",
+    label: "供应商资源库",
+    title: "供应商资源库",
+    Icon: Warehouse,
+    moduleId: "suppliers",
+    category: "选品",
   },
-  { href: "/dashboard/history", label: "历史记录", title: "历史记录", Icon: History },
-  { href: "/dashboard/settings", label: "设置", title: "设置", Icon: Settings, adminOnly: true },
+
+  { href: "/dashboard/users", label: "用户管理", title: "用户管理", Icon: Users, adminOnly: true, category: "管理" },
+  { href: "/dashboard/settings", label: "设置", title: "设置", Icon: Settings, adminOnly: true, category: "管理" },
   {
     href: "/dashboard/invite-codes",
     label: "邀请码管理",
     title: "邀请码管理",
     Icon: Ticket,
     adminOnly: true,
+    category: "管理",
   },
   {
     href: "/dashboard/token-ranking",
@@ -121,6 +146,7 @@ export const dashboardNav: DashboardNavItem[] = [
     title: "Token 用量排行",
     Icon: BarChart3,
     adminOnly: true,
+    category: "管理",
   },
   {
     href: "/dashboard/activity-logs",
@@ -128,6 +154,7 @@ export const dashboardNav: DashboardNavItem[] = [
     title: "操作记录",
     Icon: Activity,
     adminOnly: true,
+    category: "管理",
   },
 ];
 

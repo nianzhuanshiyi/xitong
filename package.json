@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npx prisma generate --schema=prisma/schema.postgresql.prisma && next build",
     "start": "npx prisma db push --accept-data-loss --schema=prisma/schema.postgresql.prisma && npx tsx prisma/seed.ts && next start",
     "start:prod": "npx prisma db push --accept-data-loss --schema=prisma/schema.postgresql.prisma && npx prisma db seed --schema=prisma/schema.postgresql.prisma && next start",
     "lint": "next lint",

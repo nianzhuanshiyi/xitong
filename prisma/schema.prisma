@@ -38,20 +38,12 @@ model User {
   assignedActionItems     ActionItem[]            @relation("ActionItemAssignee")
   emailAccounts           EmailAccount[]
   productAnalyses         ProductAnalysis[]
-  productIdeas            ProductIdea[]
-  ideaComments            IdeaComment[]
-  topPickReports          TopPickReport[]
-  threeCProductIdeas      ThreeCProductIdea[]
-  threeCIdeaComments      IdeaComment3C[]         @relation("ThreeCIdeaComments")
-  threeCTopPickReports    ThreeCTopPickReport[]
-  europeProductIdeas      EuropeProductIdea[]
-  europeIdeaComments      IdeaCommentEurope[]     @relation("EuropeIdeaComments")
-  europeTopPickReports    EuropeTopPickReport[]
   auCompetitorStores      AuCompetitorStore[]
   auCategoryOpportunities AuCategoryOpportunity[]
   auStorePlans            AuStorePlan[]
   auMilestones            AuMilestone[]
   auDevAnalyses           AuDevAnalysis[]
+  beautyIdeaPlans         BeautyIdeaPlan[]
   activityLogs            ActivityLog[]
   feedbacks               Feedback[]
   createdAt               DateTime                @default(now())
@@ -774,282 +766,43 @@ model AnalysisChat {
   @@index([analysisId, createdAt])
 }
 
-// ─── 美妆新品创意模块 ───────────────────────────────────────
-
-/// 美妆趋势
-model BeautyTrend {
-  id          String   @id @default(cuid())
-  /// google_trends / social_media / news / industry_report
-  source      String
-  /// US / KR / CN
-  market      String
-  title       String
-  content     String
-  /// JSON 数组，如 ["玻尿酸","烟酰胺"]
-  ingredients String   @default("[]")
-  /// skincare / makeup / haircare / bodycare / fragrance
-  category    String
-  trendScore  Int      @default(50)
-  sourceUrl   String?
-  scannedAt   DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  ideas ProductIdea[]
-
-  @@index([market, createdAt])
-  @@index([category, createdAt])
-}
-
-/// 新品创意
-model ProductIdea {
-  id             String       @id @default(cuid())
-  trendId        String?
-  trend          BeautyTrend? @relation(fields: [trendId], references: [id], onDelete: SetNull)
-  name           String
-  /// skincare / makeup / haircare / bodycare / fragrance
-  category       String
-  description    String
-  targetMarket   String       @default("US")
-  /// JSON 数组
-  keyIngredients String       @default("[]")
-  /// JSON 数组
-  sellingPoints  String       @default("[]")
-  estimatedPrice String?
-  estimatedCost  String?
-
-  /// 卖家精灵市场数据 JSON
-  marketData       String?
-  searchVolume     Int?
-  /// low / medium / high / extreme
-  competitionLevel String?
-  avgPrice         Float?
-  avgRating        Float?
-  /// JSON 数组
-  topCompetitors   String  @default("[]")
-
-  /// 评分
-  trendScore       Int    @default(0)
-  marketScore      Int    @default(0)
-  competitionScore Int    @default(0)
-  profitScore      Int    @default(0)
-  totalScore       Int    @default(0)
-  /// strong_go / go / watch / pass
-  recommendation   String @default("watch")
-
-  aiAnalysis String?
-  /// draft / validated / developing / abandoned
-  status     String   @default("draft")
-  createdBy  String
-  creator    User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  comments       IdeaComment[]
-  topPickReports TopPickReport[]
-
-  @@index([totalScore])
-  @@index([status, createdAt])
-  @@index([createdBy, createdAt])
-}
-
-/// 创意评论
-model IdeaComment {
-  id        String      @id @default(cuid())
-  ideaId    String
-  idea      ProductIdea @relation(fields: [ideaId], references: [id], onDelete: Cascade)
-  content   String
-  createdBy String
-  creator   User        @relation(fields: [createdBy], references: [id], onDelete: Cascade)
-  createdAt DateTime    @default(now())
-
-  @@index([ideaId, createdAt])
-}
-
-/// 精选新品方案
-model TopPickReport {
-  id               String       @id @default(cuid())
-  reportDate       String /// YYYY-MM-DD
-  ideaId           String?
-  idea             ProductIdea? @relation(fields: [ideaId], references: [id], onDelete: SetNull)
-  productName      String       @default("")
-  productNameEn    String       @default("")
-  executiveSummary String       @default("")
-
-  /// 产品方案
-  productSpec       String @default("{}") /// JSON
-  keyIngredients    String @default("") /// Markdown
-  formulaSuggestion String @default("") /// Markdown
-
-  /// 市场分析
-  marketAnalysis          String @default("") /// Markdown
-  competitorAnalysis      String @default("") /// Markdown
-  differentiationStrategy String @default("") /// Markdown
-
-  /// 财务预估
-  estimatedRetailPrice String?
-  estimatedCogs        String?
-  estimatedFbaFee      String?
-  estimatedAdCost      String?
-  estimatedProfit      String?
-  estimatedMargin      String?
-  breakEvenUnits       Int?
-
-  /// 落地执行方案
-  supplierPlan   String @default("") /// Markdown
-  timelinePlan   String @default("[]") /// JSON array
-  listingPlan    String @default("") /// Markdown
-  launchStrategy String @default("") /// Markdown
-  riskAssessment String @default("") /// Markdown
-
-  /// brief / deep / generating / completed / failed
-  status              String  @default("generating")
-  /// brief = phase1 only, deep = phase2 done
-  phase               String  @default("brief")
-  /// User dismissed this pick ("不感兴趣")
-  dismissed           Boolean @default(false)
-  /// Comma-sep category hints to avoid next time
-  dismissedCategories String  @default("")
-  /// Brief-phase fields (low token)
-  briefIngredients    String  @default("") /// comma-sep key ingredients
-  briefCompetition    String  @default("") /// low/medium/high
-  briefScore          Int     @default(0) /// AI confidence 1-100
-
-  createdBy String
-  creator   User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([reportDate])
-  @@index([createdBy])
-}
-
-/// 每日美妆报告
-model DailyBeautyReport {
-  id             String   @id @default(cuid())
-  reportDate     String   @unique /// YYYY-MM-DD
-  trendsFound    Int      @default(0)
-  ideasGenerated Int      @default(0)
-  highScoreIdeas Int      @default(0)
-  trendsSummary  String   @default("")
-  ideasSummary   String   @default("")
-  /// pending / generating / completed / failed
-  status         String   @default("pending")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-}
-
 // ─── 3C新品创意模块 ───────────────────────────────────────
 
-/// 3C趋势
-model ThreeCTrend {
-  id         String   @id @default(cuid())
-  /// google_trends / social_media / news / industry_report
-  source     String
-  /// US / EU / JP
-  market     String
-  title      String
-  content    String
-  /// JSON 数组，如 ["USB-C","快充"]
-  keywords   String   @default("[]")
-  /// phone_accessories / computer_peripherals / smart_home / audio / wearable / charging / storage
-  category   String
-  trendScore Int      @default(50)
-  sourceUrl  String?
-  scannedAt  DateTime @default(now())
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+// ─── 美妆新品创意模块 ────────────────────────────────────────────
 
-  ideas ThreeCProductIdea[]
+/// 美妆新品创意方案（卖家精灵筛选 + AI 生成）
+model BeautyIdeaPlan {
+  id         String @id @default(cuid())
+  reportDate String /// YYYY-MM-DD
 
-  @@index([market, createdAt])
-  @@index([category, createdAt])
-}
+  /// 第一步：品类筛选结果 JSON 数组
+  /// [{ keyword, searches, products, sdr, monopolyClickRate, passed, failReasons }]
+  keywordsData String @default("[]")
 
-/// 3C新品创意
-model ThreeCProductIdea {
-  id             String       @id @default(cuid())
-  trendId        String?
-  trend          ThreeCTrend? @relation(fields: [trendId], references: [id], onDelete: SetNull)
-  name           String
-  /// phone_accessories / computer_peripherals / smart_home / audio / wearable / charging / storage
-  category       String
-  description    String
-  targetMarket   String       @default("US")
-  /// JSON 数组
-  keyFeatures    String       @default("[]")
-  /// JSON 数组
-  sellingPoints  String       @default("[]")
-  estimatedPrice String?
-  estimatedCost  String?
+  /// 通过筛选的关键词列表 JSON 数组
+  qualifiedKeywords String @default("[]")
 
-  /// 卖家精灵市场数据 JSON
-  marketData       String?
-  searchVolume     Int?
-  /// low / medium / high / extreme
-  competitionLevel String?
-  avgPrice         Float?
-  avgRating        Float?
-  /// JSON 数组
-  topCompetitors   String  @default("[]")
+  /// 第二步：竞品筛选结果 JSON 数组
+  /// [{ asin, title, price, monthlySales, monthlyRevenue, reviews, rating }]
+  competitorProducts String @default("[]")
 
-  /// 评分
-  trendScore       Int    @default(0)
-  marketScore      Int    @default(0)
-  competitionScore Int    @default(0)
-  profitScore      Int    @default(0)
-  totalScore       Int    @default(0)
-  /// strong_go / go / watch / pass
-  recommendation   String @default("watch")
+  /// AI 选定的目标关键词
+  selectedKeyword    String  @default("")
+  searchVolume       Int?
+  supplyDemandRatio  Float?
+  clickConcentration Float?
 
-  aiAnalysis String?
-  /// draft / validated / developing / abandoned
-  status     String   @default("draft")
-  createdBy  String
-  creator    User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  /// 第三步：AI 生成的新品方案
+  productName     String @default("")
+  productNameEn   String @default("")
+  executiveSummary String @default("")
 
-  comments       IdeaComment3C[]
-  topPickReports ThreeCTopPickReport[]
-
-  @@index([totalScore])
-  @@index([status, createdAt])
-  @@index([createdBy, createdAt])
-}
-
-/// 3C创意评论
-model IdeaComment3C {
-  id        String            @id @default(cuid())
-  ideaId    String
-  idea      ThreeCProductIdea @relation(fields: [ideaId], references: [id], onDelete: Cascade)
-  content   String
-  createdBy String
-  creator   User              @relation("ThreeCIdeaComments", fields: [createdBy], references: [id], onDelete: Cascade)
-  createdAt DateTime          @default(now())
-
-  @@index([ideaId, createdAt])
-}
-
-/// 3C精选新品方案
-model ThreeCTopPickReport {
-  id               String             @id @default(cuid())
-  reportDate       String /// YYYY-MM-DD
-  ideaId           String?
-  idea             ThreeCProductIdea? @relation(fields: [ideaId], references: [id], onDelete: SetNull)
-  productName      String             @default("")
-  productNameEn    String             @default("")
-  executiveSummary String             @default("")
-
-  /// 产品方案
-  productSpec      String @default("{}") /// JSON
-  keyFeatures      String @default("") /// Markdown
-  designSuggestion String @default("") /// Markdown
-
-  /// 市场分析
-  marketAnalysis          String @default("") /// Markdown
-  competitorAnalysis      String @default("") /// Markdown
-  differentiationStrategy String @default("") /// Markdown
+  /// 方案详情 (Markdown)
+  keyFeatures             String @default("")
+  designSuggestion        String @default("")
+  marketAnalysis          String @default("")
+  competitorAnalysis      String @default("")
+  differentiationStrategy String @default("")
 
   /// 财务预估
   estimatedRetailPrice String?
@@ -1060,209 +813,35 @@ model ThreeCTopPickReport {
   estimatedMargin      String?
   breakEvenUnits       Int?
 
-  /// 落地执行方案
+  /// 落地执行
   supplierPlan   String @default("") /// Markdown
   timelinePlan   String @default("[]") /// JSON array
   listingPlan    String @default("") /// Markdown
   launchStrategy String @default("") /// Markdown
   riskAssessment String @default("") /// Markdown
 
-  /// brief / deep / generating / completed / failed
-  status              String  @default("generating")
-  /// brief = phase1 only, deep = phase2 done
-  phase               String  @default("brief")
-  /// User dismissed this pick
-  dismissed           Boolean @default(false)
-  /// Comma-sep category hints to avoid next time
-  dismissedCategories String  @default("")
-  /// Brief-phase fields
-  briefFeatures       String  @default("") /// comma-sep key features
-  briefCompetition    String  @default("") /// low/medium/high
-  briefScore          Int     @default(0) /// AI confidence 1-100
-
-  createdBy String
-  creator   User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([reportDate])
-  @@index([createdBy])
-}
-
-/// 每日3C报告
-model DailyThreeCReport {
-  id             String   @id @default(cuid())
-  reportDate     String   @unique /// YYYY-MM-DD
-  trendsFound    Int      @default(0)
-  ideasGenerated Int      @default(0)
-  highScoreIdeas Int      @default(0)
-  trendsSummary  String   @default("")
-  ideasSummary   String   @default("")
-  /// pending / generating / completed / failed
-  status         String   @default("pending")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-}
-
-// ─── 欧洲蓝海选品模块 ───────────────────────────────────────
-
-/// 欧洲趋势
-model EuropeTrend {
-  id         String   @id @default(cuid())
-  /// google_trends / social_media / news / industry_report / amazon_bestseller
-  source     String
-  /// DE / UK / FR / IT / ES
-  market     String
-  title      String
-  content    String
-  /// JSON 数组
-  keywords   String   @default("[]")
-  /// beauty / 3c_accessories / home / pet / sports / outdoor / office / fashion_accessories
-  category   String
-  trendScore Int      @default(50)
-  sourceUrl  String?
-  scannedAt  DateTime @default(now())
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  ideas EuropeProductIdea[]
-
-  @@index([market, createdAt])
-  @@index([category, createdAt])
-}
-
-/// 欧洲新品创意
-model EuropeProductIdea {
-  id             String       @id @default(cuid())
-  trendId        String?
-  trend          EuropeTrend? @relation(fields: [trendId], references: [id], onDelete: SetNull)
-  name           String
-  /// beauty / 3c_accessories / home / pet / sports / outdoor / office / fashion_accessories
-  category       String
-  description    String
-  targetMarket   String       @default("DE")
-  /// JSON 数组
-  keyFeatures    String       @default("[]")
-  /// JSON 数组
-  sellingPoints  String       @default("[]")
-  estimatedPrice String?
-  estimatedCost  String?
-
-  /// 卖家精灵市场数据 JSON
-  marketData       String?
-  searchVolume     Int?
-  /// low / medium / high / extreme
-  competitionLevel String?
-  avgPrice         Float?
-  avgRating        Float?
-  /// JSON 数组
-  topCompetitors   String  @default("[]")
-
-  /// 评分
-  trendScore       Int    @default(0)
+  /// 综合评分
   marketScore      Int    @default(0)
   competitionScore Int    @default(0)
+  trendScore       Int    @default(0)
   profitScore      Int    @default(0)
   totalScore       Int    @default(0)
   /// strong_go / go / watch / pass
   recommendation   String @default("watch")
+  /// low / medium / high / extreme
+  competitionLevel String @default("medium")
 
-  aiAnalysis String?
-  /// draft / validated / developing / abandoned
-  status     String   @default("draft")
-  createdBy  String
-  creator    User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  comments       IdeaCommentEurope[]
-  topPickReports EuropeTopPickReport[]
-
-  @@index([totalScore])
-  @@index([status, createdAt])
-  @@index([createdBy, createdAt])
-}
-
-/// 欧洲创意评论
-model IdeaCommentEurope {
-  id        String            @id @default(cuid())
-  ideaId    String
-  idea      EuropeProductIdea @relation(fields: [ideaId], references: [id], onDelete: Cascade)
-  content   String
-  createdBy String
-  creator   User              @relation("EuropeIdeaComments", fields: [createdBy], references: [id], onDelete: Cascade)
-  createdAt DateTime          @default(now())
-
-  @@index([ideaId, createdAt])
-}
-
-/// 欧洲精选方案
-model EuropeTopPickReport {
-  id               String             @id @default(cuid())
-  reportDate       String /// YYYY-MM-DD
-  ideaId           String?
-  idea             EuropeProductIdea? @relation(fields: [ideaId], references: [id], onDelete: SetNull)
-  productName      String             @default("")
-  productNameEn    String             @default("")
-  executiveSummary String             @default("")
-
-  /// 产品方案
-  productSpec      String @default("{}") /// JSON
-  keyFeatures      String @default("") /// Markdown
-  designSuggestion String @default("") /// Markdown
-
-  /// 市场分析
-  marketAnalysis          String @default("") /// Markdown
-  competitorAnalysis      String @default("") /// Markdown
-  differentiationStrategy String @default("") /// Markdown
-
-  /// 财务预估
-  estimatedRetailPrice String?
-  estimatedCogs        String?
-  estimatedFbaFee      String?
-  estimatedAdCost      String?
-  estimatedProfit      String?
-  estimatedMargin      String?
-  breakEvenUnits       Int?
-
-  /// 落地执行方案
-  supplierPlan   String @default("") /// Markdown
-  timelinePlan   String @default("[]") /// JSON array
-  listingPlan    String @default("") /// Markdown
-  launchStrategy String @default("") /// Markdown
-  riskAssessment String @default("") /// Markdown
-
-  /// brief / deep / generating / completed / failed
-  status              String  @default("generating")
-  phase               String  @default("brief")
-  dismissed           Boolean @default(false)
-  dismissedCategories String  @default("")
-  briefFeatures       String  @default("")
-  briefCompetition    String  @default("")
-  briefScore          Int     @default(0)
+  /// generating / completed / failed
+  status    String  @default("generating")
+  dismissed Boolean @default(false)
 
   createdBy String
   creator   User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([reportDate])
-  @@index([createdBy])
-}
-
-/// 每日欧洲报告
-model DailyEuropeReport {
-  id             String   @id @default(cuid())
-  reportDate     String   @unique /// YYYY-MM-DD
-  trendsFound    Int      @default(0)
-  ideasGenerated Int      @default(0)
-  highScoreIdeas Int      @default(0)
-  trendsSummary  String   @default("")
-  ideasSummary   String   @default("")
-  /// pending / generating / completed / failed
-  status         String   @default("pending")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  @@index([createdBy, createdAt])
+  @@index([status, createdAt])
 }
 
 // ─── AI 助手模块 ────────────────────────────────────────────

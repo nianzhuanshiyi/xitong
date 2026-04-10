@@ -528,7 +528,7 @@ export function SupplierDetail({ id }: { id: string }) {
       const j = await res.json();
       if (!res.ok) throw new Error(j.message ?? "深度分析失败");
       setCatalogResults((prev) => ({ ...prev, [fileId]: j }));
-      toast.success("深度选品分析完成");
+      toast.success("深度竞品分析完成");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "深度分析失败");
     } finally {
@@ -1362,7 +1362,7 @@ export function SupplierDetail({ id }: { id: string }) {
                                     ) : (
                                       <Sparkles className="size-3" />
                                     )}
-                                    深度选品分析
+                                    深度竞品分析
                                   </Button>
                                 )}
                                 <Button

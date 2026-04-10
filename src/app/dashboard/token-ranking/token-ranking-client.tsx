@@ -53,11 +53,10 @@ type DailyData = {
 
 const MODULE_LABELS: Record<string, string> = {
   "ai-assistant": "AI 助手",
-  "beauty-ideas": "美妆创意",
-  "3c-ideas": "3C 创意",
-  "europe-ideas": "欧洲选品",
   "mail": "邮件翻译",
   "ai-images": "AI 图片",
+  "beauty-ideas": "美妆创意",
+  "selection-analysis": "竞品分析",
 };
 
 function fmtTokens(n: number) {
@@ -168,9 +167,9 @@ export function TokenRankingClient() {
               <XAxis
                 dataKey="date"
                 tick={{ fontSize: 10 }}
-                tickFormatter={(v: any) => String(v).slice(5)}
+                tickFormatter={(v: string | number) => String(v).slice(5)}
               />
-              <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: any) => fmtTokens(Number(v) || 0)} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: string | number) => fmtTokens(Number(v) || 0)} />
               <Tooltip
                 formatter={(value: any) => [fmtTokens(Number(value) || 0), "Tokens"]}
                 labelFormatter={(label: any) => `日期: ${label}`}
@@ -198,7 +197,7 @@ export function TokenRankingClient() {
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: any) => fmtTokens(Number(v) || 0)} />
+                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: string | number) => fmtTokens(Number(v) || 0)} />
                 <Tooltip formatter={(value: any) => [fmtTokens(Number(value) || 0), "Tokens"]} />
                 <Bar dataKey="tokens" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
               </BarChart>

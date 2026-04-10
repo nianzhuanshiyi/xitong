@@ -52,10 +52,37 @@ type GeneratedRow = {
   promptEn: string;
   promptZh: string;
   filePath: string;
+  imageData?: string | null;
+  paramsJson?: string;
   isFavorite: boolean;
   sortPosition: number | null;
   createdAt: string;
 };
+
+function mimeFromRow(img: GeneratedRow): string {
+  try {
+    const p = JSON.parse(img.paramsJson || "{}") as { mimeType?: string };
+    if (p.mimeType && typeof p.mimeType === "string") return p.mimeType;
+  } catch {
+    /* ignore */
+  }
+  return "image/png";
+}
+
+function imageSrc(img: GeneratedRow, brokenPaths: Record<string, boolean> = {}): string {
+  // 优先使用物理文件路径，通过专用的 serve API 加载以确保 Content-Type 正确
+  const fp = img.filePath?.trim();
+  if (fp && !brokenPaths[fp]) {
+    return `/api/ai-images/serve?path=${encodeURIComponent(fp)}`;
+  }
+
+  // 备选方案：使用数据库中的 Base64 数据
+  if (img.imageData) {
+    if (img.imageData.startsWith("data:")) return img.imageData;
+    return `data:${mimeFromRow(img)};base64,${img.imageData}`;
+  }
+  return "";
+}
 
 const TYPE_CARDS: {
   id: AiImageTypeId;
@@ -144,6 +171,7 @@ export function AiImagesWorkspace() {
   const [loadingProject, setLoadingProject] = useState(false);
   const [promptLoading, setPromptLoading] = useState(false);
   const [genLoading, setGenLoading] = useState(false);
+  const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
   const [newOpen, setNewOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newCategory, setNewCategory] = useState("");
@@ -382,19 +410,17 @@ export function AiImagesWorkspace() {
   }
 
   async function exportZip() {
-    if (bundleOrder.length === 0) {
-      toast.error("请先在套装中排好至少一张图");
-      return;
-    }
     try {
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
       for (let i = 0; i < bundleOrder.length; i++) {
-        const id = bundleOrder[i]!;
+        const id = bundleOrder[i];
         const img = images.find((x) => x.id === id);
         if (!img) continue;
-        const url = `/${img.filePath.replace(/^\/+/, "")}`;
+        const url = imageSrc(img, brokenImages);
+        if (!url) continue;
         const res = await fetch(url);
+
         if (!res.ok) continue;
         const blob = await res.blob();
         zip.file(`amazon-slot-${i + 1}.png`, blob);
@@ -410,6 +436,7 @@ export function AiImagesWorkspace() {
       toast.error("打包失败");
     }
   }
+
 
   async function postProcess(
     img: GeneratedRow,
@@ -1052,15 +1079,23 @@ export function AiImagesWorkspace() {
                             type="button"
                             className="relative block w-full"
                             onClick={() =>
-                              setLightbox(`/${img.filePath.replace(/^\/+/, "")}`)
+                              setLightbox(imageSrc(img, brokenImages))
                             }
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={`/${img.filePath.replace(/^\/+/, "")}`}
+                              src={imageSrc(img, brokenImages)}
                               alt=""
                               className="aspect-square w-full object-cover"
                               loading="lazy"
+                              onError={() => {
+                                if (img.filePath) {
+                                  setBrokenImages((prev) => ({
+                                    ...prev,
+                                    [img.filePath]: true,
+                                  }));
+                                }
+                              }}
                             />
                           </button>
                           <div className="flex flex-wrap gap-1 p-2">
@@ -1075,7 +1110,7 @@ export function AiImagesWorkspace() {
                               <Heart className="size-4" />
                             </Button>
                             <a
-                              href={`/${img.filePath.replace(/^\/+/, "")}`}
+                              href={imageSrc(img, brokenImages)}
                               download
                               title="下载"
                               className={cn(
@@ -1215,10 +1250,18 @@ export function AiImagesWorkspace() {
                           </span>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={`/${img.filePath.replace(/^\/+/, "")}`}
+                            src={imageSrc(img, brokenImages)}
                             alt=""
                             className="size-10 rounded object-cover"
                             loading="lazy"
+                            onError={() => {
+                              if (img.filePath) {
+                                setBrokenImages((prev) => ({
+                                  ...prev,
+                                  [img.filePath]: true,
+                                }));
+                              }
+                            }}
                           />
                           <button
                             type="button"
@@ -1247,24 +1290,33 @@ export function AiImagesWorkspace() {
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {list.map((img) => (
-                            <button
-                              key={img.id}
-                              type="button"
-                              className="relative h-20 w-20 overflow-hidden rounded-md border"
-                              onClick={() =>
-                                setLightbox(
-                                  `/${img.filePath.replace(/^\/+/, "")}`
-                                )
-                              }
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={`/${img.filePath.replace(/^\/+/, "")}`}
-                                alt=""
-                                className="size-full object-cover"
-                                loading="lazy"
-                              />
-                            </button>
+                              <button
+                                key={img.id}
+                                type="button"
+                                className="relative h-20 w-20 overflow-hidden rounded-md border"
+                                onClick={() =>
+                                  setLightbox(
+                                    imageSrc(img, brokenImages)
+                                  )
+                                }
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={imageSrc(img, brokenImages)}
+                                  alt=""
+                                  className="size-full object-cover"
+                                  loading="lazy"
+                                  onError={() => {
+                                    if (img.filePath) {
+                                      setBrokenImages((prev) => ({
+                                        ...prev,
+                                        [img.filePath]: true,
+                                      }));
+                                    }
+                                  }}
+                                />
+                              </button>
+
                           ))}
                         </div>
                       </div>
