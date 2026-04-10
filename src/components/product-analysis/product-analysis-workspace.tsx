@@ -351,7 +351,7 @@ export function ProductAnalysisWorkspace() {
     <div className="mx-auto flex max-w-[1800px] flex-col gap-3 sm:gap-4">
       <div className="px-0 sm:px-0">
         <h2 className="font-heading text-lg font-semibold text-slate-900 sm:text-xl lg:text-2xl">
-          选品分析
+          
         </h2>
         <p className="mt-1 text-xs leading-relaxed text-slate-600 sm:text-sm">
           输入竞品 ASIN 或链接；3 个月内相同产品将优先使用缓存，节省 Token。
