@@ -35,6 +35,26 @@ function extractNodeIdPath(obj: unknown, depth = 0): string | null {
   return null;
 }
 
+function extractProductLabel(asinDetail: unknown): string {
+  if (!asinDetail || typeof asinDetail !== "object") return "";
+  const obj = asinDetail as Record<string, unknown>;
+  const localePath = obj.nodeLabelPathLocale ?? obj.nodeLabelLocale;
+  if (typeof localePath === "string" && localePath.includes(":")) {
+    const last = localePath.split(":").pop()?.trim();
+    if (last && last.length <= 15) return last;
+  }
+  const enPath = obj.nodeLabelPath;
+  if (typeof enPath === "string" && enPath.includes(":")) {
+    const last = enPath.split(":").pop()?.trim();
+    if (last && last.length <= 30) return last;
+  }
+  const title = obj.title;
+  if (typeof title === "string") {
+    return title.slice(0, 30) + (title.length > 30 ? "…" : "");
+  }
+  return "";
+}
+
 function bandFromTotal(total: number): ScoreBand {
   if (total >= 75) return "strong";
   if (total >= 55) return "moderate";
@@ -44,10 +64,10 @@ function bandFromTotal(total: number): ScoreBand {
 
 function bandLabel(b: ScoreBand): string {
   const m: Record<ScoreBand, string> = {
-    strong: "强烈推荐进入",
-    moderate: "可以考虑",
-    careful: "谨慎评估",
-    avoid: "不建议进入",
+    strong: "容易切入",
+    moderate: "正常难度",
+    careful: "较高难度",
+    avoid: "高难度",
   };
   return m[b];
 }
@@ -116,7 +136,7 @@ function calculateDataDrivenScore(ctx: {
   const details: Record<string, string> = {};
 
   // D1: Market Capacity (max 12) — monthly search volume
-  const searchVol = deepNumAny(ctx.trafficKeyword, ["searches", "monthlySearchVolume", "searchVolume", "searchesGrowthRate"]);
+  const searchVol = deepNumAny(ctx.trafficKeyword, ["searches", "monthlySearchVolume", "searchVolume"]);
   let d1 = 6;
   if (searchVol !== null) {
     if (searchVol >= 100000) d1 = 12;
@@ -132,7 +152,7 @@ function calculateDataDrivenScore(ctx: {
 
   // D2: Competition (max 18) — products count, SPR, supply/demand ratio, monopoly click
   const products = deepNumAny(ctx.marketResearch, ["products", "productCount"]);
-  const spr = deepNumAny(ctx.marketResearch, ["spr", "supplyDemandRatio"]);
+  const spr = deepNumAny(ctx.marketResearch, ["spr"]);
   const monopolyClick = deepNumAny(ctx.marketResearch, ["monopolyClickRate", "clickConcentration"]);
   let d2 = 9;
   const d2Parts: string[] = [];
@@ -207,10 +227,11 @@ function calculateDataDrivenScore(ctx: {
   let d6 = 4;
   if (ratings.length > 0) {
     const avgRating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
-    if (avgRating < 3.8) { d6 = 8; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（低，容易超越）`; }
-    else if (avgRating < 4.2) { d6 = 6; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（中等）`; }
-    else if (avgRating < 4.5) { d6 = 3; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（较高）`; }
-    else { d6 = 1; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（极高，难超越）`; }
+    if (avgRating < 4.0) { d6 = 8; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（低，容易超越）`; }
+    else if (avgRating < 4.3) { d6 = 6; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（中等，有机会超越）`; }
+    else if (avgRating < 4.5) { d6 = 4; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（较高，需要产品力过硬）`; }
+    else if (avgRating < 4.7) { d6 = 2; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（高，难超越）`; }
+    else { d6 = 1; details.reviewBarrier = `竞品平均评分${avgRating.toFixed(1)}（极高，几乎无法超越）`; }
   } else {
     details.reviewBarrier = "评分数据缺失，使用默认值";
   }
@@ -247,10 +268,10 @@ function calculateDataDrivenScore(ctx: {
 
       // Sub-score A: avg CPC bid (8 points)
       let cpcScore = 4;
-      if (avgBid <= 0.50) cpcScore = 8;
-      else if (avgBid <= 0.80) cpcScore = 6;
-      else if (avgBid <= 1.20) cpcScore = 4;
-      else if (avgBid <= 2.00) cpcScore = 2;
+      if (avgBid <= 0.80) cpcScore = 8;
+      else if (avgBid <= 1.30) cpcScore = 6;
+      else if (avgBid <= 2.00) cpcScore = 4;
+      else if (avgBid <= 3.00) cpcScore = 2;
       else cpcScore = 0;
       adParts.push(`平均CPC $${avgBid.toFixed(2)}`);
 
@@ -258,10 +279,10 @@ function calculateDataDrivenScore(ctx: {
       let ratioScore = 4;
       if (ctx.sellingPrice > 0) {
         const cpcRatio = avgBid / ctx.sellingPrice;
-        if (cpcRatio <= 0.03) ratioScore = 8;
-        else if (cpcRatio <= 0.05) ratioScore = 6;
-        else if (cpcRatio <= 0.08) ratioScore = 4;
-        else if (cpcRatio <= 0.12) ratioScore = 2;
+        if (cpcRatio <= 0.04) ratioScore = 8;
+        else if (cpcRatio <= 0.07) ratioScore = 6;
+        else if (cpcRatio <= 0.10) ratioScore = 4;
+        else if (cpcRatio <= 0.15) ratioScore = 2;
         else ratioScore = 0;
         adParts.push(`CPC占售价比${(cpcRatio * 100).toFixed(1)}%`);
       }
@@ -622,10 +643,10 @@ export async function runProductAnalysis(
 
   const dataTotal = Object.values(dataDimensions).reduce((a, b) => a + b, 0);
 
-  // Claude ±5 adjustment
+  // Claude ±5 adjustment (short JSON, stable parsing)
   type AdjustJson = {
     adjustment?: number;
-    rationale?: string;
+    verdict?: string;
   };
 
   const dimDetailStr = Object.entries(dimDetails)
@@ -633,24 +654,47 @@ export async function runProductAnalysis(
     .join("\n");
 
   const adjustJson = await claudeJson<AdjustJson>({
-    system:
-      "你是亚马逊选品决策助手。请全部使用中文回答，不要使用英文（专有名词如 ASIN、BSR、FBA、SPR 除外）。数据驱动评分系统已给出基础分，你需要根据数据摘要中可能遗漏的定性因素（如品牌壁垒、政策风险、季节性等）给出微调。只输出 JSON：{adjustment: -5到5之间的整数, rationale: string}。rationale 必须使用中文。adjustment 正数表示数据低估了机会，负数表示数据高估了机会。",
+    system: "你是亚马逊选品决策助手。请全部使用中文回答（专有名词如 ASIN、BSR、FBA、SPR、CPC 除外）。基于数据给出微调和判断。只输出 JSON：{adjustment: -5到5之间的整数, verdict: '容易切入'或'正常难度'或'较高难度'或'高难度'}。adjustment 正数=数据低估了机会，负数=数据高估了机会。",
     user: `数据驱动基础分: ${dataTotal}/100\n各维度详情:\n${dimDetailStr}\n\n数据摘要:\n${truncateJson(contextForAi, 8000)}`,
   });
+
+  console.log("[scoring] adjustJson:", JSON.stringify(adjustJson));
 
   const adjustment = adjustJson && typeof adjustJson.adjustment === "number"
     ? Math.max(-5, Math.min(5, Math.round(adjustJson.adjustment)))
     : 0;
-  const adjustRationale = adjustJson?.rationale ?? "";
+  const verdict = adjustJson?.verdict ?? "";
 
   const finalTotal = Math.max(0, Math.min(100, dataTotal + adjustment));
   const band = bandFromTotal(finalTotal);
+
+  // Detailed conclusion via plain-text claudeMessages (no JSON parsing, no truncation risk)
+  const conclusion = (await claudeMessages({
+    system: `你是一位经验丰富的亚马逊选品顾问。请全部使用中文回答（专有名词如 ASIN、BSR、FBA、SPR、CPC、PPC 除外）。
+
+核心理念：任何品类都有切入机会，关键是找到正确的切入方式。分数不代表"能不能做"，而是代表"难度有多大"。
+
+请给出详细的切入分析，包含以下6个部分，用序号标注，每部分1-3句话：
+
+1.【市场概况】需求规模多大？增长还是成熟？有没有季节性？
+2.【竞争格局】头部玩家是谁？新品能不能拿到流量？评论差距需要多久追上？
+3.【利润空间】当前售价和成本下利润是否健康？广告投入期需要准备多少预算？
+4.【难度评估】这个品类做起来最难的地方是什么？（只说最关键的1个点）
+5.【切入策略】给出具体切入路径：从哪个关键词切入、建议定价区间、产品差异化方向、首批备货建议。高难度品类要说明需要什么创新才能活下来。
+6.【预期节奏】从上架到月销稳定大概需要多久？分几个阶段？
+
+语气：像一个打过很多品的老运营在跟团队复盘，务实、具体、不说废话。不要说"不建议进入"，而是说清楚"要做的话需要怎么做"。`,
+    user: `综合评分: ${finalTotal}/100（${verdict || bandLabel(band)}）\n各维度详情:\n${dimDetailStr}\n\n数据摘要:\n${truncateJson(contextForAi, 8000)}`,
+  })) ?? "";
+
+  console.log("[scoring] conclusion length:", conclusion.length);
+
   const score: AnalysisResult["score"] = {
     total: finalTotal,
     band,
     label: bandLabel(band),
     dimensions: dataDimensions,
-    rationale: `数据驱动基础分 ${dataTotal}${adjustment >= 0 ? "+" : ""}${adjustment} = ${finalTotal}。${adjustRationale}`,
+    rationale: `【${verdict || bandLabel(band)}】综合评分 ${finalTotal}/100（基础分${dataTotal}${adjustment >= 0 ? "+" : ""}${adjustment}）\n\n${conclusion}`,
   };
 
   p("claude_report", "生成完整报告", 93);
@@ -785,12 +829,16 @@ export async function runProductAnalysis(
     },
   });
 
+  const primaryDetail = byAsin[parsed.asins[0]];
+  const productLabel = extractProductLabel(primaryDetail);
+  const titleSuffix = productLabel ? ` · ${productLabel}` : "";
+
   const report = await prisma.productAnalysisReport.create({
     data: {
       userId,
       marketplace: parsed.marketplace,
       asinsJson: JSON.stringify(parsed.asins),
-      title: `选品分析 · ${parsed.asins.slice(0, 3).join(", ")}${parsed.asins.length > 3 ? "…" : ""}`,
+      title: `选品分析 · ${parsed.asins.slice(0, 3).join(", ")}${parsed.asins.length > 3 ? "…" : ""}${titleSuffix}`,
       score: score.total,
       scoreBand: score.band,
       status: "completed",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -73,14 +73,53 @@ export default function AiAssistantWorkspace() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingTextRef = useRef("");
+  const displayedRef = useRef("");
+  const rafRef = useRef<number>(0);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
+  const flushPending = useCallback(() => {
+    const pending = pendingTextRef.current;
+    if (pending.length === 0) {
+      rafRef.current = requestAnimationFrame(flushPending);
+      return;
+    }
+    // 每帧输出的字符数：pending 越多输出越快，保证不掉队
+    const speed = Math.max(2, Math.ceil(pending.length / 5));
+    const chunk = pending.slice(0, speed);
+    pendingTextRef.current = pending.slice(speed);
+    displayedRef.current += chunk;
+    setStreamingText(displayedRef.current);
+    rafRef.current = requestAnimationFrame(flushPending);
+  }, []);
+
+  const startTyping = useCallback(() => {
+    pendingTextRef.current = "";
+    displayedRef.current = "";
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(flushPending);
+  }, [flushPending]);
+
+  const stopTyping = useCallback(() => {
+    // 把剩余的 pending 文字一次性显示完
+    if (pendingTextRef.current.length > 0) {
+      displayedRef.current += pendingTextRef.current;
+      pendingTextRef.current = "";
+      setStreamingText(displayedRef.current);
+    }
+    cancelAnimationFrame(rafRef.current);
+  }, []);
+
   useEffect(() => {
     scrollToBottom();
   }, [messages, streamingText, scrollToBottom]);
+
+  useEffect(() => {
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
 
   // Load conversations
   useEffect(() => {
@@ -230,6 +269,7 @@ export default function AiAssistantWorkspace() {
     setSending(true);
     setStreamingText("");
     setToolCalls([]);
+    startTyping();
 
     try {
       const res = await fetch("/api/ai-assistant/chat", {
@@ -272,7 +312,7 @@ export default function AiAssistantWorkspace() {
             const evt = JSON.parse(line);
             if (evt.type === "delta") {
               accumulated += evt.text;
-              setStreamingText(accumulated);
+              pendingTextRef.current += evt.text;
             } else if (evt.type === "tool_call") {
               setToolCalls((prev) => {
                 const existing = prev.findIndex(
@@ -297,6 +337,7 @@ export default function AiAssistantWorkspace() {
                 ];
               });
             } else if (evt.type === "done") {
+              stopTyping();
               setToolCalls([]);
               setMessages((prev) => [
                 ...prev,
@@ -319,6 +360,7 @@ export default function AiAssistantWorkspace() {
         }
       }
     } catch (err) {
+      stopTyping();
       const errMsg = err instanceof Error ? err.message : "发送失败";
       setMessages((prev) => [
         ...prev,
@@ -602,6 +644,7 @@ export default function AiAssistantWorkspace() {
     </div>
   );
 }
+
 
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";

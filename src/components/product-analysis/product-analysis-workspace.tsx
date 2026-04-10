@@ -66,6 +66,7 @@ export function ProductAnalysisWorkspace() {
   const [fromCache, setFromCache] = useState(false);
   const [cacheMeta, setCacheMeta] = useState<CacheMeta | undefined>();
   const [runError, setRunError] = useState<string | null>(null);
+  const [prefillForceRefresh, setPrefillForceRefresh] = useState(false);
 
   useEffect(() => {
     const id = searchParams.get("id");
@@ -120,8 +121,24 @@ export function ProductAnalysisWorkspace() {
       return;
     }
 
+    const prefillQ = searchParams.get("prefill");
     const asinQ = searchParams.get("asin");
     const marketplaceQ = searchParams.get("marketplace");
+    const forceRefreshQ = searchParams.get("forceRefresh");
+
+    if (prefillQ?.trim()) {
+      setRawInput(prefillQ.trim());
+      if (marketplaceQ) {
+        // Will be picked up by the preview / run flow
+      }
+      setLoadingSaved(false);
+      // Auto-trigger analysis if forceRefresh requested
+      if (forceRefreshQ === "1") {
+        setPrefillForceRefresh(true);
+      }
+      return;
+    }
+
     if (asinQ?.trim()) {
       const m = (marketplaceQ ?? "US").toUpperCase();
       const host =
@@ -275,6 +292,15 @@ export function ProductAnalysisWorkspace() {
       setRunning(false);
     }
   };
+
+  // Auto-trigger analysis when prefill + forceRefresh from URL
+  useEffect(() => {
+    if (prefillForceRefresh && rawInput.trim() && !running) {
+      setPrefillForceRefresh(false);
+      runAnalysis(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillForceRefresh, rawInput]);
 
   const downloadMarkdown = () => {
     if (!result) return;

@@ -5,9 +5,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
+  Lightbulb,
   Loader2,
+  Microscope,
+  Pause,
   Plus,
   Sparkles,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -53,7 +57,6 @@ import { cn } from "@/lib/utils";
 import {
   EMPTY_FILTERS_PLACEHOLDER,
   US_BEAUTY_DEFAULT_FILTERS,
-  estimateScanTokens,
   parseFiltersJson,
   type SmartSelectionFilters,
 } from "@/lib/smart-selection-filters";
@@ -146,63 +149,161 @@ function MinMax({
   );
 }
 
-function ScoreRing({ score }: { score: number | null | undefined }) {
-  const s = score ?? 0;
-  const pct = Math.min(100, Math.max(0, s));
+/* ScoreRing, parsePainTags, parseMargin removed — no AI scoring in scan phase */
+
+const PRESET_SUBCATEGORIES = [
+  { nodeIdPath: "3760911:11060451:11060711:7792636011", label: "面部套装 Facial Kits" },
+  { nodeIdPath: "3760911:11060451:11060711:11062031:7792528011", label: "精华 Serums" },
+  { nodeIdPath: "3760911:11060451:11060711:11062031:11061121", label: "面膜 Masks" },
+  { nodeIdPath: "3760911:11060451:11060711:11061301:16479981011", label: "面霜保湿 Face Moisturizers" },
+  { nodeIdPath: "3760911:11060451:11060711:11062031:7792926011", label: "去角质 Facial Peels" },
+  { nodeIdPath: "3760911:11060451:11060711:11061931", label: "化妆水 Toners" },
+  { nodeIdPath: "3760911:11060451:11062591:11062651:7792567011", label: "面部防晒 Facial Sunscreens" },
+  { nodeIdPath: "3760911:11060451:11061941:11061971", label: "眼膜 Eye Masks" },
+  { nodeIdPath: "3760911:11060451:11061941:7730090011", label: "眼霜 Eye Creams" },
+  { nodeIdPath: "3760911:11060451:3761351:979546011", label: "润唇膏 Lip Balms" },
+  { nodeIdPath: "3760911:11060451:11060711:11061301:15239989011", label: "保湿喷雾 Face Mists" },
+  { nodeIdPath: "3760911:11060451:11060711:11060901:7730193011", label: "洁面 Face Washes" },
+  { nodeIdPath: "3760911:11060451:11060521:11056471", label: "身体磨砂 Body Scrubs" },
+];
+
+type ScanFiltersJson = {
+  marketplace?: string;
+  subcategories?: Array<{ nodeIdPath: string; label: string }>;
+  newProductMonths?: number;
+  minPrice?: number;
+  maxPrice?: number;
+  minMonthlyRevenue?: number;
+  maxReviews?: number;
+  minRating?: number;
+  supplyChainTags?: string[];
+};
+
+function parseScanConfig(filters: SmartSelectionFilters): ScanFiltersJson {
+  try {
+    const raw = (filters as unknown as Record<string, unknown>)._scanConfig;
+    if (raw && typeof raw === "object") return raw as ScanFiltersJson;
+  } catch { /* ignore */ }
+  return {};
+}
+
+function ScanCategoryConfig({
+  filters,
+  setFilters,
+}: {
+  filters: SmartSelectionFilters;
+  setFilters: React.Dispatch<React.SetStateAction<SmartSelectionFilters>>;
+}) {
+  const scanConfig = parseScanConfig(filters);
+  const selected = scanConfig.subcategories ?? [];
+  const [customPath, setCustomPath] = useState("");
+  const [customLabel, setCustomLabel] = useState("");
+
+  const updateScan = (patch: Partial<ScanFiltersJson>) => {
+    setFilters((f) => ({
+      ...f,
+      _scanConfig: { ...parseScanConfig(f), ...patch },
+    } as SmartSelectionFilters));
+  };
+
+  const toggleSubcat = (item: { nodeIdPath: string; label: string }) => {
+    const has = selected.some((s) => s.nodeIdPath === item.nodeIdPath);
+    const next = has
+      ? selected.filter((s) => s.nodeIdPath !== item.nodeIdPath)
+      : [...selected, item];
+    updateScan({ subcategories: next });
+  };
+
+  const addCustom = () => {
+    if (!customPath.trim() || !customLabel.trim()) return;
+    const item = { nodeIdPath: customPath.trim(), label: customLabel.trim() };
+    if (!selected.some((s) => s.nodeIdPath === item.nodeIdPath)) {
+      updateScan({ subcategories: [...selected, item] });
+    }
+    setCustomPath("");
+    setCustomLabel("");
+  };
+
   return (
-    <div className="relative mx-auto size-20">
-      <svg className="size-20 -rotate-90" viewBox="0 0 36 36">
-        <circle
-          cx="18"
-          cy="18"
-          r="15.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="3"
-          className="text-slate-200"
-        />
-        <circle
-          cx="18"
-          cy="18"
-          r="15.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="3"
-          strokeDasharray={`${pct}, 100`}
-          className="text-indigo-500"
-          pathLength={100}
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span className="text-lg font-semibold text-slate-900">{s || "—"}</span>
-        <span className="text-[10px] text-muted-foreground">分</span>
+    <div className="rounded-lg border border-indigo-200/80 bg-indigo-50/30 p-4 space-y-4">
+      <h3 className="text-sm font-semibold text-indigo-900">扫描配置（类目 & 筛选条件）</h3>
+
+      <div className="space-y-2">
+        <p className={labelCls}>扫描类目（勾选需要扫描的类目）</p>
+        <div className="grid gap-1 sm:grid-cols-2">
+          {PRESET_SUBCATEGORIES.map((item) => (
+            <label key={item.nodeIdPath} className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={selected.some((s) => s.nodeIdPath === item.nodeIdPath)}
+                onCheckedChange={() => toggleSubcat(item)}
+              />
+              {item.label}
+            </label>
+          ))}
+        </div>
+        <div className="flex gap-2 mt-2">
+          <Input className="h-8 flex-1" placeholder="自定义 nodeIdPath" value={customPath} onChange={(e) => setCustomPath(e.target.value)} />
+          <Input className="h-8 w-32" placeholder="类目名称" value={customLabel} onChange={(e) => setCustomLabel(e.target.value)} />
+          <Button type="button" size="sm" variant="outline" onClick={addCustom}>添加</Button>
+        </div>
+        {selected.length > 0 && (
+          <p className="text-xs text-muted-foreground">已选 {selected.length} 个类目</p>
+        )}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-1">
+          <p className={labelCls}>新品定义（月）</p>
+          <Input className="h-8" type="number" value={scanConfig.newProductMonths ?? 6}
+            onChange={(e) => updateScan({ newProductMonths: Number(e.target.value) || 6 })} />
+        </div>
+        <div className="space-y-1">
+          <p className={labelCls}>最低售价 ($)</p>
+          <Input className="h-8" type="number" value={scanConfig.minPrice ?? 20}
+            onChange={(e) => updateScan({ minPrice: Number(e.target.value) || 0 })} />
+        </div>
+        <div className="space-y-1">
+          <p className={labelCls}>最高售价 ($)</p>
+          <Input className="h-8" type="number" value={scanConfig.maxPrice ?? 200}
+            onChange={(e) => updateScan({ maxPrice: Number(e.target.value) || 200 })} />
+        </div>
+        <div className="space-y-1">
+          <p className={labelCls}>最低月收入 ($)</p>
+          <Input className="h-8" type="number" value={scanConfig.minMonthlyRevenue ?? 10000}
+            onChange={(e) => updateScan({ minMonthlyRevenue: Number(e.target.value) || 0 })} />
+        </div>
+        <div className="space-y-1">
+          <p className={labelCls}>最多评论数</p>
+          <Input className="h-8" type="number" value={scanConfig.maxReviews ?? 500}
+            onChange={(e) => updateScan({ maxReviews: Number(e.target.value) || 500 })} />
+        </div>
+        <div className="space-y-1">
+          <p className={labelCls}>最低评分</p>
+          <Input className="h-8" type="number" step="0.1" value={scanConfig.minRating ?? 3.0}
+            onChange={(e) => updateScan({ minRating: Number(e.target.value) || 0 })} />
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <p className={labelCls}>供应链标签</p>
+        <div className="flex gap-3 text-sm">
+          {["韩国", "美国", "中国"].map((tag) => (
+            <label key={tag} className="flex items-center gap-2">
+              <Checkbox
+                checked={(scanConfig.supplyChainTags ?? []).includes(tag)}
+                onCheckedChange={() => {
+                  const arr = scanConfig.supplyChainTags ?? [];
+                  const next = arr.includes(tag) ? arr.filter((t) => t !== tag) : [...arr, tag];
+                  updateScan({ supplyChainTags: next });
+                }}
+              />
+              {tag}
+            </label>
+          ))}
+        </div>
       </div>
     </div>
   );
-}
-
-function parsePainTags(aiJson: string | null): string[] {
-  if (!aiJson) return [];
-  try {
-    const j = JSON.parse(aiJson) as { painTags?: string[] };
-    if (Array.isArray(j.painTags)) return j.painTags.slice(0, 8);
-  } catch {
-    /* ignore */
-  }
-  return [];
-}
-
-function parseMargin(aiJson: string | null): string | null {
-  if (!aiJson) return null;
-  try {
-    const j = JSON.parse(aiJson) as { estimatedMarginPct?: number };
-    if (typeof j.estimatedMarginPct === "number") {
-      return `${j.estimatedMarginPct}%`;
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
 }
 
 export function SmartSelectionWorkspace() {
@@ -223,28 +324,30 @@ export function SmartSelectionWorkspace() {
   const [candidates, setCandidates] = useState<ResultRow[]>([]);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [newPlanOpen, setNewPlanOpen] = useState(false);
-  const [newPlan, setNewPlan] = useState({
-    name: "",
-    slug: "",
-    marketplace: "US",
-  });
+  const [newPlanName, setNewPlanName] = useState("");
+  const [creatingPlan, setCreatingPlan] = useState(false);
+  const [extractingId, setExtractingId] = useState<string | null>(null);
+  const [expandedIdea, setExpandedIdea] = useState<string | null>(null);
+  const [plansLoaded, setPlansLoaded] = useState(false);
 
   const currentPlan = useMemo(
     () => plans.find((p) => p.id === planId) ?? null,
     [plans, planId]
   );
 
-  const tokenEst = useMemo(() => estimateScanTokens(filters), [filters]);
+  // tokenEst removed — scan phase has zero AI token cost
 
   const loadPlans = useCallback(async () => {
     const res = await fetch("/api/smart-selection/plans");
     const j = await res.json().catch(() => ({}));
     if (!res.ok) {
       toast.error(j.message ?? "加载方案失败");
+      setPlansLoaded(true);
       return;
     }
     const list = j as PlanListItem[];
     setPlans(list);
+    setPlansLoaded(true);
     setPlanId((prev) => {
       if (prev) return prev;
       const first = list.find((p) => p.slug === "us-beauty") ?? list[0];
@@ -261,7 +364,12 @@ export function SmartSelectionWorkspace() {
         fetch(`/api/smart-selection/plans/${id}/stats`),
       ]);
       const pj = await pRes.json().catch(() => ({}));
-      if (!pRes.ok) throw new Error(pj.message ?? "加载方案失败");
+      if (!pRes.ok) {
+        if (pRes.status === 404 || pRes.status === 403) {
+          throw new Error("方案不存在");
+        }
+        throw new Error((pj as { message?: string }).message ?? "加载方案失败");
+      }
       const plan = pj as {
         filtersJson: string;
         slug: string;
@@ -283,7 +391,15 @@ export function SmartSelectionWorkspace() {
       if (sRes.ok) setStats(sj as Stats);
       else setStats(null);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "加载失败");
+      const msg = e instanceof Error ? e.message : "加载失败";
+      if (msg.includes("不存在") || msg.includes("未找到") || msg.includes("404")) {
+        toast.error("该方案已删除或不存在，请选择其他方案或新建方案");
+        setPlanId(null);
+        setResults([]);
+        setStats(null);
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setLoadingPlan(false);
     }
@@ -292,6 +408,14 @@ export function SmartSelectionWorkspace() {
   useEffect(() => {
     loadPlans();
   }, [loadPlans]);
+
+  // Clear planId if it doesn't exist in the loaded plans list
+  useEffect(() => {
+    if (planId && plansLoaded && plans.length > 0 && !plans.some((p) => p.id === planId)) {
+      setPlanId(null);
+      toast.error("该方案已删除或不存在，请选择其他方案或新建方案");
+    }
+  }, [planId, plans, plansLoaded]);
 
   useEffect(() => {
     if (planId) loadPlanDetail(planId);
@@ -317,12 +441,31 @@ export function SmartSelectionWorkspace() {
   }
 
   async function runScan() {
-    if (!planId || !currentPlan?.active) {
-      toast.error("请先选择已开放的方案");
+    if (!planId) {
+      toast.error("请先选择一个方案");
       return;
     }
     setScanning(true);
     setScanProgress(0);
+    setScanStep("保存筛选条件…");
+
+    // Auto-save filters to DB before scanning so scan route reads latest config
+    try {
+      const saveRes = await fetch(`/api/smart-selection/plans/${planId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filtersJson: JSON.stringify(filters) }),
+      });
+      if (!saveRes.ok) {
+        const sj = await saveRes.json().catch(() => ({}));
+        throw new Error((sj as { message?: string }).message ?? "保存筛选条件失败");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "保存失败");
+      setScanning(false);
+      return;
+    }
+
     setScanStep("连接扫描服务…");
     try {
       const res = await fetch("/api/smart-selection/scan/stream", {
@@ -457,6 +600,31 @@ export function SmartSelectionWorkspace() {
     }
   }
 
+  async function extractIdea(row: ResultRow) {
+    if (!planId || extractingId) return;
+    setExtractingId(row.id);
+    try {
+      const res = await fetch(`/api/smart-selection/plans/${planId}/extract-idea`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resultId: row.id }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((j as { message?: string }).message ?? "提取创意失败");
+      toast.success("创意提取完成");
+      // Update the result in local state with the analysis
+      setResults((prev) => prev.map((r) =>
+        r.id === row.id ? { ...r, aiSummary: (j as { analysis?: string }).analysis ?? r.aiSummary } : r
+      ));
+      setExpandedIdea(row.id);
+      if (planId) loadPlanDetail(planId);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "提取创意失败");
+    } finally {
+      setExtractingId(null);
+    }
+  }
+
   function exportCandidatesCsv() {
     const headers = [
       "ASIN",
@@ -495,30 +663,36 @@ export function SmartSelectionWorkspace() {
     URL.revokeObjectURL(a.href);
   }
 
-  async function createPlan() {
-    if (!newPlan.name.trim() || !newPlan.slug.trim()) {
-      toast.error("请填写方案名称与 slug");
+  async function createPlan(name?: string) {
+    const planName = (name ?? newPlanName).trim();
+    if (!planName) {
+      toast.error("请填写方案名称");
       return;
     }
+    // Auto-generate slug from name
+    const slug = planName
+      .toLowerCase()
+      .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 60) || `plan-${Date.now()}`;
+    setCreatingPlan(true);
     try {
       const res = await fetch("/api/smart-selection/plans", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newPlan.name.trim(),
-          slug: newPlan.slug.trim().toLowerCase(),
-          marketplace: newPlan.marketplace,
-        }),
+        body: JSON.stringify({ name: planName, slug, marketplace: "US" }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.message ?? "创建失败");
-      toast.success("方案已创建");
+      toast.success("方案已创建，请勾选类目后开始扫描");
       setNewPlanOpen(false);
-      setNewPlan({ name: "", slug: "", marketplace: "US" });
+      setNewPlanName("");
       await loadPlans();
       setPlanId(j.id as string);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "创建失败");
+    } finally {
+      setCreatingPlan(false);
     }
   }
 
@@ -583,44 +757,79 @@ export function SmartSelectionWorkspace() {
             智能选品
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            按预设条件从亚马逊池子中筛选，并由 AI 评估是否值得开发；每次推荐 3
-            个合格商品（完整扫描流程将逐步接入）。
+            按预设类目和筛选条件从亚马逊拉取新品数据，纯代码过滤，零 AI 消耗。点击「深度分析」跳转选品分析页做详细评估。
           </p>
         </div>
-        <Button type="button" variant="outline" onClick={() => setNewPlanOpen(true)}>
-          <Plus className="mr-1 size-4" />
-          新建方案
-        </Button>
+        {plans.length > 0 && (
+          <Button type="button" variant="outline" onClick={() => setNewPlanOpen(true)}>
+            <Plus className="mr-1 size-4" />
+            新建方案
+          </Button>
+        )}
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
-        {plans.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            onClick={() => setPlanId(p.id)}
-            className={cn(
-              "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-              planId === p.id
-                ? "bg-indigo-100 text-indigo-900"
-                : "text-slate-600 hover:bg-slate-100"
-            )}
-          >
-            {p.name}
-            {!p.active ? (
-              <Badge variant="secondary" className="ml-2 text-[10px]">
-                即将开放
-              </Badge>
-            ) : null}
-          </button>
-        ))}
-      </div>
+      {/* No plans: show inline creation */}
+      {plansLoaded && plans.length === 0 && (
+        <Card>
+          <CardContent className="py-10">
+            <div className="mx-auto max-w-md space-y-4 text-center">
+              <Sparkles className="mx-auto size-10 text-indigo-400" />
+              <h2 className="text-lg font-semibold text-slate-800">创建你的第一个选品方案</h2>
+              <p className="text-sm text-muted-foreground">
+                给方案起个名字（如「2026年5月·护肤选品」），创建后即可勾选类目、设条件、开始扫描。
+              </p>
+              <div className="flex gap-2 justify-center">
+                <Input
+                  className="max-w-xs"
+                  placeholder="输入方案名称…"
+                  value={newPlanName}
+                  onChange={(e) => setNewPlanName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && createPlan()}
+                />
+                <Button onClick={() => createPlan()} disabled={creatingPlan || !newPlanName.trim()}>
+                  {creatingPlan ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Plus className="mr-1 size-4" />}
+                  创建方案
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {loadingPlan ? (
+      {/* Has plans: show plan tabs */}
+      {plans.length > 0 && (
+        <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
+          {plans.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setPlanId(p.id)}
+              className={cn(
+                "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                planId === p.id
+                  ? "bg-indigo-100 text-indigo-900"
+                  : "text-slate-600 hover:bg-slate-100"
+              )}
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!planId && plans.length > 0 && (
+        <Card>
+          <CardContent className="py-12 text-center text-sm text-muted-foreground">
+            请在上方选择一个方案开始操作。
+          </CardContent>
+        </Card>
+      )}
+
+      {loadingPlan && planId ? (
         <div className="flex justify-center py-16 text-muted-foreground">
           <Loader2 className="size-8 animate-spin" />
         </div>
-      ) : (
+      ) : planId ? (
         <>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1019,6 +1228,11 @@ export function SmartSelectionWorkspace() {
                   </div>
                 </div>
 
+                <ScanCategoryConfig
+                  filters={filters}
+                  setFilters={setFilters}
+                />
+
                 <div className="rounded-lg border border-amber-200/80 bg-amber-50/50 p-4">
                   <h3 className="mb-3 text-sm font-semibold text-amber-900">
                     我们的开发标准（AI 评估用）
@@ -1096,18 +1310,14 @@ export function SmartSelectionWorkspace() {
                     type="button"
                     variant="secondary"
                     onClick={() => saveFilters()}
-                    disabled={savingFilters || !currentPlan?.active}
+                    disabled={savingFilters}
                   >
                     {savingFilters ? (
                       <Loader2 className="mr-2 size-4 animate-spin" />
                     ) : null}
                     保存筛选条件
                   </Button>
-                  {!currentPlan?.active ? (
-                    <span className="text-sm text-muted-foreground self-center">
-                      该方案即将开放，暂不可保存。
-                    </span>
-                  ) : null}
+                  {null}
                 </div>
               </CardContent>
             ) : null}
@@ -1117,9 +1327,7 @@ export function SmartSelectionWorkspace() {
             <CardHeader>
               <CardTitle className="text-base">操作</CardTitle>
               <CardDescription>
-                预计扫描约 {tokenEst.pullCount} 个商品，AI 深度评估约{" "}
-                {tokenEst.aiDeepCount} 个，约消耗 {tokenEst.tokensApprox}{" "}
-                tokens（估算值，接入真实流程后会按实际调整）。
+                扫描方案中配置的类目，通过卖家精灵拉取数据并按筛选条件过滤新品。零 AI token 消耗。
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1127,7 +1335,7 @@ export function SmartSelectionWorkspace() {
                 type="button"
                 size="lg"
                 className="w-full sm:w-auto"
-                disabled={scanning || !currentPlan?.active}
+                disabled={scanning}
                 onClick={() => runScan()}
               >
                 {scanning ? (
@@ -1158,107 +1366,115 @@ export function SmartSelectionWorkspace() {
             {results.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                  暂无推荐结果。完成接入卖家精灵与 Claude
-                  后，每次扫描将展示最多 3 张商品卡片。
+                  暂无推荐结果。请先配置扫描类目，然后点击「开始智能扫描」。
                 </CardContent>
               </Card>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {results.map((row) => {
-                  const pains = parsePainTags(row.aiJson);
-                  const margin = parseMargin(row.aiJson);
+                  let categoryLabel: string | null = null;
+                  let totalRevenue: number | null = null;
+                  let shelfDate: string | null = null;
+                  try {
+                    const pj = JSON.parse(row.productJson) as Record<string, unknown>;
+                    if (typeof pj._categoryLabel === "string") categoryLabel = pj._categoryLabel;
+                    const rev = typeof pj.totalRevenue === "number" ? pj.totalRevenue
+                      : typeof pj.totalAmount === "number" ? pj.totalAmount : null;
+                    totalRevenue = rev;
+                    const sd = pj.shelfDate ?? pj.availableDate ?? pj.available_date;
+                    if (typeof sd === "string" && sd.trim()) shelfDate = sd.trim().slice(0, 10);
+                  } catch { /* ignore */ }
                   return (
                     <Card key={row.id} className="overflow-hidden">
                       <CardContent className="p-0">
                         <div className="flex gap-3 p-4">
-                          <div className="size-24 shrink-0 overflow-hidden rounded-md bg-slate-100">
+                          <div className="size-20 shrink-0 overflow-hidden rounded-md bg-slate-100">
                             {row.imageUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={row.imageUrl}
-                                alt=""
-                                className="size-full object-cover"
-                              />
+                              <img src={row.imageUrl} alt="" className="size-full object-cover" />
                             ) : (
-                              <div className="flex size-full items-center justify-center text-xs text-muted-foreground">
-                                无图
-                              </div>
+                              <div className="flex size-full items-center justify-center text-xs text-muted-foreground">无图</div>
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="line-clamp-2 text-sm font-medium">
-                              {row.title ?? row.asin}
+                              {row.title ? (row.title.length > 50 ? row.title.slice(0, 50) + "…" : row.title) : row.asin}
                             </p>
-                            <p className="mt-1 font-mono text-xs text-muted-foreground">
-                              {row.asin}
-                            </p>
-                            <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                              {row.price != null ? (
-                                <span>${row.price}</span>
-                              ) : null}
-                              {row.bsr != null ? <span>BSR {row.bsr}</span> : null}
-                              {row.rating != null ? (
-                                <span>★ {row.rating}</span>
-                              ) : null}
-                              {row.reviewCount != null ? (
-                                <span>{row.reviewCount} 评</span>
-                              ) : null}
-                              {row.monthlySales != null ? (
-                                <span>月销 {row.monthlySales}</span>
-                              ) : null}
-                            </div>
-                          </div>
-                          <ScoreRing score={row.aiScore} />
-                        </div>
-                        <div className="border-t border-slate-100 px-4 py-3 text-sm">
-                          <p className="text-slate-700">
-                            {row.aiSummary ?? "—"}
-                          </p>
-                          {pains.length > 0 ? (
-                            <div className="mt-2 flex flex-wrap gap-1">
-                              {pains.map((t) => (
-                                <Badge
-                                  key={t}
-                                  variant="secondary"
-                                  className="text-xs"
-                                >
-                                  {t}
-                                </Badge>
-                              ))}
-                            </div>
-                          ) : null}
-                          {margin ? (
-                            <p className="mt-2 text-xs text-muted-foreground">
-                              预估利润率：{margin}
-                            </p>
-                          ) : null}
-                        </div>
-                        <div className="flex flex-wrap gap-2 border-t border-slate-100 p-4">
-                          <Link
-                            href={`/dashboard/product-analysis?asin=${encodeURIComponent(row.asin)}&marketplace=${encodeURIComponent(row.marketplace || currentPlan?.marketplace || "US")}`}
-                            className={cn(
-                              buttonVariants({ variant: "outline", size: "sm" })
+                            <p className="mt-1 font-mono text-xs text-muted-foreground">{row.asin}</p>
+                            {categoryLabel && (
+                              <Badge variant="secondary" className="mt-1 text-[10px]">{categoryLabel}</Badge>
                             )}
-                          >
-                            详细分析
-                          </Link>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1 border-t border-slate-100 px-4 py-2 text-center text-xs">
+                          <div>
+                            <p className="font-medium text-slate-700">{row.price != null ? `$${row.price}` : "—"}</p>
+                            <p className="text-muted-foreground">售价</p>
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-700">{row.monthlySales ?? "—"}</p>
+                            <p className="text-muted-foreground">月销量</p>
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-700">{totalRevenue != null ? `$${Math.round(totalRevenue).toLocaleString()}` : "—"}</p>
+                            <p className="text-muted-foreground">月收入</p>
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-700">{row.reviewCount ?? "—"}</p>
+                            <p className="text-muted-foreground">评论数</p>
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-700">{row.rating != null ? `★${row.rating}` : "—"}</p>
+                            <p className="text-muted-foreground">评分</p>
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-700">{shelfDate ?? "—"}</p>
+                            <p className="text-muted-foreground">上架</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2 border-t border-slate-100 p-3">
                           <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => postCandidate(row)}
+                            type="button" size="sm" variant="default" className="gap-1"
+                            disabled={extractingId === row.id}
+                            onClick={() => extractIdea(row)}
                           >
-                            加入候选
+                            {extractingId === row.id ? <Loader2 className="size-3.5 animate-spin" /> : <Lightbulb className="size-3.5" />}
+                            提取创意
                           </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive"
-                            onClick={() => postExclude(row.asin)}
+                          <Link
+                            href={`/dashboard/product-analysis?prefill=${encodeURIComponent(row.asin)}&marketplace=${encodeURIComponent(row.marketplace || currentPlan?.marketplace || "US")}&forceRefresh=1`}
+                            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1")}
                           >
+                            <Microscope className="size-3.5" />
+                            深度分析
+                          </Link>
+                          <Button type="button" size="sm" variant="ghost" className="gap-1" onClick={() => postCandidate(row)}>
+                            <Pause className="size-3.5" />
+                            暂缓
+                          </Button>
+                          <Button type="button" size="sm" variant="ghost" className="gap-1 text-destructive" onClick={() => postExclude(row.asin)}>
+                            <X className="size-3.5" />
                             不感兴趣
                           </Button>
                         </div>
+                        {/* Analysis result display */}
+                        {row.aiSummary && (
+                          <div className="border-t border-slate-100">
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-indigo-600 hover:bg-indigo-50/50"
+                              onClick={() => setExpandedIdea(expandedIdea === row.id ? null : row.id)}
+                            >
+                              <Lightbulb className="size-3.5" />
+                              {expandedIdea === row.id ? "收起创意分析" : "查看创意分析"}
+                            </button>
+                            {expandedIdea === row.id && (
+                              <div className="px-4 pb-4 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                                {row.aiSummary}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   );
@@ -1270,10 +1486,10 @@ export function SmartSelectionWorkspace() {
               <Button
                 type="button"
                 variant="secondary"
-                disabled={scanning || !currentPlan?.active}
+                disabled={scanning}
                 onClick={() => runScan()}
               >
-                继续扫描下 3 个
+                重新扫描
               </Button>
               <Button
                 type="button"
@@ -1301,7 +1517,7 @@ export function SmartSelectionWorkspace() {
             ) : null}
           </div>
         </>
-      )}
+      ) : null}
 
       <Sheet open={candidatesOpen} onOpenChange={setCandidatesOpen}>
         <SheetContent
@@ -1392,45 +1608,21 @@ export function SmartSelectionWorkspace() {
           </DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="space-y-1">
-              <p className={labelCls}>名称</p>
+              <p className={labelCls}>方案名称</p>
               <Input
-                value={newPlan.name}
-                onChange={(e) =>
-                  setNewPlan((n) => ({ ...n, name: e.target.value }))
-                }
-                placeholder="如：加拿大家居选品"
-              />
-            </div>
-            <div className="space-y-1">
-              <p className={labelCls}>slug（小写、短横线）</p>
-              <Input
-                value={newPlan.slug}
-                onChange={(e) =>
-                  setNewPlan((n) => ({ ...n, slug: e.target.value }))
-                }
-                placeholder="ca-home"
-              />
-            </div>
-            <div className="space-y-1">
-              <p className={labelCls}>站点</p>
-              <Input
-                value={newPlan.marketplace}
-                onChange={(e) =>
-                  setNewPlan((n) => ({ ...n, marketplace: e.target.value }))
-                }
-                placeholder="US"
+                value={newPlanName}
+                onChange={(e) => setNewPlanName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && createPlan()}
+                placeholder="如：2026年5月·护肤选品"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setNewPlanOpen(false)}
-            >
+            <Button type="button" variant="outline" onClick={() => setNewPlanOpen(false)}>
               取消
             </Button>
-            <Button type="button" onClick={() => createPlan()}>
+            <Button type="button" onClick={() => createPlan()} disabled={creatingPlan || !newPlanName.trim()}>
+              {creatingPlan ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
               创建
             </Button>
           </DialogFooter>
