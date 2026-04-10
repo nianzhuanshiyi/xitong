@@ -72,14 +72,7 @@ export const dashboardNav: DashboardNavItem[] = [
     moduleId: "ai-assistant",
     category: "常用工具",
   },
-  {
-    href: "/dashboard/suppliers",
-    label: "供应商资源库",
-    title: "供应商资源库",
-    Icon: Warehouse,
-    moduleId: "suppliers",
-    category: "常用工具",
-  },
+  
   {
     href: "/dashboard/feedback",
     label: "需求反馈",
@@ -126,6 +119,14 @@ export const dashboardNav: DashboardNavItem[] = [
     title: "产品开发",
     Icon: Package,
     moduleId: "product-dev",
+    category: "选品",
+  },
+  {
+    href: "/dashboard/suppliers",
+    label: "供应商资源库",
+    title: "供应商资源库",
+    Icon: Warehouse,
+    moduleId: "suppliers",
     category: "选品",
   },
 
