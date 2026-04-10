@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ArrowUpRight, LineChart, Mail, Sparkles, Warehouse, ClipboardList } from "lucide-react";
-import { ArrowUpRight, LineChart, Mail, Sparkles, Warehouse, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const modules = [
