@@ -45,6 +45,7 @@ model User {
   auDevAnalyses           AuDevAnalysis[]
   beautyIdeaPlans         BeautyIdeaPlan[]
   threeCIdeaPlans         ThreeCIdeaPlan[]
+  europeIdeaPlans         EuropeIdeaPlan[]
   activityLogs            ActivityLog[]
   feedbacks               Feedback[]
   createdAt               DateTime                @default(now())
@@ -878,6 +879,89 @@ model BeautyIdeaPlan {
   differentiationStrategy String @default("")
 
   /// 财务预估
+  estimatedRetailPrice String?
+  estimatedCogs        String?
+  estimatedFbaFee      String?
+  estimatedAdCost      String?
+  estimatedProfit      String?
+  estimatedMargin      String?
+  breakEvenUnits       Int?
+
+  /// 落地执行
+  supplierPlan   String @default("") /// Markdown
+  timelinePlan   String @default("[]") /// JSON array
+  listingPlan    String @default("") /// Markdown
+  launchStrategy String @default("") /// Markdown
+  riskAssessment String @default("") /// Markdown
+
+  /// 综合评分
+  marketScore      Int    @default(0)
+  competitionScore Int    @default(0)
+  trendScore       Int    @default(0)
+  profitScore      Int    @default(0)
+  totalScore       Int    @default(0)
+  /// strong_go / go / watch / pass
+  recommendation   String @default("watch")
+  /// low / medium / high / extreme
+  competitionLevel String @default("medium")
+
+  /// generating / completed / failed
+  status    String  @default("generating")
+  dismissed Boolean @default(false)
+
+  createdBy String
+  creator   User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdBy, createdAt])
+  @@index([status, createdAt])
+}
+
+// ─── 欧洲蓝海选品模块 ────────────────────────────────────────────
+
+/// 欧洲蓝海选品方案（卖家精灵筛选 + AI 生成）
+model EuropeIdeaPlan {
+  id         String @id @default(cuid())
+  reportDate String /// YYYY-MM-DD
+
+  /// 目标欧洲站点：DE/FR/UK/IT/ES/EU
+  marketplace String @default("DE")
+
+  /// 第一步：品类筛选结果 JSON 数组
+  /// [{ keyword, searches, products, sdr, monopolyClickRate, passed, failReasons }]
+  keywordsData String @default("[]")
+
+  /// 通过筛选的关键词列表 JSON 数组
+  qualifiedKeywords String @default("[]")
+
+  /// 第二步：竞品筛选结果 JSON 数组
+  /// [{ asin, title, price, monthlySales, monthlyRevenue, reviews, rating }]
+  competitorProducts String @default("[]")
+
+  /// AI 选定的目标关键词
+  selectedKeyword    String  @default("")
+  searchVolume       Int?
+  supplyDemandRatio  Float?
+  clickConcentration Float?
+
+  /// 第三步：AI 生成的新品方案
+  productName      String @default("")
+  productNameEn    String @default("")
+  executiveSummary String @default("")
+
+  /// 欧洲市场特有字段
+  targetMarket     String @default("") /// 主攻市场（德国/法国/英国等）
+  regulatoryNotes  String @default("") /// 欧盟认证/合规说明
+
+  /// 方案详情 (Markdown)
+  keyFeatures             String @default("")
+  designSuggestion        String @default("")
+  marketAnalysis          String @default("")
+  competitorAnalysis      String @default("")
+  differentiationStrategy String @default("")
+
+  /// 财务预估（欧元）
   estimatedRetailPrice String?
   estimatedCogs        String?
   estimatedFbaFee      String?
