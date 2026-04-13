@@ -120,7 +120,6 @@ export const dashboardNav: DashboardNavItem[] = [
     label: "3C新品创意",
     title: "3C新品创意",
     Icon: Cpu,
-    moduleId: "three-c-ideas",
     category: "选品",
   },
   {
