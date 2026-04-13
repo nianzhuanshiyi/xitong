@@ -113,7 +113,6 @@ export const dashboardNav: DashboardNavItem[] = [
     label: "欧洲蓝海选品",
     title: "欧洲蓝海选品",
     Icon: Globe,
-    moduleId: "europe-ideas",
     category: "选品",
   },
   {
