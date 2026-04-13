@@ -44,6 +44,7 @@ model User {
   auMilestones            AuMilestone[]
   auDevAnalyses           AuDevAnalysis[]
   beautyIdeaPlans         BeautyIdeaPlan[]
+  threeCIdeaPlans         ThreeCIdeaPlan[]
   activityLogs            ActivityLog[]
   feedbacks               Feedback[]
   createdAt               DateTime                @default(now())
@@ -767,6 +768,78 @@ model AnalysisChat {
 }
 
 // ─── 3C新品创意模块 ───────────────────────────────────────
+
+/// 3C新品创意方案
+model ThreeCIdeaPlan {
+  id         String @id @default(cuid())
+  reportDate String /// YYYY-MM-DD
+
+  /// 第一步：品类筛选结果 JSON 数组
+  keywordsData String @default("[]")
+
+  /// 通过筛选的关键词列表 JSON 数组
+  qualifiedKeywords String @default("[]")
+
+  /// 第二步：竞品筛选结果 JSON 数组
+  competitorProducts String @default("[]")
+
+  /// AI 选定的目标关键词
+  selectedKeyword    String  @default("")
+  searchVolume       Int?
+  supplyDemandRatio  Float?
+  clickConcentration Float?
+
+  /// 第三步：AI 生成的新品方案
+  productName      String @default("")
+  productNameEn    String @default("")
+  executiveSummary String @default("")
+
+  /// 方案详情 (Markdown)
+  keyFeatures             String @default("")
+  designSuggestion        String @default("")
+  marketAnalysis          String @default("")
+  competitorAnalysis      String @default("")
+  differentiationStrategy String @default("")
+
+  /// 财务预估
+  estimatedRetailPrice String?
+  estimatedCogs        Int?
+  estimatedFbaFee      Int?
+  estimatedAdCost      Int?
+  estimatedProfit      Int?
+  estimatedMargin      String?
+  breakEvenUnits       Int?
+
+  /// 落地执行
+  supplierPlan   String @default("") /// Markdown
+  timelinePlan   String @default("[]") /// JSON array
+  listingPlan    String @default("") /// Markdown
+  launchStrategy String @default("") /// Markdown
+  riskAssessment String @default("") /// Markdown
+
+  /// 综合评分
+  marketScore      Int    @default(0)
+  competitionScore Int    @default(0)
+  trendScore       Int    @default(0)
+  profitScore      Int    @default(0)
+  totalScore       Int    @default(0)
+  /// strong_go / go / watch / pass
+  recommendation   String @default("watch")
+  /// low / medium / high / extreme
+  competitionLevel String @default("medium")
+
+  /// generating / completed / failed
+  status    String  @default("generating")
+  dismissed Boolean @default(false)
+
+  createdBy String
+  creator   User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdBy, createdAt])
+  @@index([status, createdAt])
+}
 
 // ─── 美妆新品创意模块 ────────────────────────────────────────────
 
