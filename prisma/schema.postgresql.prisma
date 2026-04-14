@@ -44,6 +44,8 @@ model User {
   auMilestones            AuMilestone[]
   auDevAnalyses           AuDevAnalysis[]
   beautyIdeaPlans         BeautyIdeaPlan[]
+  threeCIdeaPlans         ThreeCIdeaPlan[]
+  europeIdeaPlans         EuropeIdeaPlan[]
   activityLogs            ActivityLog[]
   feedbacks               Feedback[]
   createdAt               DateTime                @default(now())
@@ -768,6 +770,78 @@ model AnalysisChat {
 
 // ─── 3C新品创意模块 ───────────────────────────────────────
 
+/// 3C新品创意方案
+model ThreeCIdeaPlan {
+  id         String @id @default(cuid())
+  reportDate String /// YYYY-MM-DD
+
+  /// 第一步：品类筛选结果 JSON 数组
+  keywordsData String @default("[]") @db.Text
+
+  /// 通过筛选的关键词列表 JSON 数组
+  qualifiedKeywords String @default("[]") @db.Text
+
+  /// 第二步：竞品筛选结果 JSON 数组
+  competitorProducts String @default("[]") @db.Text
+
+  /// AI 选定的目标关键词
+  selectedKeyword    String  @default("")
+  searchVolume       Int?
+  supplyDemandRatio  Float?
+  clickConcentration Float?
+
+  /// 第三步：AI 生成的新品方案
+  productName      String @default("")
+  productNameEn    String @default("")
+  executiveSummary String @default("") @db.Text
+
+  /// 方案详情 (Markdown)
+  keyFeatures             String @default("") @db.Text
+  designSuggestion        String @default("") @db.Text
+  marketAnalysis          String @default("") @db.Text
+  competitorAnalysis      String @default("") @db.Text
+  differentiationStrategy String @default("") @db.Text
+
+  /// 财务预估
+  estimatedRetailPrice String?
+  estimatedCogs        Int?
+  estimatedFbaFee      Int?
+  estimatedAdCost      Int?
+  estimatedProfit      Int?
+  estimatedMargin      String?
+  breakEvenUnits       Int?
+
+  /// 落地执行
+  supplierPlan   String @default("") @db.Text
+  timelinePlan   String @default("[]") @db.Text
+  listingPlan    String @default("") @db.Text
+  launchStrategy String @default("") @db.Text
+  riskAssessment String @default("") @db.Text
+
+  /// 综合评分
+  marketScore      Int    @default(0)
+  competitionScore Int    @default(0)
+  trendScore       Int    @default(0)
+  profitScore      Int    @default(0)
+  totalScore       Int    @default(0)
+  /// strong_go / go / watch / pass
+  recommendation   String @default("watch")
+  /// low / medium / high / extreme
+  competitionLevel String @default("medium")
+
+  /// generating / completed / failed
+  status    String  @default("generating")
+  dismissed Boolean @default(false)
+
+  createdBy String
+  creator   User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdBy, createdAt])
+  @@index([status, createdAt])
+}
+
 // ─── AI 助手模块 ────────────────────────────────────────────
 
 model AiConversation {
@@ -839,6 +913,84 @@ model BeautyIdeaPlan {
   differentiationStrategy String @default("") @db.Text
 
   /// 财务预估
+  estimatedRetailPrice String?
+  estimatedCogs        String?
+  estimatedFbaFee      String?
+  estimatedAdCost      String?
+  estimatedProfit      String?
+  estimatedMargin      String?
+  breakEvenUnits       Int?
+
+  /// 落地执行
+  supplierPlan   String @default("") @db.Text
+  timelinePlan   String @default("[]") @db.Text
+  listingPlan    String @default("") @db.Text
+  launchStrategy String @default("") @db.Text
+  riskAssessment String @default("") @db.Text
+
+  /// 综合评分
+  marketScore      Int    @default(0)
+  competitionScore Int    @default(0)
+  trendScore       Int    @default(0)
+  profitScore      Int    @default(0)
+  totalScore       Int    @default(0)
+  recommendation   String @default("watch")
+  competitionLevel String @default("medium")
+
+  status    String  @default("generating")
+  dismissed Boolean @default(false)
+
+  createdBy String
+  creator   User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdBy, createdAt])
+  @@index([status, createdAt])
+}
+
+// ─── 欧洲蓝海选品模块 ────────────────────────────────────────────
+
+/// 欧洲蓝海选品方案（卖家精灵筛选 + AI 生成）
+model EuropeIdeaPlan {
+  id         String @id @default(cuid())
+  reportDate String /// YYYY-MM-DD
+
+  /// 目标欧洲站点：DE/FR/UK/IT/ES/EU
+  marketplace String @default("DE")
+
+  /// 第一步：品类筛选结果 JSON 数组
+  keywordsData String @default("[]") @db.Text
+
+  /// 通过筛选的关键词列表 JSON 数组
+  qualifiedKeywords String @default("[]") @db.Text
+
+  /// 第二步：竞品筛选结果 JSON 数组
+  competitorProducts String @default("[]") @db.Text
+
+  /// AI 选定的目标关键词
+  selectedKeyword    String  @default("")
+  searchVolume       Int?
+  supplyDemandRatio  Float?
+  clickConcentration Float?
+
+  /// 第三步：AI 生成的新品方案
+  productName      String @default("")
+  productNameEn    String @default("")
+  executiveSummary String @default("") @db.Text
+
+  /// 欧洲市场特有字段
+  targetMarket    String @default("")
+  regulatoryNotes String @default("") @db.Text
+
+  /// 方案详情 (Markdown)
+  keyFeatures             String @default("") @db.Text
+  designSuggestion        String @default("") @db.Text
+  marketAnalysis          String @default("") @db.Text
+  competitorAnalysis      String @default("") @db.Text
+  differentiationStrategy String @default("") @db.Text
+
+  /// 财务预估（欧元）
   estimatedRetailPrice String?
   estimatedCogs        String?
   estimatedFbaFee      String?

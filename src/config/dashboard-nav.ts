@@ -19,6 +19,8 @@ import {
   Rocket,
   Activity,
   MessageSquarePlus,
+  Cpu,
+  Globe,
 } from "lucide-react";
 
 export type DashboardNavItem = {
@@ -104,6 +106,20 @@ export const dashboardNav: DashboardNavItem[] = [
     title: "美妆新品创意",
     Icon: FlaskConical,
     moduleId: "beauty-ideas",
+    category: "选品",
+  },
+  {
+    href: "/dashboard/europe-ideas",
+    label: "欧洲蓝海选品",
+    title: "欧洲蓝海选品",
+    Icon: Globe,
+    category: "选品",
+  },
+  {
+    href: "/dashboard/three-c-ideas",
+    label: "3C新品创意",
+    title: "3C新品创意",
+    Icon: Cpu,
     category: "选品",
   },
   {

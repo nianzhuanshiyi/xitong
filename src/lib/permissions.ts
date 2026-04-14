@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 /** All module IDs used across the system */
 export const ALL_MODULES = [
   "beauty-ideas",
+  "europe-ideas",
   "email",
   "ai-assistant",
   "product-dev",
@@ -14,6 +15,7 @@ export const ALL_MODULES = [
   "suppliers",
   "todos",
   "au-dev",
+  "three-c-ideas",
 ] as const;
 
 export type ModuleId = (typeof ALL_MODULES)[number];
@@ -21,6 +23,7 @@ export type ModuleId = (typeof ALL_MODULES)[number];
 /** Map dashboard paths to module IDs */
 const PATH_TO_MODULE: Record<string, ModuleId> = {
   "/dashboard/beauty-ideas": "beauty-ideas",
+  "/dashboard/europe-ideas": "europe-ideas",
   "/dashboard/mail": "email",
   "/dashboard/ai-assistant": "ai-assistant",
   "/dashboard/product-dev": "product-dev",
@@ -31,11 +34,13 @@ const PATH_TO_MODULE: Record<string, ModuleId> = {
   "/dashboard/suppliers": "suppliers",
   "/dashboard/todos": "todos",
   "/dashboard/au-dev": "au-dev",
+  "/dashboard/three-c-ideas": "three-c-ideas",
 };
 
 /** Map API paths to module IDs */
 const API_TO_MODULE: Record<string, ModuleId> = {
   "/api/beauty-ideas": "beauty-ideas",
+  "/api/europe-ideas": "europe-ideas",
   "/api/mail": "email",
   "/api/ai-assistant": "ai-assistant",
   "/api/product-dev": "product-dev",
@@ -46,6 +51,7 @@ const API_TO_MODULE: Record<string, ModuleId> = {
   "/api/suppliers": "suppliers",
   "/api/todos": "todos",
   "/api/au-dev": "au-dev",
+  "/api/three-c-ideas": "three-c-ideas",
 };
 
 /** Check if user has access to a specific module — currently all logged-in users have access */

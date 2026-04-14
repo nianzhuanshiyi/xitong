@@ -1,12 +1,4 @@
-- 不要输出"好的，我明白了"等确认性废话，直接给出结果
-- 修改代码时只输出变更部分，不要重复输出未修改的代码
-- 回答要简洁，不需要解释显而易见的内容
-
-# CLAUDE
-写代码时, 避免定义但是未使用的变量 
-
 # 技术架构
-
 1. 基础架构 (Core)
 
 - 框架 : Next.js 14 (使用 App Router 架构)
@@ -36,7 +28,6 @@
 - 文档处理 : pdf-parse , docx , jszip
 - 图像处理 : Sharp
 5. 开发与部署 (DevOps)
-
 - 构建工具 : Next.js CLI
 - Lint : ESLint (使用 eslint-config-next )
 - 部署环境 : 支持 Railway (通过 package.json 中的 Prisma 构建脚本可见)
