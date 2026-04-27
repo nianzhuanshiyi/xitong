@@ -493,7 +493,7 @@ export function EtsySelectionWorkspace() {
       {/* Header */}
       <div>
         <h1 className="font-heading text-xl font-semibold text-slate-900 sm:text-2xl">
-          Etsy 选品助手
+          Etsy 选品助手（待开发）
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           输入关键词（如 men&apos;s toupee），自动抓取高销量产品链接，并用 AI
