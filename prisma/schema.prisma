@@ -48,6 +48,7 @@ model User {
   europeIdeaPlans         EuropeIdeaPlan[]
   activityLogs            ActivityLog[]
   feedbacks               Feedback[]
+  etsySearchTasks         EtsySearchTask[]
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
 }
@@ -1186,4 +1187,64 @@ model Feedback {
   user        User      @relation(fields: [userId], references: [id])
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+// ─── Etsy 选品系统 ────────────────────────────────────────────────────────────
+
+/// Etsy 关键词搜索任务
+model EtsySearchTask {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  keyword      String
+  /// pending / running / done / failed
+  status       String        @default("pending")
+  /// 筛选条件 JSON: { minShopSales, minReviews, minRating, minPrice, maxPrice }
+  filtersJson  String        @default("{}")
+  totalFound   Int?
+  errorMessage String?
+  products     EtsyProduct[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([userId, createdAt])
+}
+
+/// Etsy 单个产品记录
+model EtsyProduct {
+  id            String         @id @default(cuid())
+  taskId        String
+  task          EtsySearchTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  listingId     String
+  url           String
+  title         String
+  price         Float?
+  currencyCode  String?
+  shopName      String
+  shopUrl       String?
+  /// 店铺总销售数（核心筛选字段）
+  shopSales     Int?
+  favoriteCount Int?
+  reviewCount   Int?
+  rating        Float?
+  /// JSON 数组，最多 13 个 Etsy tags
+  tagsJson      String?
+  imageUrl      String?
+  /// AI 分析是否完成
+  aiAnalyzed    Boolean       @default(false)
+  /// AI: 产品卖点与差异化
+  aiSellingPoints   String?
+  /// AI: 定价策略分析
+  aiPricingStrategy String?
+  /// AI: 关键词与标签 (JSON string[])
+  aiKeywords        String?
+  /// AI: 目标客群分析
+  aiTargetAudience  String?
+  /// AI: 一句话总结
+  aiSummary         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([taskId, shopSales])
+  @@index([taskId, createdAt])
 }

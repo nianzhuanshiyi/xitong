@@ -21,6 +21,7 @@ import {
   MessageSquarePlus,
   Cpu,
   Globe,
+  ShoppingBag,
 } from "lucide-react";
 
 export type DashboardNavItem = {
@@ -120,6 +121,13 @@ export const dashboardNav: DashboardNavItem[] = [
     label: "3C新品创意",
     title: "3C新品创意",
     Icon: Cpu,
+    category: "选品",
+  },
+  {
+    href: "/dashboard/etsy-selection",
+    label: "Etsy 选品",
+    title: "Etsy 选品助手",
+    Icon: ShoppingBag,
     category: "选品",
   },
   {

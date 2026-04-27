@@ -33,9 +33,15 @@ export type GeminiImageResult =
   | { ok: true; base64: string; mimeType: string }
   | { ok: false; message: string };
 
+export type GeminiReferenceImage = {
+  mimeType: string;
+  base64Data: string;
+};
+
 export async function generateGeminiProductImage(
   apiKey: string,
-  fullPrompt: string
+  fullPrompt: string,
+  referenceImages: GeminiReferenceImage[] = []
 ): Promise<GeminiImageResult> {
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -47,7 +53,16 @@ export async function generateGeminiProductImage(
       model: "gemini-2.5-flash-image",
       generationConfig,
     });
-    const result = await model.generateContent(fullPrompt);
+    const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [
+      { text: fullPrompt },
+      ...referenceImages.map((image) => ({
+        inlineData: {
+          mimeType: image.mimeType,
+          data: image.base64Data,
+        },
+      })),
+    ];
+    const result = await model.generateContent(parts);
     const response = result.response;
     const cand = response.candidates?.[0];
     if (cand?.finishReason === "SAFETY") {
