@@ -53,7 +53,9 @@ export async function generateGeminiProductImage(
       model: "gemini-2.5-flash-image",
       generationConfig,
     });
-    const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [
+    const requestParts: Array<
+      { text: string } | { inlineData: { mimeType: string; data: string } }
+    > = [
       { text: fullPrompt },
       ...referenceImages.map((image) => ({
         inlineData: {
@@ -62,7 +64,7 @@ export async function generateGeminiProductImage(
         },
       })),
     ];
-    const result = await model.generateContent(parts);
+    const result = await model.generateContent(requestParts);
     const response = result.response;
     const cand = response.candidates?.[0];
     if (cand?.finishReason === "SAFETY") {
@@ -72,8 +74,8 @@ export async function generateGeminiProductImage(
           "内容被安全策略拦截，请调整产品描述（尽量减少人物相关表述）。",
       };
     }
-    const parts = cand?.content?.parts ?? [];
-    for (const part of parts) {
+    const responseParts = cand?.content?.parts ?? [];
+    for (const part of responseParts) {
       if (
         "inlineData" in part &&
         part.inlineData?.data &&
@@ -86,7 +88,7 @@ export async function generateGeminiProductImage(
         };
       }
     }
-    const textPart = parts.find((p) => "text" in p && p.text) as
+    const textPart = responseParts.find((p) => "text" in p && p.text) as
       | { text?: string }
       | undefined;
     const text = textPart?.text?.trim();
