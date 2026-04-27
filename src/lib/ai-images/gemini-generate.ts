@@ -33,9 +33,15 @@ export type GeminiImageResult =
   | { ok: true; base64: string; mimeType: string }
   | { ok: false; message: string };
 
+export type GeminiReferenceImage = {
+  mimeType: string;
+  base64Data: string;
+};
+
 export async function generateGeminiProductImage(
   apiKey: string,
-  fullPrompt: string
+  fullPrompt: string,
+  referenceImages: GeminiReferenceImage[] = []
 ): Promise<GeminiImageResult> {
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -47,7 +53,18 @@ export async function generateGeminiProductImage(
       model: "gemini-2.5-flash-image",
       generationConfig,
     });
-    const result = await model.generateContent(fullPrompt);
+    const requestParts: Array<
+      { text: string } | { inlineData: { mimeType: string; data: string } }
+    > = [
+      { text: fullPrompt },
+      ...referenceImages.map((image) => ({
+        inlineData: {
+          mimeType: image.mimeType,
+          data: image.base64Data,
+        },
+      })),
+    ];
+    const result = await model.generateContent(requestParts);
     const response = result.response;
     const cand = response.candidates?.[0];
     if (cand?.finishReason === "SAFETY") {
@@ -57,8 +74,8 @@ export async function generateGeminiProductImage(
           "内容被安全策略拦截，请调整产品描述（尽量减少人物相关表述）。",
       };
     }
-    const parts = cand?.content?.parts ?? [];
-    for (const part of parts) {
+    const responseParts = cand?.content?.parts ?? [];
+    for (const part of responseParts) {
       if (
         "inlineData" in part &&
         part.inlineData?.data &&
@@ -71,7 +88,7 @@ export async function generateGeminiProductImage(
         };
       }
     }
-    const textPart = parts.find((p) => "text" in p && p.text) as
+    const textPart = responseParts.find((p) => "text" in p && p.text) as
       | { text?: string }
       | undefined;
     const text = textPart?.text?.trim();

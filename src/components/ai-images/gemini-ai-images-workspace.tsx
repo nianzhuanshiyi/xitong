@@ -61,6 +61,14 @@ type GeneratedRow = {
   createdAt: string;
 };
 
+type ReferenceImageDraft = {
+  id: string;
+  previewUrl: string;
+  mimeType: string;
+  base64Data: string;
+  name: string;
+};
+
 function safeFilePart(s: string) {
   return s.replace(/[/\\?%*:|"<>]/g, "_").trim().slice(0, 80) || "project";
 }
@@ -114,6 +122,7 @@ export function GeminiAiImagesWorkspace() {
   const [extraNotes, setExtraNotes] = useState("");
   const [generating, setGenerating] = useState(false);
   const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
+  const [referenceImages, setReferenceImages] = useState<ReferenceImageDraft[]>([]);
 
   const lastDetailProjectId = useRef<string | null>(null);
 
@@ -180,6 +189,7 @@ export function GeminiAiImagesWorkspace() {
       setProductDescription(
         detail.description?.trim() ? detail.description : ""
       );
+      setReferenceImages([]);
     }
   }, [detail]);
 
@@ -258,6 +268,10 @@ export function GeminiAiImagesWorkspace() {
           productDescription: productDescription.trim(),
           style,
           extraNotes: extraNotes.trim(),
+          referenceImages: referenceImages.map((item) => ({
+            mimeType: item.mimeType,
+            base64Data: item.base64Data,
+          })),
         }),
       });
       const j = await r.json();
@@ -271,6 +285,60 @@ export function GeminiAiImagesWorkspace() {
       toast.error(e instanceof Error ? e.message : "生成失败");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function onPickReferenceImages(files: FileList | null) {
+    if (!files?.length) return;
+    const remain = 3 - referenceImages.length;
+    if (remain <= 0) {
+      toast.error("参考图片最多 3 张");
+      return;
+    }
+    const incoming = Array.from(files).slice(0, remain);
+    if (incoming.length < files.length) {
+      toast.message("最多保留前 3 张参考图");
+    }
+    try {
+      const nextItems = await Promise.all(
+        incoming.map(
+          (file) =>
+            new Promise<ReferenceImageDraft>((resolve, reject) => {
+              if (!file.type.startsWith("image/")) {
+                reject(new Error(`文件 ${file.name} 不是图片`));
+                return;
+              }
+              const reader = new FileReader();
+              reader.onload = () => {
+                const result = typeof reader.result === "string" ? reader.result : "";
+                const commaIndex = result.indexOf(",");
+                if (!result.startsWith("data:") || commaIndex <= 0) {
+                  reject(new Error(`文件 ${file.name} 读取失败`));
+                  return;
+                }
+                const mimeMatch = /^data:([^;]+);base64,/.exec(result);
+                const mimeType = mimeMatch?.[1] || file.type || "image/png";
+                const base64Data = result.slice(commaIndex + 1);
+                if (!base64Data) {
+                  reject(new Error(`文件 ${file.name} 内容为空`));
+                  return;
+                }
+                resolve({
+                  id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                  previewUrl: result,
+                  mimeType,
+                  base64Data,
+                  name: file.name,
+                });
+              };
+              reader.onerror = () => reject(new Error(`文件 ${file.name} 读取失败`));
+              reader.readAsDataURL(file);
+            })
+        )
+      );
+      setReferenceImages((prev) => [...prev, ...nextItems]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "读取参考图失败");
     }
   }
 
@@ -452,6 +520,47 @@ export function GeminiAiImagesWorkspace() {
                       className="shadow-sm"
                     />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>参考图片（选填，最多 3 张）</Label>
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => {
+                      void onPickReferenceImages(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                  {referenceImages.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {referenceImages.map((item) => (
+                        <div
+                          key={item.id}
+                          className="relative h-16 w-16 overflow-hidden rounded-md border"
+                          title={item.name}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={item.previewUrl}
+                            alt={item.name}
+                            className="size-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            className="absolute right-0 top-0 rounded-bl bg-black/60 px-1 text-[10px] text-white"
+                            onClick={() =>
+                              setReferenceImages((prev) =>
+                                prev.filter((x) => x.id !== item.id)
+                              )
+                            }
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <Button

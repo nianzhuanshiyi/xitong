@@ -20,6 +20,15 @@ const bodySchema = z.object({
   productDescription: z.string().min(1).max(8000).optional(),
   style: geminiStyleZ.optional(),
   extraNotes: z.string().max(2000).optional().default(""),
+  referenceImages: z
+    .array(
+      z.object({
+        mimeType: z.string().min(1).max(100),
+        base64Data: z.string().min(1),
+      })
+    )
+    .max(3)
+    .optional(),
 
   // Support for older/different workspace format
   promptEn: z.string().optional(),
@@ -46,7 +55,15 @@ export async function POST(req: Request) {
     );
   }
 
-  const { projectId, extraNotes, promptEn, promptZh, imageType: bodyImageType, form } = parsed.data;
+  const {
+    projectId,
+    extraNotes,
+    promptEn,
+    promptZh,
+    imageType: bodyImageType,
+    form,
+    referenceImages = [],
+  } = parsed.data;
   let { productDescription, style } = parsed.data;
 
   // Resolve productDescription and style from different formats
@@ -86,7 +103,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const gen = await generateGeminiProductImage(apiKey, finalPrompt);
+  const gen = await generateGeminiProductImage(apiKey, finalPrompt, referenceImages);
   if (!gen.ok) {
     return NextResponse.json(
       {
@@ -128,6 +145,7 @@ export async function POST(req: Request) {
     source: "gemini-2.5-flash-image",
     style,
     extraNotes: extraNotes || null,
+    referenceImageCount: referenceImages.length,
     mimeType: gen.mimeType,
     formUsed: !!form,
   });
