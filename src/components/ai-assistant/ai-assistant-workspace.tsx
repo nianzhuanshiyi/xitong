@@ -527,7 +527,7 @@ export default function AiAssistantWorkspace() {
               发送消息开始对话
             </div>
           ) : (
-            <div className="max-w-3xl mx-auto py-4 px-4 space-y-4">
+            <div className="max-w-5xl py-4 px-6 space-y-4">
               {messages.map((msg) => (
                 <MessageBubble key={msg.id} message={msg} />
               ))}
@@ -575,7 +575,7 @@ export default function AiAssistantWorkspace() {
 
         {/* Input Area */}
         <div className="border-t bg-white p-4">
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-5xl px-2">
             {uploadedFile && (
               <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg text-sm">
                 <FileText className="h-4 w-4 text-blue-500" />
@@ -679,7 +679,7 @@ function MessageBubble({ message }: { message: Message }) {
         )}
       </div>
       <div
-        className={`flex-1 min-w-0 max-w-[80%] ${
+        className={`flex-1 min-w-0 max-w-[85%] ${
           isUser ? "flex flex-col items-end" : ""
         }`}
       >
