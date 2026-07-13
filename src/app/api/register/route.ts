@@ -75,7 +75,7 @@ export async function POST(req: Request) {
         role: isSpecialAdmin ? "ADMIN" : "EMPLOYEE",
         aiAuthorized: true,
         allowedModules: allModules,
-        assignedModel: "claude-sonnet-4-20250514",
+        assignedModel: "claude-sonnet-5",
       },
     });
 

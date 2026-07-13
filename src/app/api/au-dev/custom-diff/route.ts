@@ -64,7 +64,7 @@ export async function POST(req: Request) {
         system: diffSystemPrompt,
         user: diffUserMsg,
         maxTokens: 2048,
-        model: "claude-opus-4-20250514",
+        model: "claude-opus-4-6",
       });
     } catch (opusErr) {
       console.error("[au-dev/custom-diff] Opus 失败，降级 Sonnet:", opusErr instanceof Error ? opusErr.message : opusErr);
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
         system: diffSystemPrompt,
         user: diffUserMsg,
         maxTokens: 2048,
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-5",
       });
     }
 

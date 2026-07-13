@@ -253,14 +253,14 @@ ASIN：${asin} | 品牌：${productData.brand} | 价格：A$${productData.price}
           actionPlan: Array<Record<string, unknown>>;
         };
         let result: AnalysisResult | null = null;
-        let usedModel = "claude-opus-4-20250514";
+        let usedModel = "claude-opus-4-6";
 
         try {
           result = (await callAnthropicForJson(usedModel)) as AnalysisResult | null;
         } catch (opusErr) {
           console.error("[au-dev/analyze] Opus 失败，降级 Sonnet:", opusErr instanceof Error ? opusErr.message : opusErr);
           send({ type: "progress", step: 3, label: "Opus 不可用，切换 Sonnet...", percent: 55 });
-          usedModel = "claude-sonnet-4-20250514";
+          usedModel = "claude-sonnet-5";
           result = (await callAnthropicForJson(usedModel)) as AnalysisResult | null;
         }
 

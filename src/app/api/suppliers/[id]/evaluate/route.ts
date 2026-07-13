@@ -171,7 +171,7 @@ ${issuesSection}
   const systemPrompt =
     "你是跨境电商供应商评估专家。请基于提供的供应商完整信息进行综合评估。overallScore 1-5 number. JSON keys: overallScore, strengths[], risks[], recommendedCategories[] (Chinese), demandMatchNote (Chinese). Return ONLY valid JSON, no markdown.";
 
-  console.log("[EVALUATE] Calling Anthropic API, model: claude-sonnet-4-20250514");
+  console.log("[EVALUATE] Calling Anthropic API, model: claude-sonnet-5");
 
   let evalResult: {
     overallScore: number;
@@ -190,7 +190,7 @@ ${issuesSection}
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-5",
         max_tokens: 4096,
         system: systemPrompt,
         messages: [{ role: "user", content: userContent }],

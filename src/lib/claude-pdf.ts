@@ -6,7 +6,7 @@ export async function callClaudeWithPdf(
   pdfBase64: string,
   systemPrompt: string,
   userPrompt: string,
-  model: string = "claude-sonnet-4-20250514"
+  model: string = "claude-sonnet-5"
 ): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
   if (!apiKey) throw new Error("Claude API Key 未配置");
