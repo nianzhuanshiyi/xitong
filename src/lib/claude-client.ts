@@ -2,6 +2,7 @@ import { getClaudeApiKey } from "@/lib/integration-keys";
 
 const DEFAULT_MODEL = "claude-sonnet-5";
 
+
 export function extractJsonBlock(text: string): string {
   // Try fenced code block first (greedy — grab the largest block)
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
