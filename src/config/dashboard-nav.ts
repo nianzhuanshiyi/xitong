@@ -22,6 +22,7 @@ import {
   Cpu,
   Globe,
   ShoppingBag,
+  Store,
 } from "lucide-react";
 
 export type DashboardNavItem = {
@@ -89,6 +90,14 @@ export const dashboardNav: DashboardNavItem[] = [
     label: "竞品分析",
     title: "竞品分析",
     Icon: LineChart,
+    moduleId: "selection-analysis",
+    category: "选品",
+  },
+  {
+    href: "/dashboard/walmart-competitive-analysis",
+    label: "沃尔玛竞品分析",
+    title: "沃尔玛竞品分析",
+    Icon: Store,
     moduleId: "selection-analysis",
     category: "选品",
   },
