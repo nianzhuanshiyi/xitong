@@ -19,8 +19,22 @@ import {
   Search,
   Database,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+/** 表格/代码块横向溢出时提供独立滚动容器，避免撑破聊天气泡 */
+const markdownComponents: Components = {
+  table: ({ children, ...props }) => (
+    <div className="overflow-x-auto max-w-full my-2 rounded-lg border">
+      <table {...props}>{children}</table>
+    </div>
+  ),
+  pre: ({ children, ...props }) => (
+    <pre {...props} className="overflow-x-auto max-w-full">
+      {children}
+    </pre>
+  ),
+};
 
 type Conversation = {
   id: string;
@@ -544,9 +558,9 @@ export default function AiAssistantWorkspace() {
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
                     <Bot className="h-4 w-4 text-white" />
                   </div>
-                  <div className="flex-1 bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border">
-                    <div className="prose prose-sm max-w-none">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  <div className="flex-1 min-w-0 bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border">
+                    <div className="prose prose-sm max-w-none break-words">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                         {streamingText}
                       </ReactMarkdown>
                     </div>
@@ -665,7 +679,7 @@ function MessageBubble({ message }: { message: Message }) {
         )}
       </div>
       <div
-        className={`flex-1 max-w-[80%] ${
+        className={`flex-1 min-w-0 max-w-[80%] ${
           isUser ? "flex flex-col items-end" : ""
         }`}
       >
@@ -676,17 +690,17 @@ function MessageBubble({ message }: { message: Message }) {
           </div>
         )}
         <div
-          className={`rounded-2xl px-4 py-3 text-sm ${
+          className={`rounded-2xl px-4 py-3 text-sm max-w-full ${
             isUser
               ? "bg-blue-600 text-white rounded-tr-sm"
-              : "bg-white border shadow-sm rounded-tl-sm"
+              : "bg-white border shadow-sm rounded-tl-sm overflow-x-hidden"
           }`}
         >
           {isUser ? (
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <p className="whitespace-pre-wrap break-words">{message.content}</p>
           ) : (
-            <div className="prose prose-sm max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <div className="prose prose-sm max-w-none break-words">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                 {message.content}
               </ReactMarkdown>
             </div>
