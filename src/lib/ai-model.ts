@@ -1,19 +1,19 @@
 import prisma from "@/lib/prisma";
 
 const MODEL_MAP: Record<string, string> = {
-  sonnet: "claude-sonnet-4-20250514",
-  opus: "claude-opus-4-20250514",
+  sonnet: "claude-sonnet-5",
+  opus: "claude-opus-4-6",
 };
 
 /** Only these full model IDs are valid — anything else (e.g. haiku) is ignored */
 const VALID_MODELS = new Set([
-  "claude-sonnet-4-20250514",
-  "claude-opus-4-20250514",
+  "claude-sonnet-5",
+  "claude-opus-4-6",
 ]);
 
-const DEFAULT_MODEL_ID = "claude-sonnet-4-20250514";
-const DEFAULT_ADMIN_MODEL = "claude-opus-4-20250514";
-const DEFAULT_EMPLOYEE_MODEL = "claude-sonnet-4-20250514";
+const DEFAULT_MODEL_ID = "claude-sonnet-5";
+const DEFAULT_ADMIN_MODEL = "claude-opus-4-6";
+const DEFAULT_EMPLOYEE_MODEL = "claude-sonnet-5";
 
 /**
  * Get the globally configured AI model ID.

@@ -49,6 +49,7 @@ model User {
   activityLogs            ActivityLog[]
   feedbacks               Feedback[]
   etsySearchTasks         EtsySearchTask[]
+  walmartCompetitorAnalyses WalmartCompetitorAnalysis[]
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
 }
@@ -1247,4 +1248,77 @@ model EtsyProduct {
 
   @@index([taskId, shopSales])
   @@index([taskId, createdAt])
+}
+
+model WalmartCompetitorAnalysis {
+  id            String                  @id @default(cuid())
+  userId        String
+  user          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cacheKey      String?                 @unique
+  expiresAt     DateTime?
+  competitorUrl String
+  productId     String
+  productName   String?
+  status        String                  @default("pending")
+  errorMessage  String?
+  reportJson    String?
+  snapshots     WalmartProductSnapshot[]
+  keywordRanks  WalmartKeywordRanking[]
+  reviews       WalmartReviewRecord[]
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([productId, createdAt])
+  @@index([expiresAt])
+}
+
+model WalmartProductSnapshot {
+  id          String                    @id @default(cuid())
+  analysisId  String
+  analysis    WalmartCompetitorAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  productId   String
+  name        String?
+  brand       String?
+  category    String?
+  price       Float?
+  rating      Float?
+  reviewCount Int?
+  sellerName  String?
+  rawJson     String
+  createdAt   DateTime                  @default(now())
+
+  @@index([analysisId, createdAt])
+}
+
+model WalmartKeywordRanking {
+  id               String                    @id @default(cuid())
+  analysisId       String
+  analysis         WalmartCompetitorAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  keyword          String
+  rank             Int?
+  totalResults     Int?
+  matchedTitle     String?
+  matchedProductId String?
+  rawJson          String
+  createdAt        DateTime                  @default(now())
+
+  @@index([analysisId, keyword])
+}
+
+model WalmartReviewRecord {
+  id         String                    @id @default(cuid())
+  analysisId String
+  analysis   WalmartCompetitorAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  reviewId   String?
+  title      String?
+  text       String?
+  rating     Float?
+  reviewer   String?
+  reviewDate String?
+  rawJson    String
+  createdAt  DateTime                  @default(now())
+
+  @@index([analysisId, reviewDate])
+  @@index([reviewId])
 }

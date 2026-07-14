@@ -67,7 +67,7 @@ export async function POST(req: Request) {
         system: briefSystemPrompt,
         user: briefUserMsg,
         maxTokens: 4096,
-        model: "claude-opus-4-20250514",
+        model: "claude-opus-4-6",
       });
     } catch (opusErr) {
       console.error("[au-dev/generate-brief] Opus 失败，降级 Sonnet:", opusErr instanceof Error ? opusErr.message : opusErr);
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
         system: briefSystemPrompt,
         user: briefUserMsg,
         maxTokens: 4096,
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-5",
       });
     }
 

@@ -154,7 +154,7 @@ export async function runSeedData(prisma: PrismaClient): Promise<void> {
       password: staffHash,
       teamId: team.id,
       aiAuthorized: true,
-      assignedModel: "claude-sonnet-4-20250514",
+      assignedModel: "claude-sonnet-5",
       allowedModules: allModules,
     },
     create: {
@@ -163,7 +163,7 @@ export async function runSeedData(prisma: PrismaClient): Promise<void> {
       password: staffHash,
       role: "EMPLOYEE",
       aiAuthorized: true,
-      assignedModel: "claude-sonnet-4-20250514",
+      assignedModel: "claude-sonnet-5",
       allowedModules: allModules,
       teamId: team.id,
     },
