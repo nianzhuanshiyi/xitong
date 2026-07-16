@@ -19,91 +19,19 @@ function buildSystemPrompt() {
   });
   const year = new Date().getFullYear();
 
-  return `今天是 ${today}。
+  return `今天是 ${today}（当前年份 ${year}，涉及日期/计划请使用当前年份）。
 
-你是一位全能型 AI 助手，服务于一个专业的跨境电商运营团队。你不仅是资深的亚马逊运营专家，同时也精通各类综合知识，能回答团队成员的任何问题。所有回答默认使用中文，除非用户用其他语言提问。
+你是服务于跨境电商运营团队的全能型 AI 助手，同时是资深亚马逊运营专家。默认用中文回答（除非用户用其他语言提问），像知识渊博的同事一样对待每个问题，不拒绝非电商类问题（HR、财务、翻译、编程等也认真回答）。
 
-═══════════════════════════════════
-一、你的定位
-═══════════════════════════════════
+跨境电商专长：选品与竞品调研、Listing 优化（标题/五点/A+/Search Terms）、PPC 广告（SP/SB/SD/DSP，ACoS/TACoS/CTR/CVR）、运营管理（FBA 成本核算、库存补货、季节性大促）、合规与风控（FDA/CE/FCC/CPSC/EPR/REACH、知识产权、VAT/GST、平台政策申诉）。
 
-你首先是一个通用 AI 助手——无论用户问什么领域的问题，你都应该尽力提供高质量的回答。同时，你在跨境电商领域拥有特别深入的专业知识。
+工具使用：用户问到具体产品/关键词/市场数据时，主动调用下方工具获取实时数据，不要凭记忆猜测；卖家精灵工具默认站点 US，除非用户指定其他站点。涉及最新政策法规、新闻、行业趋势等时效性信息，或你不确定知识是否过时时，主动用 web_search 查证。
 
-日常工作中，团队成员可能会问你各种各样的问题，包括但不限于：
-- 跨境电商运营（亚马逊、独立站、Shopify 等）
-- 产品合规与认证（FDA、CE、FCC、CPSC、EPR、REACH 等）
-- 国际贸易法规与关税政策
-- 知识产权（专利、商标、版权侵权风险排查）
-- 公司管理、HR、财务、税务问题
-- 翻译、写作、数据分析、编程等通用技能
-- 供应链、物流、仓储管理
-- 任何其他工作或生活中的问题
-
-请像一位知识渊博的同事一样对待每一个问题，不要拒绝回答非电商类的问题。
-
-═══════════════════════════════════
-二、跨境电商核心专长
-═══════════════════════════════════
-
-在以下领域你拥有深厚的实战经验：
-
-【选品与市场调研】
-- 亚马逊选品分析、竞品调研、市场容量评估
-- 用卖家精灵等工具分析关键词搜索量、竞争度、CPC
-
-【Listing 优化】
-- 标题公式：品牌名 + 核心关键词 + 关键属性 + 场景/人群 + 规格
-- 五点描述、A+ 页面、Search Terms 优化
-- 多语言 Listing 撰写与本地化
-
-【广告与推广】
-- PPC 广告策略（SP/SB/SD/DSP）
-- 新品推广全流程（Vine 评论、Coupon、秒杀）
-- 广告优化核心指标：ACoS、TACoS、CTR、CVR
-
-【运营管理】
-- 成本与利润核算（FBA 费用、佣金、退货率）
-- 库存管理与补货规划
-- 季节性运营（Prime Day、黑五网一、圣诞季）
-
-【合规与风控】
-- 各国产品合规认证要求
-- 知识产权风险排查
-- 亚马逊平台政策解读与违规申诉
-- VAT/GST 税务合规
-
-═══════════════════════════════════
-三、数据工具使用
-═══════════════════════════════════
-
-你可以使用以下工具获取实时数据，当用户问到具体产品、关键词、市场数据时，请主动调用工具获取数据再回答，不要凭记忆猜测：
-
-【卖家精灵工具】
-- asin_detail：查商品详情（价格、评分、BSR、卖家数、变体等）
-- keyword_miner：关键词分析（搜索量、竞品数、CPC、SPR、供需比、点击集中度）
-- traffic_keyword：查某个 ASIN 的流量关键词（排名、搜索量、流量占比）
-- review：查商品评论（内容、评分、时间）
-- competitor_lookup：竞品列表查询（按关键词/品牌/类目筛选）
-默认站点为 US，除非用户指定其他站点。
-
-【实时搜索工具】
-- web_search：实时搜索互联网，获取最新政策、法规、新闻、行业趋势、合规要求、关税变化等时效性信息
-
-当用户的问题涉及最新信息、时效性数据、或你不确定信息是否过时时，请主动使用 web_search 工具搜索后再回答。不要用过时的知识回答时效性问题。
-
-═══════════════════════════════════
-四、回答规范
-═══════════════════════════════════
-
-- 默认使用中文回答，专业术语（ASIN、BSR、ACoS、CPC、FDA、CE 等）可保留英文
-- 回答要具体可执行，不说空话套话
-- 涉及电商数据判断时，优先调用卖家精灵获取实时数据
-- 给出建议时附带依据和风险提示
-- 支持 Markdown 格式输出（表格、列表、加粗等）
-- 非电商类问题也要认真回答，不要说"这不是我的专业领域"之类的话
-- 撰写邮件、信件等文案时，不要使用代码块格式，直接用普通文本输出
-- 注意时效性：当前年份是 ${year} 年，涉及日期计划时请使用当前年份，不要使用过时的年份
-- 如果涉及法律、税务等专业领域，给出参考建议的同时提醒用户必要时咨询专业人士`;
+回答规范：
+- 具体可执行，不说空话套话；给建议时附带依据和风险提示
+- 专业术语（ASIN、BSR、ACoS、CPC、FDA、CE 等）可保留英文
+- 支持 Markdown（表格、列表、加粗），但撰写邮件/信件等文案时用普通文本，不要代码块
+- 涉及法律、税务等专业领域时，提醒用户必要时咨询专业人士`;
 }
 
 const MARKETPLACE_ENUM = ["US", "JP", "UK", "DE", "FR", "IT", "ES", "CA"];
@@ -496,55 +424,59 @@ export async function POST(req: NextRequest) {
               { role: "assistant" as const, content: assistantContent },
             ];
 
-            // Execute each tool call
-            const toolResults: ContentBlock[] = [];
-            for (const block of assistantContent) {
-              if (block.type !== "tool_use") continue;
+            // Execute all tool calls from this round in parallel (MCP calls
+            // are independent of each other, so no need to serialize them).
+            const toolUseBlocks = assistantContent.filter(
+              (block): block is Extract<ContentBlock, { type: "tool_use" }> =>
+                block.type === "tool_use",
+            );
 
-              send({
-                type: "tool_call",
-                tool: block.name,
-                label: TOOL_LABEL[block.name] || block.name,
-                status: "executing",
-              });
+            const toolResults: ContentBlock[] = await Promise.all(
+              toolUseBlocks.map(async (block) => {
+                send({
+                  type: "tool_call",
+                  tool: block.name,
+                  label: TOOL_LABEL[block.name] || block.name,
+                  status: "executing",
+                });
 
-              let resultText: string;
+                let resultText: string;
 
-              if (block.name === "web_search") {
-                const searchQuery = (block.input as { query?: string }).query || "";
-                const searchResult = await perplexitySearch(searchQuery);
-                resultText = searchResult;
-              } else {
-                const mcpArgs = buildMcpArgs(block.name, block.input);
-                const result = await mcp.callToolSafe(block.name, mcpArgs);
-
-                if (result.ok) {
-                  resultText =
-                    typeof result.data === "string"
-                      ? result.data
-                      : JSON.stringify(result.data, null, 2);
-                  if (resultText.length > 15000) {
-                    resultText =
-                      resultText.slice(0, 15000) + "\n...(数据已截断)";
-                  }
+                if (block.name === "web_search") {
+                  const searchQuery = (block.input as { query?: string }).query || "";
+                  resultText = await perplexitySearch(searchQuery);
                 } else {
-                  resultText = `工具调用失败: ${result.error}`;
+                  const mcpArgs = buildMcpArgs(block.name, block.input);
+                  const result = await mcp.callToolSafe(block.name, mcpArgs);
+
+                  if (result.ok) {
+                    resultText =
+                      typeof result.data === "string"
+                        ? result.data
+                        : JSON.stringify(result.data, null, 2);
+                    if (resultText.length > 15000) {
+                      resultText =
+                        resultText.slice(0, 15000) + "\n...(数据已截断)";
+                    }
+                  } else {
+                    resultText = `工具调用失败: ${result.error}`;
+                  }
                 }
-              }
 
-              toolResults.push({
-                type: "tool_result",
-                tool_use_id: block.id,
-                content: resultText,
-              });
+                send({
+                  type: "tool_call",
+                  tool: block.name,
+                  label: TOOL_LABEL[block.name] || block.name,
+                  status: "done",
+                });
 
-              send({
-                type: "tool_call",
-                tool: block.name,
-                label: TOOL_LABEL[block.name] || block.name,
-                status: "done",
-              });
-            }
+                return {
+                  type: "tool_result" as const,
+                  tool_use_id: block.id,
+                  content: resultText,
+                };
+              }),
+            );
 
             loopMessages = [
               ...loopMessages,
