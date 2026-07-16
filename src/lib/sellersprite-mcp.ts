@@ -141,9 +141,16 @@ export function createSellerspriteMcpClient(): SellerspriteMcpClient {
   const url = getSellerspriteMcpUrl();
   let sessionId: string | null = null;
   let initOnce: Promise<void> | null = null;
+  let secretOnce: Promise<string | null> | null = null;
 
   function nextRpcId(): number {
     return Date.now() + Math.floor(Math.random() * 1000);
+  }
+
+  /** 同一 client 内复用密钥，避免每次 callTool 都重新查一次数据库 */
+  function getSecret(): Promise<string | null> {
+    if (!secretOnce) secretOnce = getSellerspriteSecret();
+    return secretOnce;
   }
 
   function ensureInitialized(secret: string): Promise<void> {
@@ -182,7 +189,7 @@ export function createSellerspriteMcpClient(): SellerspriteMcpClient {
     toolName: string,
     args: Record<string, unknown>
   ): Promise<unknown> {
-    const secret = await getSellerspriteSecret();
+    const secret = await getSecret();
     if (!secret) throw new Error("未配置 SELLERSPRITE_SECRET_KEY");
 
     const normArgs = normalizeToolArguments(args);
