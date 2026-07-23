@@ -157,6 +157,7 @@ function buildMcpArgs(
 
 type ContentBlock =
   | { type: "text"; text: string }
+  | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
   | { type: "document"; source: { type: "base64"; media_type: string; data: string } }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; tool_use_id: string; content: string };
@@ -222,18 +223,26 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Load conversation history (last 50 messages)
-  const history = await prisma.aiMessage.findMany({
+  // Load the most recent 50 messages, then restore chronological order.
+  // Using `asc + take: 50` would return the earliest 50 rows and can make
+  // the Anthropic payload end with an assistant message on long threads.
+  const historyRows = await prisma.aiMessage.findMany({
     where: { conversationId },
-    orderBy: { createdAt: "asc" },
+    orderBy: { createdAt: "desc" },
     take: 50,
     select: { role: true, content: true },
   });
+  const history = [...historyRows].reverse();
 
   const apiMessages: ApiMessage[] = history.map((m) => ({
     role: m.role as "user" | "assistant",
     content: m.content,
   }));
+
+  // Anthropic requires the conversation to end with a user message.
+  while (apiMessages.length > 0 && apiMessages[apiMessages.length - 1]?.role !== "user") {
+    apiMessages.pop();
+  }
 
   // If the latest user message has a file, inject it for Claude
   if (apiMessages.length > 0 && fileName) {
@@ -241,7 +250,20 @@ export async function POST(req: NextRequest) {
     if (lastMsg.role === "user") {
       const userText = typeof lastMsg.content === "string" ? lastMsg.content : "";
 
-      if (fileBase64 && fileType === "application/pdf") {
+      if (fileBase64 && fileType?.startsWith("image/")) {
+        console.log("[CHAT] Injecting image for:", fileName, "base64 length:", fileBase64.length);
+        lastMsg.content = [
+          {
+            type: "image" as const,
+            source: {
+              type: "base64" as const,
+              media_type: fileType,
+              data: fileBase64,
+            },
+          },
+          { type: "text" as const, text: userText },
+        ];
+      } else if (fileBase64 && fileType === "application/pdf") {
         // PDF: use Claude native document support
         console.log("[CHAT] Injecting PDF document for:", fileName, "base64 length:", fileBase64.length);
         lastMsg.content = [
