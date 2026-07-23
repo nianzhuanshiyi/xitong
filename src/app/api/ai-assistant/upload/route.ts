@@ -22,6 +22,10 @@ const ALLOWED_TYPES = new Set([
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_TEXT_CHARS = 8000;
 
+function isImageMimeType(mimeType: string) {
+  return mimeType.toLowerCase().startsWith("image/");
+}
+
 async function extractTextNonPdf(
   buffer: Buffer,
   mimeType: string,
@@ -99,9 +103,11 @@ export async function POST(req: NextRequest) {
   await writeFile(filePath, buffer);
 
   const url = `/uploads/ai-assistant/${dateDir}/${uniqueName}`;
-  const isPdf = file.type.toLowerCase() === "application/pdf";
+  const normalizedType = file.type.toLowerCase();
+  const isPdf = normalizedType === "application/pdf";
+  const isImage = isImageMimeType(normalizedType);
 
-  // For PDFs: return base64 so Claude can read it natively
+  // For PDFs/images: return base64 so Claude can read them natively
   // For other files: extract text content
   let fileContent: string | null = null;
   let fileBase64: string | null = null;
@@ -110,6 +116,14 @@ export async function POST(req: NextRequest) {
     fileBase64 = buffer.toString("base64");
     console.log(
       "[UPLOAD] PDF file, returning base64, size:",
+      buffer.length,
+      "base64 length:",
+      fileBase64.length
+    );
+  } else if (isImage) {
+    fileBase64 = buffer.toString("base64");
+    console.log(
+      "[UPLOAD] Image file, returning base64, size:",
       buffer.length,
       "base64 length:",
       fileBase64.length
