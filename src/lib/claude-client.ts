@@ -296,12 +296,13 @@ export async function claudeMessagesStream(params: {
   system?: string;
   user: string;
   maxTokens?: number;
+  model?: string;
   onTextDelta: (delta: string) => void;
 }): Promise<string> {
   const key = await getClaudeApiKey();
   if (!key) throw new Error("未配置 Claude API 密钥");
 
-  const model = DEFAULT_MODEL;
+  const model = params.model || DEFAULT_MODEL;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
