@@ -532,7 +532,7 @@ export function ListingWorkspace() {
           Listing 撰写
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          使用 Claude（claude-opus-4-6）生成标题、五点、描述、搜索词与 A+
+          使用 Claude（claude-sonnet-5）生成标题、五点、描述、搜索词与 A+
           建议；支持流式输出、竞品参考与草稿保存。
         </p>
         <ModuleGuide moduleKey="listing">

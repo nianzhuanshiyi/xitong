@@ -8,6 +8,8 @@ import type {
   ListingResultPayload,
 } from "./types";
 
+const LISTING_MODEL = "claude-sonnet-5";
+
 function extractJsonBlock(text: string): string {
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fence?.[1]) return fence[1].trim();
@@ -27,6 +29,7 @@ export async function generateListingFull(
   const raw = await claudeMessagesStream({
     system,
     user,
+    model: LISTING_MODEL,
     maxTokens: 16_384,
     onTextDelta,
   });
@@ -63,7 +66,11 @@ export async function regenerateSingleBullet(params: {
   const system =
     "You write one Amazon bullet point only. Reply JSON: {\"bullet\":\"...\"}. Max 500 characters. Start with short ALL CAPS phrase + colon.";
   const user = `Language context: marketplace ${params.input.marketplace}. Brand: ${params.input.brandName}. Product: ${params.input.productName}.\nSelling points:\n${params.input.sellingPoints}\nKeywords:\n${params.input.coreKeywords}\nBanned:\n${params.input.bannedWords}\nOther bullets (do not repeat verbatim):\n${params.currentBullets.map((b, i) => `${i + 1}. ${b}`).join("\n")}\nRewrite ONLY bullet #${idx + 1}.`;
-  const r = await claudeJson<{ bullet?: string }>({ system, user });
+  const r = await claudeJson<{ bullet?: string }>({
+    system,
+    user,
+    model: LISTING_MODEL,
+  });
   return (r?.bullet ?? "").trim();
 }
 
@@ -77,6 +84,7 @@ export async function regenerateDescription(params: {
   const r = await claudeJson<{ productDescriptionHtml?: string }>({
     system,
     user,
+    model: LISTING_MODEL,
   });
   return (r?.productDescriptionHtml ?? "").trim();
 }
@@ -88,7 +96,11 @@ export async function regenerateSearchTerms(params: {
   const system =
     'Reply JSON only: {"searchTerms":"..."} — space-separated backend keywords, no punctuation, no brand, no words from title; UTF-8 under 249 bytes.';
   const user = `Title (exclude these terms): ${params.title}\nBrand (exclude): ${params.input.brandName}\nKeywords to include where possible:\n${params.input.coreKeywords}`;
-  const r = await claudeJson<{ searchTerms?: string }>({ system, user });
+  const r = await claudeJson<{ searchTerms?: string }>({
+    system,
+    user,
+    model: LISTING_MODEL,
+  });
   const raw = (r?.searchTerms ?? "").trim();
   return refineSearchTerms(raw, params.title, params.input.brandName);
 }
@@ -100,7 +112,11 @@ export async function regenerateTitles(params: {
   const system =
     'Reply JSON: {"titles":["","",""]} — exactly 3 Amazon titles, brand first, max 200 chars each.';
   const user = `Marketplace ${params.input.marketplace}. Brand: ${params.input.brandName}. Product: ${params.input.productName}.\nSelling points:\n${params.input.sellingPoints}\nKeywords:\n${params.input.coreKeywords}`;
-  const r = await claudeJson<{ titles?: string[] }>({ system, user });
+  const r = await claudeJson<{ titles?: string[] }>({
+    system,
+    user,
+    model: LISTING_MODEL,
+  });
   const t = r?.titles ?? [];
   return [
     String(t[0] ?? ""),
@@ -118,6 +134,7 @@ export async function regenerateAplus(params: {
   const r = await claudeJson<{ aplus?: ListingResultPayload["aplus"] }>({
     system,
     user,
+    model: LISTING_MODEL,
   });
   const a = r?.aplus;
   return {

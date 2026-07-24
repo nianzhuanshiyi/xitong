@@ -5,11 +5,24 @@ import { getClaudeApiKey } from "@/lib/integration-keys";
 import { getUserAiModel } from "@/lib/ai-model";
 import { createSellerspriteMcpClient } from "@/lib/sellersprite-mcp";
 import { perplexitySearch } from "@/lib/perplexity";
+import { claudeJson, getLastClaudeUsage } from "@/lib/claude-client";
+import { recordTokenUsage } from "@/lib/token-tracker";
+import {
+  buildDynamicWindow,
+  estimateAttachmentTokens,
+  estimateTextTokens,
+  formatConversationMemory,
+  getContextTokenBudget,
+  parseConversationMemory,
+  serializeConversationMemory,
+  type ConversationMemory,
+  type StoredChatMessage,
+} from "@/lib/ai-assistant-memory";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-function buildSystemPrompt() {
+function buildSystemPrompt(memoryContext?: string) {
   const today = new Date().toLocaleDateString("zh-CN", {
     year: "numeric",
     month: "long",
@@ -31,7 +44,11 @@ function buildSystemPrompt() {
 - 具体可执行，不说空话套话；给建议时附带依据和风险提示
 - 专业术语（ASIN、BSR、ACoS、CPC、FDA、CE 等）可保留英文
 - 支持 Markdown（表格、列表、加粗），但撰写邮件/信件等文案时用普通文本，不要代码块
-- 涉及法律、税务等专业领域时，提醒用户必要时咨询专业人士`;
+- 涉及法律、税务等专业领域时，提醒用户必要时咨询专业人士${
+    memoryContext
+      ? `\n\n以下是当前会话的长期记忆，请将其作为背景信息参考；若与更近的用户消息冲突，以更近消息为准：\n${memoryContext}`
+      : ""
+  }`;
 }
 
 const MARKETPLACE_ENUM = ["US", "JP", "UK", "DE", "FR", "IT", "ES", "CA"];
@@ -176,6 +193,176 @@ const TOOL_LABEL: Record<string, string> = {
   web_search: "互联网搜索",
 };
 
+const SUMMARY_KEEP_RECENT_MESSAGES = 12;
+const SUMMARY_REFRESH_MIN_MESSAGES = 8;
+
+type DbChatMessage = StoredChatMessage & {
+  createdAt: Date;
+};
+
+function buildLatestUserContent(params: {
+  userText: string;
+  fileName?: string;
+  fileType?: string;
+  fileContent?: string;
+  fileBase64?: string;
+}): string | ContentBlock[] {
+  const { userText, fileName, fileType, fileContent, fileBase64 } = params;
+
+  if (!fileName) return userText;
+
+  if (fileBase64 && fileType?.startsWith("image/")) {
+    console.log("[CHAT] Injecting image for:", fileName, "base64 length:", fileBase64.length);
+    return [
+      {
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: fileType,
+          data: fileBase64,
+        },
+      },
+      { type: "text", text: userText },
+    ];
+  }
+
+  if (fileBase64 && fileType === "application/pdf") {
+    console.log("[CHAT] Injecting PDF document for:", fileName, "base64 length:", fileBase64.length);
+    return [
+      {
+        type: "document",
+        source: {
+          type: "base64",
+          media_type: "application/pdf",
+          data: fileBase64,
+        },
+      },
+      { type: "text", text: userText },
+    ];
+  }
+
+  if (fileContent?.trim()) {
+    console.log("[CHAT] Injecting file text for:", fileName, "length:", fileContent.length);
+    return `[用户上传了文件: ${fileName}]\n=== 文件内容 ===\n${fileContent}\n=== 文件内容结束 ===\n\n用户的问题: ${userText}`;
+  }
+
+  return `[用户上传了文件: ${fileName}，但未能提取文本内容]\n\n用户的问题: ${userText}`;
+}
+
+function serializeMessagesForSummary(messages: DbChatMessage[]): string {
+  return messages
+    .map((msg, index) => {
+      const timestamp = msg.createdAt.toISOString();
+      const fileLabel = msg.fileName ? ` [附件: ${msg.fileName}]` : "";
+      return `#${index + 1} ${msg.role.toUpperCase()} ${timestamp}${fileLabel}\n${msg.content}`;
+    })
+    .join("\n\n");
+}
+
+async function refreshConversationSummary(params: {
+  conversationId: string;
+  userId: string;
+  model: string;
+  existingSummary?: string | null;
+  summarizedMessageCount: number;
+  messages: DbChatMessage[];
+}): Promise<{ summaryText: string | null; summaryMessageCount: number }> {
+  const {
+    conversationId,
+    userId,
+    model,
+    existingSummary,
+    summarizedMessageCount,
+    messages,
+  } = params;
+
+  const summaryCutoff = Math.max(0, messages.length - SUMMARY_KEEP_RECENT_MESSAGES);
+  if (summaryCutoff <= summarizedMessageCount) {
+    return {
+      summaryText: existingSummary?.trim() || null,
+      summaryMessageCount: summarizedMessageCount,
+    };
+  }
+
+  const pendingMessages = messages.slice(summarizedMessageCount, summaryCutoff);
+  if (pendingMessages.length < SUMMARY_REFRESH_MIN_MESSAGES) {
+    return {
+      summaryText: existingSummary?.trim() || null,
+      summaryMessageCount: summarizedMessageCount,
+    };
+  }
+
+  const previousMemory = parseConversationMemory(existingSummary);
+
+  try {
+    const summary = await claudeJson<ConversationMemory>({
+      model,
+      maxTokens: 1400,
+      system: `你负责维护 AI 对话的长期记忆。请把“已有记忆”和“新增对话片段”合并为紧凑、稳定、去重的结构化 JSON。
+
+要求：
+- 只保留对后续对话长期有价值的信息，删除寒暄、重复表述、一次性措辞
+- 新消息如果推翻旧信息，要用新信息覆盖旧信息
+- 每个数组尽量 0-8 条，短句表达
+- 不要捏造未出现过的事实
+- 必须只返回合法 JSON，对象字段固定为：
+{
+  "userGoals": string[],
+  "establishedFacts": string[],
+  "constraints": string[],
+  "uploadedArtifacts": string[],
+  "resolvedItems": string[],
+  "pendingItems": string[],
+  "workingDecisions": string[]
+}`,
+      user: `已有记忆（可能为空）：
+${previousMemory ? JSON.stringify(previousMemory, null, 2) : "null"}
+
+新增对话片段：
+${serializeMessagesForSummary(pendingMessages)}`,
+    });
+
+    const summaryText = serializeConversationMemory(summary);
+    if (!summaryText) {
+      return {
+        summaryText: existingSummary?.trim() || null,
+        summaryMessageCount: summarizedMessageCount,
+      };
+    }
+
+    await prisma.aiConversation.update({
+      where: { id: conversationId },
+      data: {
+        contextSummary: summaryText,
+        summaryMessageCount: summaryCutoff,
+        summaryUpdatedAt: new Date(),
+      },
+    });
+
+    const usage = getLastClaudeUsage();
+    if (usage) {
+      await recordTokenUsage({
+        userId,
+        module: "ai-assistant-summary",
+        model,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+      });
+    }
+
+    return {
+      summaryText,
+      summaryMessageCount: summaryCutoff,
+    };
+  } catch (error) {
+    console.error("[ai-assistant] summary refresh failed:", error);
+    return {
+      summaryText: existingSummary?.trim() || null,
+      summaryMessageCount: summarizedMessageCount,
+    };
+  }
+}
+
 export async function POST(req: NextRequest) {
   const { session, error } = await requireModuleAccess("ai-assistant");
   if (error) return error;
@@ -205,6 +392,11 @@ export async function POST(req: NextRequest) {
 
   const conversation = await prisma.aiConversation.findFirst({
     where: { id: conversationId, userId: session!.user.id },
+    select: {
+      id: true,
+      contextSummary: true,
+      summaryMessageCount: true,
+    },
   });
   if (!conversation) {
     return NextResponse.json({ message: "会话不存在" }, { status: 404 });
@@ -223,21 +415,62 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Load the most recent 50 messages, then restore chronological order.
-  // Using `asc + take: 50` would return the earliest 50 rows and can make
-  // the Anthropic payload end with an assistant message on long threads.
-  const historyRows = await prisma.aiMessage.findMany({
+  const allMessages = await prisma.aiMessage.findMany({
     where: { conversationId },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-    select: { role: true, content: true },
+    orderBy: { createdAt: "asc" },
+    select: {
+      role: true,
+      content: true,
+      fileName: true,
+      createdAt: true,
+    },
   });
-  const history = [...historyRows].reverse();
 
-  const apiMessages: ApiMessage[] = history.map((m) => ({
-    role: m.role as "user" | "assistant",
+  const summaryState = await refreshConversationSummary({
+    conversationId,
+    userId: session!.user.id,
+    model: claudeModel,
+    existingSummary: conversation.contextSummary,
+    summarizedMessageCount: conversation.summaryMessageCount,
+    messages: allMessages.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+      fileName: m.fileName,
+      createdAt: m.createdAt,
+    })),
+  });
+
+  const memoryContext = formatConversationMemory(
+    parseConversationMemory(summaryState.summaryText),
+  );
+  const systemPrompt = buildSystemPrompt(memoryContext || undefined);
+
+  const recentMessages = buildDynamicWindow({
+    messages: allMessages
+      .slice(summaryState.summaryMessageCount)
+      .map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+        fileName: m.fileName,
+        createdAt: m.createdAt,
+      })),
+    budgetTokens: getContextTokenBudget(claudeModel),
+    systemTokens: estimateTextTokens(systemPrompt),
+    latestAttachmentTokens: estimateAttachmentTokens({
+      fileType,
+      fileContent,
+      fileBase64,
+    }),
+  });
+
+  const apiMessages: ApiMessage[] = recentMessages.map((m) => ({
+    role: m.role,
     content: m.content,
   }));
+
+  if (apiMessages.length === 0) {
+    apiMessages.push({ role: "user", content: message });
+  }
 
   // Anthropic requires the conversation to end with a user message.
   while (apiMessages.length > 0 && apiMessages[apiMessages.length - 1]?.role !== "user") {
@@ -249,45 +482,17 @@ export async function POST(req: NextRequest) {
     const lastMsg = apiMessages[apiMessages.length - 1];
     if (lastMsg.role === "user") {
       const userText = typeof lastMsg.content === "string" ? lastMsg.content : "";
-
-      if (fileBase64 && fileType?.startsWith("image/")) {
-        console.log("[CHAT] Injecting image for:", fileName, "base64 length:", fileBase64.length);
-        lastMsg.content = [
-          {
-            type: "image" as const,
-            source: {
-              type: "base64" as const,
-              media_type: fileType,
-              data: fileBase64,
-            },
-          },
-          { type: "text" as const, text: userText },
-        ];
-      } else if (fileBase64 && fileType === "application/pdf") {
-        // PDF: use Claude native document support
-        console.log("[CHAT] Injecting PDF document for:", fileName, "base64 length:", fileBase64.length);
-        lastMsg.content = [
-          {
-            type: "document" as const,
-            source: {
-              type: "base64" as const,
-              media_type: "application/pdf",
-              data: fileBase64,
-            },
-          },
-          { type: "text" as const, text: userText },
-        ];
-      } else if (fileContent && fileContent.trim()) {
-        // Non-PDF with extracted text
-        console.log("[CHAT] Injecting file text for:", fileName, "length:", fileContent.length);
-        lastMsg.content = `[用户上传了文件: ${fileName}]\n=== 文件内容 ===\n${fileContent}\n=== 文件内容结束 ===\n\n用户的问题: ${userText}`;
-      } else if (typeof lastMsg.content === "string") {
-        lastMsg.content = `[用户上传了文件: ${fileName}，但未能提取文本内容]\n\n用户的问题: ${userText}`;
-      }
+      lastMsg.content = buildLatestUserContent({
+        userText,
+        fileName,
+        fileType,
+        fileContent,
+        fileBase64,
+      });
     }
   }
 
-  const isFirstMessage = history.filter((m) => m.role === "user").length === 1;
+  const isFirstMessage = allMessages.filter((m) => m.role === "user").length === 1;
 
   const encoder = new TextEncoder();
 
@@ -321,7 +526,7 @@ export async function POST(req: NextRequest) {
               body: JSON.stringify({
                 model: claudeModel,
                 max_tokens: 4096,
-                system: buildSystemPrompt(),
+                system: systemPrompt,
                 messages: loopMessages,
                 tools: TOOLS,
                 stream: true,

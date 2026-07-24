@@ -1006,13 +1006,16 @@ model EuropeIdeaPlan {
 // ─── AI 助手模块 ────────────────────────────────────────────
 
 model AiConversation {
-  id        String      @id @default(cuid())
-  title     String      @default("新对话")
-  userId    String
-  model     String      @default("sonnet")
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-  messages  AiMessage[]
+  id                  String      @id @default(cuid())
+  title               String      @default("新对话")
+  userId              String
+  model               String      @default("sonnet")
+  contextSummary      String?
+  summaryMessageCount Int         @default(0)
+  summaryUpdatedAt    DateTime?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  messages            AiMessage[]
 }
 
 model AiMessage {
